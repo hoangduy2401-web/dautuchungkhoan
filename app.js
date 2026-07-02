@@ -1,0 +1,350 @@
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  watchlist: [...APP_CONFIG.DEFAULT_WATCHLIST],
+  selected: APP_CONFIG.DEFAULT_WATCHLIST[0],
+  range: 90,
+  quotes: {}, // symbol -> {price, changePct, volume}
+  chart: null,
+};
+
+const fmt = (n, d = 2) => Number(n).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtPct = (n) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+const trendClass = (n) => (n > 0.001 ? "up" : n < -0.001 ? "down" : "flat");
+const arrow = (n) => (n > 0.001 ? "▲" : n < -0.001 ? "▼" : "•");
+
+/* ============================================================
+   INIT
+   ============================================================ */
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("mockBadge").style.display = APP_CONFIG.USE_MOCK ? "inline-block" : "none";
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  renderRangeTabs();
+  wireForms();
+  ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
+  wireChartToolbar();
+
+  refreshAll();
+  setInterval(refreshAll, APP_CONFIG.REFRESH_INTERVAL_MS);
+});
+
+function wireChartToolbar() {
+  document.getElementById("chkMA10").addEventListener("change", (e) => ChartModule.toggleSeries("ma10", e.target.checked));
+  document.getElementById("chkMA20").addEventListener("change", (e) => ChartModule.toggleSeries("ma20", e.target.checked));
+  document.getElementById("chkBB").addEventListener("change", (e) => ChartModule.toggleSeries("bb", e.target.checked));
+  document.getElementById("chkVol").addEventListener("change", (e) => ChartModule.toggleSeries("volume", e.target.checked));
+  document.getElementById("chkRSI").addEventListener("change", (e) => ChartModule.toggleSeries("rsi", e.target.checked));
+
+  const drawBtn = document.getElementById("drawTrendBtn");
+  let drawing = false;
+  drawBtn.addEventListener("click", () => {
+    drawing = !drawing;
+    drawBtn.classList.toggle("active", drawing);
+    ChartModule.setDrawMode(drawing);
+  });
+  document.addEventListener("trendline-drawn", () => {
+    drawing = false;
+    drawBtn.classList.remove("active");
+  });
+  document.getElementById("clearTrendBtn").addEventListener("click", () => ChartModule.clearTrendline());
+}
+
+function tickClock() {
+  document.getElementById("clock").textContent = new Date().toLocaleString("vi-VN");
+}
+
+async function refreshAll() {
+  await Promise.all([loadIndices(), loadWatchlistQuotes()]);
+  renderTickerTape();
+  renderWatchlist();
+  await loadSelectedSymbol();
+  renderPortfolio();
+}
+
+/* ============================================================
+   INDEX STRIP
+   ============================================================ */
+async function loadIndices() {
+  try {
+    state.indices = await DataService.getIndices();
+  } catch (e) {
+    console.error(e);
+    state.indices = [];
+  }
+  const el = document.getElementById("indexStrip");
+  el.innerHTML = state.indices
+    .map(
+      (ix) => `
+    <div class="index-card">
+      <div class="code">${ix.code}</div>
+      <div class="val">${fmt(ix.value, 2)}</div>
+      <div class="chg ${trendClass(ix.changePct)}">${arrow(ix.changePct)} ${fmtPct(ix.changePct)}</div>
+    </div>`
+    )
+    .join("");
+}
+
+/* ============================================================
+   TICKER TAPE
+   ============================================================ */
+function renderTickerTape() {
+  const items = state.watchlist
+    .map((s) => {
+      const q = state.quotes[s];
+      if (!q) return "";
+      return `<span class="ticker-item"><span class="sym">${s}</span><span class="${trendClass(
+        q.changePct
+      )}">${fmt(q.price)} ${arrow(q.changePct)} ${fmtPct(q.changePct)}</span></span>`;
+    })
+    .join("");
+  // duplicate content for seamless scroll loop
+  document.getElementById("tickerTrack").innerHTML = items + items;
+}
+
+/* ============================================================
+   WATCHLIST
+   ============================================================ */
+async function loadWatchlistQuotes() {
+  const results = await Promise.all(
+    state.watchlist.map((s) =>
+      DataService.getQuote(s)
+        .then((q) => [s, q])
+        .catch(() => [s, null])
+    )
+  );
+  results.forEach(([s, q]) => {
+    if (q) state.quotes[s] = q;
+  });
+}
+
+function renderWatchlist() {
+  const el = document.getElementById("watchlist");
+  if (state.watchlist.length === 0) {
+    el.innerHTML = `<div class="empty-state">Chưa có mã theo dõi.<br>Thêm mã ở ô phía trên.</div>`;
+    return;
+  }
+  el.innerHTML = state.watchlist
+    .map((s) => {
+      const q = state.quotes[s] || { price: 0, changePct: 0 };
+      const info = DataService.getCompanyInfo(s);
+      return `
+      <div class="watch-item ${s === state.selected ? "active" : ""}" data-symbol="${s}">
+        <div>
+          <div class="sym">${s}</div>
+          <div class="name">${info.name}</div>
+        </div>
+        <div class="right">
+          <div class="price">${fmt(q.price)}</div>
+          <div class="chg ${trendClass(q.changePct)}">${fmtPct(q.changePct)}</div>
+        </div>
+        <span class="rm" data-remove="${s}" title="Bỏ theo dõi">✕</span>
+      </div>`;
+    })
+    .join("");
+
+  el.querySelectorAll(".watch-item").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      if (e.target.dataset.remove) return;
+      state.selected = row.dataset.symbol;
+      loadSelectedSymbol();
+      renderWatchlist();
+    });
+  });
+  el.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const sym = btn.dataset.remove;
+      state.watchlist = state.watchlist.filter((s) => s !== sym);
+      if (state.selected === sym) state.selected = state.watchlist[0];
+      renderWatchlist();
+      renderTickerTape();
+      if (state.selected) loadSelectedSymbol();
+    });
+  });
+}
+
+function wireForms() {
+  document.getElementById("addSymbolForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = document.getElementById("newSymbol");
+    const sym = input.value.trim().toUpperCase();
+    input.value = "";
+    if (!sym) return;
+    if (!state.watchlist.includes(sym)) state.watchlist.push(sym);
+    state.selected = sym;
+    DataService.getQuote(sym)
+      .then((q) => (state.quotes[sym] = q))
+      .finally(() => {
+        renderWatchlist();
+        renderTickerTape();
+        loadSelectedSymbol();
+      });
+  });
+
+  document.getElementById("txForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = e.target;
+    Portfolio.add({
+      symbol: f.symbol.value,
+      type: f.type.value,
+      qty: f.qty.value,
+      price: f.price.value,
+      date: f.date.value || new Date().toISOString().slice(0, 10),
+      note: f.note.value,
+    });
+    f.reset();
+    renderPortfolio();
+  });
+}
+
+/* ============================================================
+   SELECTED SYMBOL: CHART + FUNDAMENTALS + NEWS
+   ============================================================ */
+function renderRangeTabs() {
+  const ranges = [
+    { label: "1M", days: 30 },
+    { label: "3M", days: 90 },
+    { label: "6M", days: 180 },
+  ];
+  const el = document.getElementById("rangeTabs");
+  el.innerHTML = ranges
+    .map((r) => `<button data-days="${r.days}" class="${r.days === state.range ? "active" : ""}">${r.label}</button>`)
+    .join("");
+  el.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.range = Number(btn.dataset.days);
+      renderRangeTabs();
+      loadSelectedSymbol();
+    });
+  });
+}
+
+async function loadSelectedSymbol() {
+  if (!state.selected) return;
+  const sym = state.selected;
+  const info = DataService.getCompanyInfo(sym);
+  const q = state.quotes[sym] || (await DataService.getQuote(sym));
+  state.quotes[sym] = q;
+
+  document.getElementById("symbolTitle").innerHTML = `
+    <span class="sym">${sym}</span>
+    <span class="name">${info.name} · ${info.exchange}</span>
+    <span class="price ${trendClass(q.changePct)}">${fmt(q.price)} <small>${fmtPct(q.changePct)}</small></span>
+  `;
+
+  const [history, fundamentals, news] = await Promise.all([
+    DataService.getHistory(sym, state.range),
+    DataService.getFundamentals(sym),
+    DataService.getNews(state.watchlist),
+  ]);
+
+  ChartModule.setData(history);
+  renderFundamentals(fundamentals);
+  renderNews(news);
+}
+
+function renderFundamentals(f) {
+  const cells = [
+    ["Vốn hóa (nghìn tỷ)", fmt(f.marketCap, 1)],
+    ["P/E", fmt(f.pe, 1)],
+    ["P/B", fmt(f.pb, 2)],
+    ["EPS (nghìn đ)", fmt(f.eps, 2)],
+    ["ROE (%)", fmt(f.roe, 1)],
+    ["ROA (%)", fmt(f.roa, 1)],
+    ["Cổ tức (%)", fmt(f.dividendYield, 1)],
+    ["DT YoY (%)", fmtPct(f.revenueYoY)],
+    ["LNST YoY (%)", fmtPct(f.netProfitYoY)],
+    ["Nợ/Vốn CSH", fmt(f.debtToEquity, 2)],
+  ];
+  document.getElementById("fundGrid").innerHTML = cells
+    .map(([label, value]) => `<div class="fund-cell"><div class="label">${label}</div><div class="value">${value}</div></div>`)
+    .join("");
+}
+
+function renderNews(items) {
+  const el = document.getElementById("newsList");
+  if (!items.length) {
+    el.innerHTML = `<div class="empty-state">Chưa có tin tức.</div>`;
+    return;
+  }
+  el.innerHTML = items
+    .slice(0, 12)
+    .map((n) => {
+      const t = new Date(n.time);
+      const hoursAgo = Math.max(1, Math.round((Date.now() - t) / 3600000));
+      return `
+      <div class="news-item">
+        <div class="meta"><span class="tag">${n.symbol}</span><span>${n.source}</span><span>${hoursAgo}h trước</span></div>
+        <div class="title"><a href="${n.url}" target="_blank" rel="noopener">${n.title}</a></div>
+      </div>`;
+    })
+    .join("");
+}
+
+/* ============================================================
+   PORTFOLIO / TRANSACTION HISTORY
+   ============================================================ */
+function renderPortfolio() {
+  const currentPrices = {};
+  Object.entries(state.quotes).forEach(([s, q]) => (currentPrices[s] = q.price));
+
+  const holdings = Portfolio.computeHoldings(currentPrices);
+  const totalValue = holdings.reduce((a, h) => a + h.marketValue, 0);
+  const totalUnrealized = holdings.reduce((a, h) => a + h.unrealizedPL, 0);
+  const totalRealized = holdings.reduce((a, h) => a + h.realizedPL, 0);
+
+  document.getElementById("holdingsSummary").innerHTML = `
+    <div class="stat"><div class="label">Giá trị danh mục</div><div class="val">${fmt(totalValue, 1)} tr đ</div></div>
+    <div class="stat"><div class="label">Lãi/lỗ tạm tính</div><div class="val ${trendClass(totalUnrealized)}">${fmt(totalUnrealized, 1)} tr đ</div></div>
+    <div class="stat"><div class="label">Lãi/lỗ đã chốt</div><div class="val ${trendClass(totalRealized)}">${fmt(totalRealized, 1)} tr đ</div></div>
+  `;
+
+  const holdEl = document.getElementById("holdingsTable");
+  holdEl.innerHTML = holdings.length
+    ? `<table>
+        <thead><tr><th>Mã</th><th class="num">KL</th><th class="num">Giá vốn TB</th><th class="num">Giá hiện tại</th><th class="num">Lãi/lỗ</th></tr></thead>
+        <tbody>${holdings
+          .map(
+            (h) => `<tr>
+              <td>${h.symbol}</td>
+              <td class="num">${fmt(h.qty, 0)}</td>
+              <td class="num">${fmt(h.avgCost)}</td>
+              <td class="num">${fmt(h.currentPrice)}</td>
+              <td class="num ${trendClass(h.unrealizedPL)}">${fmt(h.unrealizedPL, 1)} (${fmtPct(h.unrealizedPLPct)})</td>
+            </tr>`
+          )
+          .join("")}</tbody>
+      </table>`
+    : `<div class="empty-state">Chưa có mã nào đang nắm giữ.</div>`;
+
+  const txs = Portfolio.list().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const txEl = document.getElementById("txTable");
+  txEl.innerHTML = txs.length
+    ? `<table>
+        <thead><tr><th>Ngày</th><th>Mã</th><th>Loại</th><th class="num">KL</th><th class="num">Giá</th><th>Ghi chú</th><th></th></tr></thead>
+        <tbody>${txs
+          .map(
+            (t) => `<tr>
+              <td>${t.date}</td>
+              <td>${t.symbol}</td>
+              <td><span class="pill ${t.type}">${t.type === "buy" ? "MUA" : "BÁN"}</span></td>
+              <td class="num">${fmt(t.qty, 0)}</td>
+              <td class="num">${fmt(t.price)}</td>
+              <td>${t.note || "—"}</td>
+              <td><button class="del-btn" data-id="${t.id}" title="Xóa">✕</button></td>
+            </tr>`
+          )
+          .join("")}</tbody>
+      </table>`
+    : `<div class="empty-state">Chưa có giao dịch nào. Thêm giao dịch đầu tiên ở bên trái.</div>`;
+
+  txEl.querySelectorAll("[data-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      Portfolio.remove(btn.dataset.id);
+      renderPortfolio();
+    });
+  });
+}

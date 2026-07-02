@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bảng Điện — Dashboard Chứng Khoán</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Ticker tape: dải giá chạy liên tục kiểu bảng điện sàn giao dịch -->
+  <div class="ticker-tape">
+    <span class="live-dot">LIVE</span>
+    <span class="ticker-track" id="tickerTrack"></span>
+  </div>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="mark">BẢNG<span>ĐIỆN</span></div>
+      <div class="sub">Dashboard tổng hợp cổ phiếu &amp; danh mục cá nhân</div>
+    </div>
+    <div class="header-right">
+      <span class="mock-badge" id="mockBadge">DỮ LIỆU MẪU — XEM config.js</span>
+      <span class="clock" id="clock"></span>
+    </div>
+  </header>
+
+  <section class="index-strip" id="indexStrip"></section>
+
+  <main class="main-grid">
+    <!-- Watchlist -->
+    <div class="panel">
+      <div class="panel-head"><h2>Danh mục theo dõi</h2></div>
+      <form id="addSymbolForm" class="watchlist-add">
+        <input id="newSymbol" placeholder="Mã CK, vd: VIC" maxlength="10" />
+        <button type="submit">+ Thêm</button>
+      </form>
+      <div id="watchlist"></div>
+    </div>
+
+    <!-- Chart + Fundamentals -->
+    <div class="panel">
+      <div class="panel-head"><h2>Biểu đồ giá &amp; chỉ số cơ bản</h2></div>
+      <div class="panel-body">
+        <div class="symbol-title" id="symbolTitle"></div>
+        <div class="chart-toolbar">
+          <div class="range-tabs" id="rangeTabs"></div>
+          <label class="chk"><input type="checkbox" id="chkMA10" checked/><span class="sw" style="background:#2a78d6;"></span>MA10</label>
+          <label class="chk"><input type="checkbox" id="chkMA20" checked/><span class="sw" style="background:#4a3aa7;"></span>MA20</label>
+          <label class="chk"><input type="checkbox" id="chkBB"/><span class="sw" style="background:#1baf7a;"></span>Bollinger</label>
+          <label class="chk"><input type="checkbox" id="chkVol" checked/>KL</label>
+          <label class="chk"><input type="checkbox" id="chkRSI" checked/>RSI</label>
+          <button type="button" id="drawTrendBtn" class="btn-outline">Vẽ trendline</button>
+          <button type="button" id="clearTrendBtn" class="btn-outline">Xóa</button>
+        </div>
+        <div class="chart-stack">
+          <div class="chart-wrap" id="priceChartContainer"></div>
+          <canvas id="trendOverlay" class="trend-overlay"></canvas>
+        </div>
+        <div class="chart-wrap-rsi" id="rsiChartContainer"></div>
+        <div class="fund-grid" id="fundGrid"></div>
+      </div>
+    </div>
+
+    <!-- News -->
+    <div class="panel">
+      <div class="panel-head"><h2>Tin tức liên quan</h2></div>
+      <div id="newsList"></div>
+    </div>
+  </main>
+
+  <!-- Portfolio / Transaction history -->
+  <section class="portfolio-section">
+    <div class="portfolio-grid">
+      <div class="panel">
+        <div class="panel-head"><h2>Thêm giao dịch</h2></div>
+        <div class="panel-body">
+          <form id="txForm" class="tx-form">
+            <div>
+              <label>Mã CK</label>
+              <input name="symbol" placeholder="VNM" required maxlength="10" />
+            </div>
+            <div>
+              <label>Loại lệnh</label>
+              <select name="type">
+                <option value="buy">Mua</option>
+                <option value="sell">Bán</option>
+              </select>
+            </div>
+            <div>
+              <label>Khối lượng</label>
+              <input name="qty" type="number" min="1" step="1" required />
+            </div>
+            <div>
+              <label>Giá (nghìn đồng)</label>
+              <input name="price" type="number" min="0" step="0.01" required />
+            </div>
+            <div>
+              <label>Ngày</label>
+              <input name="date" type="date" />
+            </div>
+            <div>
+              <label>Ghi chú</label>
+              <input name="note" placeholder="Tùy chọn" />
+            </div>
+            <button type="submit" class="btn btn-submit">Lưu giao dịch</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Danh mục &amp; lịch sử giao dịch</h2></div>
+        <div class="holdings-summary" id="holdingsSummary"></div>
+        <div class="panel-body" id="holdingsTable"></div>
+        <div class="panel-head"><h2>Lịch sử giao dịch</h2></div>
+        <div class="panel-body" id="txTable"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="app-footer">
+    Dữ liệu giá/tin tức hiện đang ở chế độ <code>mock</code> để minh họa giao diện.
+    Xem <code>config.js</code> và thư mục <code>server/</code> để nối API thật (SSI FastConnect, vnstock, CafeF/Vietstock RSS...).
+    Lịch sử giao dịch được lưu cục bộ trong trình duyệt (localStorage).
+  </footer>
+
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="config.js"></script>
+  <script src="mockData.js"></script>
+  <script src="dataService.js"></script>
+  <script src="portfolio.js"></script>
+  <script src="chartModule.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
