@@ -13,7 +13,13 @@ const app = express();
 app.use(cors());
 
 const PORT = process.env.PORT || 3001;
-const rssParser = new Parser();
+const rssParser = new Parser({
+  headers: {
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    Accept: "application/rss+xml, application/xml, text/xml, */*",
+  },
+});
 
 // ------------------------------------------------------------
 // Simple in-memory cache (avoid hammering upstream APIs / rate limits)
@@ -189,7 +195,31 @@ function toThousandVnd(v) {
 
 // ============================================================
 // Fundamentals — TCBS public API (unofficial, may change)
+// TCBS blocks raw server-to-server requests; we must send browser-like
+// headers or the CDN returns 404/403. Endpoint path also shifted from
+// /ticker/... to /company/... — try both.
 // ============================================================
+const TCBS_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "vi,en;q=0.9",
+  Origin: "https://tcinvest.tcbs.com.vn",
+  Referer: "https://tcinvest.tcbs.com.vn/",
+  Connection: "keep-alive",
+};
+
+async function tcbsFetchJson(paths) {
+  // Try each path in order; first 2xx wins. Throws if all fail.
+  let lastStatus = 0;
+  for (const path of paths) {
+    const res = await fetch(`https://apipubaws.tcbs.com.vn${path}`, { headers: TCBS_HEADERS });
+    if (res.ok) return res.json();
+    lastStatus = res.status;
+  }
+  throw new Error(`TCBS all paths ${lastStatus}`);
+}
+
 app.get("/api/fundamentals/:symbol", async (req, res) => {
   const symbol = String(req.params.symbol || "").toUpperCase();
   const cacheKey = `fund:${symbol}`;
@@ -197,14 +227,22 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const [overviewRes, ratioRes] = await Promise.all([
-      fetch(`https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/${symbol}/overview`),
-      fetch(`https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/${symbol}/financialratio?yearly=1&isAll=true`),
+    // Overview: newer path is /tcanalysis/v1/ticker/:sym/overview but /company/... also works.
+    // Ratios: /tcanalysis/v1/finance/:sym/financialratio is the current name; keep legacy as fallback.
+    const [overview, ratios] = await Promise.all([
+      tcbsFetchJson([
+        `/tcanalysis/v1/ticker/${symbol}/overview`,
+        `/tcanalysis/v1/company/${symbol}/overview`,
+      ]).catch(() => ({})),
+      tcbsFetchJson([
+        `/tcanalysis/v1/finance/${symbol}/financialratio?yearly=1&isAll=true`,
+        `/tcanalysis/v1/ticker/${symbol}/financialratio?yearly=1&isAll=true`,
+      ]).catch(() => []),
     ]);
 
-    if (!overviewRes.ok) throw new Error(`TCBS overview ${overviewRes.status}`);
-    const overview = await overviewRes.json();
-    const ratios = ratioRes.ok ? await ratioRes.json() : [];
+    if (!overview || Object.keys(overview).length === 0) {
+      throw new Error("TCBS overview empty");
+    }
     const latestRatio = Array.isArray(ratios) ? ratios[0] || {} : {};
 
     const fundamentals = {
