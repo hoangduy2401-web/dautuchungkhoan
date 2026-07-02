@@ -1,0 +1,20 @@
+{
+  "name": "bang-dien-server",
+  "version": "1.0.0",
+  "description": "Backend proxy cho Bảng Điện Dashboard - SSI FastConnect / TCBS / CafeF",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "rss-parser": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
