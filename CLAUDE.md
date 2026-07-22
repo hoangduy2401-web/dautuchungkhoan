@@ -161,18 +161,20 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   - `/api/price/quote` ✅ FPT 64.6 (-0.31%)
   - `/api/fundamentals/:symbol` ✅ VNDirect finfo (FPT, VCB)
   - `/api/news` ✅ CafeF, lọc mã tiếng Việt đúng
-- `config.js`: baseUrl đã trỏ Render; **`USE_MOCK` vẫn `true`** — chỉ bật
-  `false` sau khi Render deploy code mới + set env vars.
+- **Render đã live với credentials SSI** (env vars set trong dashboard, không
+  phải file `.env`): token OK, indices, history 180 ngày, quote đều chạy thật.
+- **`USE_MOCK: false`** — GitHub Pages
+  (https://hoangduy2401-web.github.io/dautuchungkhoan/) đang chạy dữ liệu thật.
+  `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
+- Git: máy đã lưu PAT trong osxkeychain, `git push` chạy thẳng không cần hỏi.
 
 ### Việc cần làm tiếp theo (ưu tiên)
 
-1. Push code lên GitHub (cần `gh auth login` trên máy)
-2. Trên Render dashboard: set env `SSI_CONSUMER_ID`, `SSI_CONSUMER_SECRET`
-   → deploy lại → kiểm tra `https://dashboard-chung-khoan.onrender.com/health`
-   và `/api/price/indices`
-3. Đặt `USE_MOCK: false` trong `config.js` → push → kiểm tra GitHub Pages
-4. Ping định kỳ (UptimeRobot) chống Render Free ngủ sau 15 phút
-5. (Tùy chọn) Lấy `revenueYoY`, `netProfitYoY`, `debtToEquity` từ
+1. Ping định kỳ (UptimeRobot, 10 phút/lần vào `/health`) chống Render Free ngủ
+   sau 15 phút — lần tải đầu hiện mất ~30-50s nếu server đang ngủ
+2. Mở dashboard trong giờ giao dịch để kiểm tra ticker/watchlist/chart với dữ
+   liệu thật (mọi test tới giờ đều ngoài giờ khớp lệnh)
+3. (Tùy chọn) Lấy `revenueYoY`, `netProfitYoY`, `debtToEquity` từ
    `/v4/financial_statements` của VNDirect — cần map itemCode
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
