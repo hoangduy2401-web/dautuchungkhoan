@@ -7,6 +7,9 @@
 const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const Parser = require("rss-parser");
 require("dotenv").config();
 
@@ -296,44 +299,49 @@ app.get("/api/price/indices", async (req, res) => {
   }
 });
 
+// Latest quote for one symbol, in thousands of VND. Shared by /api/price/quote
+// and the account panel (FCTrading returns marketPrice = 0 outside market hours).
+async function fetchQuote(symbol) {
+  const cacheKey = `quote:${symbol}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  // DailyStockPrice carries close + reference price for the change% calc.
+  const today = new Date();
+  const raw = await ssiGet("/api/v2/Market/DailyStockPrice", {
+    Symbol: symbol,
+    FromDate: fmtSsiDate(new Date(today.getTime() - 7 * 24 * 3600 * 1000)),
+    ToDate: fmtSsiDate(today),
+    PageIndex: 1,
+    PageSize: 10,
+    Market: "",
+    ascending: false,
+  });
+
+  const rows = extractRows(raw)
+    .map((r) => ({ row: r, date: normalizeDate(pickField(r, ["TradingDate", "Date"])) }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const d = rows[0]?.row || {};
+  const price = toThousandVnd(pickField(d, ["ClosePrice", "MatchPrice", "MatchedPrice", "Close"]));
+  const refPrice = toThousandVnd(pickField(d, ["RefPrice", "BasicPrice", "PriorClosePrice"]));
+
+  const quote = {
+    price,
+    changePct: refPrice ? ((price - refPrice) / refPrice) * 100 : 0,
+    volume: num(pickField(d, ["TotalMatchVol", "TotalVol", "Volume"])),
+  };
+  cacheSet(cacheKey, quote, 10_000);
+  return quote;
+}
+
 // GET /api/price/quote?symbol=VNM  (used by dataService.getQuote)
 app.get("/api/price/quote", async (req, res) => {
   const symbol = String(req.query.symbol || "").toUpperCase();
   if (!symbol) return res.status(400).json({ error: "missing symbol" });
 
-  const cacheKey = `quote:${symbol}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
-
   try {
-    // DailyStockPrice carries close + reference price for the change% calc.
-    const today = new Date();
-    const raw = await ssiGet("/api/v2/Market/DailyStockPrice", {
-      Symbol: symbol,
-      FromDate: fmtSsiDate(new Date(today.getTime() - 7 * 24 * 3600 * 1000)),
-      ToDate: fmtSsiDate(today),
-      PageIndex: 1,
-      PageSize: 10,
-      Market: "",
-      ascending: false,
-    });
-
-    const rows = extractRows(raw)
-      .map((r) => ({ row: r, date: normalizeDate(pickField(r, ["TradingDate", "Date"])) }))
-      .sort((a, b) => b.date.localeCompare(a.date));
-
-    const d = rows[0]?.row || {};
-    const price = toThousandVnd(pickField(d, ["ClosePrice", "MatchPrice", "MatchedPrice", "Close"]));
-    const refPrice = toThousandVnd(pickField(d, ["RefPrice", "BasicPrice", "PriorClosePrice"]));
-    const changePct = refPrice ? ((price - refPrice) / refPrice) * 100 : 0;
-
-    const quote = {
-      price,
-      changePct,
-      volume: num(pickField(d, ["TotalMatchVol", "TotalVol", "Volume"])),
-    };
-    cacheSet(cacheKey, quote, 10_000);
-    res.json(quote);
+    res.json(await fetchQuote(symbol));
   } catch (err) {
     console.error("[/api/price/quote]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
@@ -572,8 +580,43 @@ function requireDashboardKey(req, res, next) {
 
 const accountGuards = [requireAllowedOrigin, requireDashboardKey];
 
+// Account numbers are 7 digits: 6-digit customer code + 1 (cơ sở) / 8 (phái sinh).
+function normalizeAccount(acc) {
+  const a = String(acc || "").trim();
+  return a.length === 6 ? `${a}1` : a;
+}
+
+// Token cache on disk so a server restart does not force a fresh OTP.
+// Render's filesystem is ephemeral, so a cold start still needs one.
+const TOKEN_CACHE_FILE = path.join(os.tmpdir(), "ssi-trade-token.json");
+
 let tradeToken = null;
 let tradeTokenExpiry = 0;
+
+(function restoreTradeToken() {
+  try {
+    const c = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, "utf8"));
+    if (c.token && c.expiry > Date.now()) {
+      tradeToken = c.token;
+      tradeTokenExpiry = c.expiry;
+      console.log("[FCTrading] khôi phục token từ cache, hết hạn", new Date(c.expiry).toISOString());
+    }
+  } catch {
+    /* no cache yet */
+  }
+})();
+
+function persistTradeToken() {
+  try {
+    fs.writeFileSync(
+      TOKEN_CACHE_FILE,
+      JSON.stringify({ token: tradeToken, expiry: tradeTokenExpiry }),
+      { mode: 0o600 }
+    );
+  } catch (err) {
+    console.warn("[FCTrading] không ghi được token cache:", err.message);
+  }
+}
 
 // FCTrading answers HTTP 200 even for failures, putting the real outcome in
 // `status` (200 = success) and `message`. Checking res.ok alone silently
@@ -623,6 +666,7 @@ async function loginTrading(code) {
 
   tradeToken = token;
   tradeTokenExpiry = Date.now() + 7 * 60 * 60 * 1000; // TTL 8h, refresh sớm 1h
+  persistTradeToken();
   return token;
 }
 
@@ -671,7 +715,7 @@ app.post("/api/account/login", accountGuards, async (req, res) => {
 
 // GET /api/account/portfolio — real positions + cash balance
 app.get("/api/account/portfolio", accountGuards, async (req, res) => {
-  const account = String(req.query.account || process.env.SSI_ACCOUNT || "");
+  const account = normalizeAccount(req.query.account || process.env.SSI_ACCOUNT);
   if (!account) return res.status(400).json({ error: "missing_account" });
 
   try {
@@ -681,23 +725,34 @@ app.get("/api/account/portfolio", accountGuards, async (req, res) => {
     ]);
 
     const rows = posRaw.data?.stockPositions || posRaw.dataList || [];
-    const positions = rows
-      .map((p) => {
-        const qty = num(pickField(p, ["onHand"]));
-        const avgCost = toThousandVnd(pickField(p, ["avgPrice"]));
-        const marketPrice = toThousandVnd(pickField(p, ["marketPrice"]));
-        return {
-          symbol: String(pickField(p, ["instrumentID", "symbol"], "")).toUpperCase(),
-          qty,
-          sellableQty: num(pickField(p, ["sellableQty"])),
-          avgCost,
-          marketPrice,
-          marketValue: (qty * marketPrice) / 1000, // -> triệu đồng
-          unrealizedPL: (qty * (marketPrice - avgCost)) / 1000,
-          unrealizedPLPct: avgCost > 0 ? ((marketPrice - avgCost) / avgCost) * 100 : 0,
-        };
-      })
-      .filter((p) => p.symbol && p.qty > 0)
+    const held = rows
+      .map((p) => ({
+        symbol: String(pickField(p, ["instrumentID", "symbol"], "")).toUpperCase(),
+        qty: num(pickField(p, ["onHand"])),
+        sellableQty: num(pickField(p, ["sellableQty"])),
+        avgCost: toThousandVnd(pickField(p, ["avgPrice"])),
+        marketPrice: toThousandVnd(pickField(p, ["marketPrice"])),
+      }))
+      .filter((p) => p.symbol && p.qty > 0);
+
+    // FCTrading reports marketPrice = 0 outside trading hours, which would show
+    // every holding at -100%. Fall back to the last close from FCData.
+    await Promise.all(
+      held
+        .filter((p) => p.marketPrice <= 0)
+        .map(async (p) => {
+          const q = await fetchQuote(p.symbol).catch(() => null);
+          if (q?.price) p.marketPrice = q.price;
+        })
+    );
+
+    const positions = held
+      .map((p) => ({
+        ...p,
+        marketValue: (p.qty * p.marketPrice) / 1000, // -> triệu đồng
+        unrealizedPL: (p.qty * (p.marketPrice - p.avgCost)) / 1000,
+        unrealizedPLPct: p.avgCost > 0 ? ((p.marketPrice - p.avgCost) / p.avgCost) * 100 : 0,
+      }))
       .sort((a, b) => b.marketValue - a.marketValue);
 
     const c = cashRaw.data || {};

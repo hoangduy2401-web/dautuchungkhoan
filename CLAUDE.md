@@ -268,6 +268,26 @@ GET  /api/account/portfolio  → { positions[], cash{}, fetchedAt }
 - Dữ liệu tài khoản **không bao giờ fallback sang mock** (khác các route giá):
   bảng trống còn hơn số liệu bịa.
 
+**Cạm bẫy FCTrading đã gặp (dữ liệu thật, 22/07/2026):**
+- **Trả HTTP 200 kèm lỗi trong body** — outcome thật nằm ở `status` (200 = ok)
+  và `message`. Chỉ check `res.ok` là nuốt lỗi im lặng → `assertTradeOk()`.
+- **Số tài khoản phải đủ 7 chữ số**: 6 số mã KH + hậu tố `1` (cơ sở) / `8`
+  (phái sinh). Thiếu hậu tố → `"Account is not exist."`.
+  `normalizeAccount()` tự nối `1` khi thấy 6 số.
+- **`marketPrice = 0` ngoài giờ giao dịch** → mọi mã hiện lỗ -100%. Đã fallback
+  sang giá đóng cửa gần nhất của FCData qua `fetchQuote()`.
+- **`GetOTP` trả "2FA type is invalid" với tài khoản Smart OTP** — endpoint này
+  chỉ dành cho SMS/Email OTP. Smart OTP thì lấy mã trong app rồi gọi thẳng
+  `AccessToken`.
+- Token cache ra `os.tmpdir()/ssi-trade-token.json` (mode 600) để restart không
+  phải nhập OTP lại. **Render ngủ dậy = instance mới = mất cache** → tài khoản
+  Smart OTP phải nhập lại mỗi lần server cold start. Muốn tự động hoàn toàn thì
+  phải chuyển sang xác thực PIN.
+- Sai OTP quá 5 lần → SSI khóa tạm dịch vụ. Đừng đoán mò.
+
+**Đã kiểm chứng số liệu**: tổng giá trị cổ phiếu + tiền mặt khớp chính xác
+`totalAssets` do SSI trả về.
+
 **GĐ2 — đặt lệnh: CHƯA làm và cố ý chưa làm.** Cần chữ ký RSA-SHA256 bằng
 private key PEM; server hiện không giữ private key nào, nên kể cả bị lộ
 `DASHBOARD_API_KEY` thì kẻ tấn công cũng chỉ đọc được, không giao dịch được.
