@@ -39,8 +39,12 @@ nghiệp, tin tức theo mã, lịch sử giao dịch cá nhân tính lãi/lỗ 
 - **Đơn vị giá: nghìn đồng VND.** SSI trả đồng → chia 1000 ở backend.
 - CORS: mọi API chứng khoán VN chặn gọi thẳng từ trình duyệt → backend proxy là
   bắt buộc, không phải tùy chọn.
-- `localStorage` key lịch sử giao dịch: `vn_dashboard_transactions_v1`.
-  Lãi/lỗ tính theo **giá vốn bình quân gia quyền**.
+- `localStorage` keys: `vn_dashboard_transactions_v1` (lịch sử giao dịch),
+  `vn_dashboard_watchlist_v1` (watchlist). Lãi/lỗ tính theo **giá vốn bình
+  quân gia quyền**.
+- `DEFAULT_WATCHLIST` trong `config.js` chỉ là **seed lần đầu**; sau đó
+  watchlist đọc/ghi localStorage. Danh sách rỗng được tôn trọng, không tự nạp
+  lại seed.
 - Font: Space Grotesk (display) / Be Vietnam Pro (body) / JetBrains Mono (số).
 - Theme tối: nền `#0a0f1c`, amber `#f2a93b`, xanh `#17d980`, đỏ `#ff4d5e`.
 - Mọi widget lấy dữ liệu qua `dataService.js` — không `fetch()` thẳng trong
@@ -127,6 +131,17 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   không ảnh hưởng nơi kia.
 - Git: PAT lưu trong macOS osxkeychain, cần cả scope `repo` **và `workflow`**
   (thiếu `workflow` thì mọi push đụng `.github/workflows/` đều bị từ chối).
+- **Enforce HTTPS đang bị chặn**: GitHub báo "domain is not properly
+  configured" vì tên miền gốc mới chỉ có **1 bản ghi A** (`185.199.108.153`) —
+  GitHub đòi đủ 4 IP (`.108/.109/.110/.111.153`). Trang vẫn chạy HTTPS
+  (chứng chỉ đã cấp), chỉ là chưa ép được `http://` chuyển sang `https://`.
+  Giao diện DNS Mắt Bão có vẻ chỉ cho 1 bản ghi A → nếu đúng vậy thì phải
+  chuyển nameserver sang Cloudflare mới thêm đủ được.
+- **Cache 10 phút**: GitHub Pages trả `cache-control: max-age=600` cho JS/CSS.
+  Sau mỗi lần push, trình duyệt vẫn chạy code cũ tới 10 phút → phải hard
+  refresh (`Cmd+Shift+R`) trước khi kết luận "sửa không ăn". Đã mất một vòng
+  debug vì chuyện này. Cách dứt điểm: gắn `?v=N` vào các thẻ script trong
+  `index.html` (chưa làm).
 
 ## 6. Key learnings (đừng lặp lại sai lầm cũ)
 
@@ -195,14 +210,23 @@ https://dashboardstock.io.vn** — `USE_MOCK: false`,
 24/7. Lưu ý GitHub **tự tắt scheduled workflow sau 60 ngày repo không có
 commit** → khi đó vào tab Actions bấm *Enable workflow*.
 
+**Watchlist đã lưu localStorage** (22/07/2026): trước đó `state.watchlist` chỉ
+nằm trong RAM nên mỗi lần F5 là về lại `DEFAULT_WATCHLIST`. Đã xác nhận chạy
+đúng trên Edge sau hard refresh (`typeof saveWatchlist === "function"`).
+
+`REBOOT_SCRIPT.md` đã xóa — mô tả trạng thái tiền-viết-lại (TCBS làm
+fundamentals, backend chưa test), dễ khiến phiên sau đi sai hướng.
+
 ### Việc cần làm tiếp theo
 
-1. Mở dashboard trong giờ giao dịch (9h-15h, T2-T6) để kiểm tra
+1. Thêm 3 bản ghi A còn thiếu (hoặc chuyển DNS sang Cloudflare) → bật
+   **Enforce HTTPS**
+2. Mở dashboard trong giờ giao dịch (9h-15h, T2-T6) để kiểm tra
    ticker/watchlist/chart với dữ liệu động — mọi test tới giờ đều ngoài giờ
-   khớp lệnh nên bảng điện đứng yên.
-2. Bật **Enforce HTTPS** trong Settings → Pages nếu chưa (lúc kiểm tra cuối,
-   `http://` vẫn trả 200 thay vì chuyển sang `https://`).
-3. Bật tự động gia hạn tên miền ở Mắt Bão.
+   khớp lệnh nên bảng điện đứng yên
+3. Bật tự động gia hạn tên miền ở Mắt Bão
+4. (Cân nhắc) Gắn `?v=N` vào thẻ script trong `index.html` để khỏi phải hard
+   refresh sau mỗi lần deploy
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
 
@@ -212,4 +236,43 @@ commit** → khi đó vào tab Actions bấm *Enable workflow*.
   `list/add/remove/computeHoldings`.
 - Lọc tin tức chính xác hơn / thêm nguồn Vietstock RSS.
 - Alert giá — toast khi vượt ngưỡng.
-- SSI FastConnect Trading — đặt lệnh (credentials đã có, chưa dùng).
+- **SSI FastConnect Trading** (credentials đã có, chưa dùng) — xem mục 9.
+
+## 9. FastConnect Trading — khảo sát (CHƯA triển khai)
+
+Base URL: `https://fc-tradeapi.ssi.com.vn/api/v2/` (khác hẳn FCData).
+
+**Yêu cầu xác thực nặng hơn FCData nhiều:**
+1. Cặp `ConsumerID`/`ConsumerSecret` **riêng của Trading** (không dùng chung
+   với Data).
+2. **2FA bắt buộc**: `AccessToken` nhận tham số `TwoFactorType` — 0 = PIN,
+   1 = OTP. `GetOTP` gửi mã về email đã đăng ký. Xin OTP quá 5 lần mà không
+   xác thực thì **bị khóa tạm thời**.
+3. **Chữ ký số RSA + SHA256** cho mọi lệnh làm thay đổi tiền/chứng khoán
+   (đặt/sửa/hủy lệnh). Private key dạng PEM, lấy khi tạo connection key trên
+   iBoard.
+4. Token nên cache ra file/bộ nhớ kèm refresh token để khỏi xin OTP liên tục.
+
+**Không có môi trường UAT/paper trading trong tài liệu** → mọi lệnh test đều
+là lệnh thật, tiền thật.
+
+### Rào cản kiến trúc phải giải quyết TRƯỚC khi viết dòng code nào
+
+Backend hiện tại là **public, `cors()` mở cho mọi origin, không có xác thực**.
+Với dữ liệu đọc thì vô hại. Nhưng nếu gắn endpoint đặt lệnh vào đó thì bất kỳ
+ai biết URL Render đều đặt được lệnh trên tài khoản thật. Bắt buộc phải có
+trước:
+- Xác thực phía backend (shared secret trong header, so sánh
+  `crypto.timingSafeEqual`), secret lưu trong env Render.
+- Giới hạn CORS về đúng `https://dashboardstock.io.vn`.
+- Rate limit + log mọi lệnh.
+- PIN/OTP **không bao giờ** lưu ở frontend hay localStorage.
+
+### Lộ trình đề xuất (2 giai đoạn)
+
+- **GĐ 1 — chỉ đọc, không rủi ro**: `stockPosition`, `cashAcctBal`,
+  `orderBook`, `orderHistory` → tự đồng bộ danh mục thật thay vì gõ tay vào
+  `portfolio.js`. Không cần chữ ký RSA, chỉ cần token + 2FA.
+- **GĐ 2 — đặt lệnh**: chỉ làm sau khi GĐ 1 chạy ổn và đã có xác thực backend.
+  Cần thêm: xác nhận 2 bước trên UI, giới hạn giá trị lệnh tối đa, và nút
+  hủy khẩn cấp.
