@@ -3,7 +3,7 @@
 // ============================================================
 const APP_CONFIG = {
   // Set to false to use the real backend proxy (server/index.js on Render).
-  USE_MOCK: true,
+  USE_MOCK: false,
 
   // Keep the UI alive while the real backend is still being wired up:
   // any failing API call silently falls back to mock data.
