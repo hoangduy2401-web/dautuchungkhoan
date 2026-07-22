@@ -342,10 +342,75 @@ app.get("/api/price/quote", async (req, res) => {
 // Fundamentals — VNDirect finfo (public, allows server-to-server).
 // SSI FCData and FCTrading have no fundamentals endpoint; TCBS blocks
 // server-to-server requests (404) even with browser-like headers.
-// Only these 8 ratio codes are exposed by finfo; growth ratios and
-// debt/equity are not available -> returned as null ("—" in the UI).
+// Ratios come from /ratios/latest; growth + debt/equity are not exposed
+// there, so they are derived from /financial_statements line items.
 // ============================================================
 const VNDIRECT_RATIOS = "https://api-finfo.vndirect.com.vn/v4/ratios/latest";
+const VNDIRECT_STATEMENTS = "https://api-finfo.vndirect.com.vn/v4/financial_statements";
+
+// Statement line item codes (from /v4/financial_models catalog).
+// 13000/14000/23000 are identical for NON_FINANCE and BANK company forms;
+// only the revenue line differs.
+const ITEM_REVENUE = 21001; // Doanh thu thuần (NON_FINANCE)
+const ITEM_REVENUE_BANK = 421701; // Tổng thu nhập hoạt động (BANK)
+const ITEM_NPATMI = 23000; // Lợi nhuận sau thuế của Công ty mẹ
+const ITEM_LIABILITIES = 13000; // Nợ phải trả
+const ITEM_EQUITY = 14000; // Vốn chủ sở hữu
+
+async function vndirectJson(url) {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`VNDirect ${res.status}`);
+  return (await res.json()).data || [];
+}
+
+// Group statement rows by fiscalDate: { "2025-12-31": { 21001: n, ... } }
+function groupByFiscalDate(rows) {
+  const byDate = new Map();
+  for (const r of rows) {
+    const d = r.fiscalDate;
+    if (!byDate.has(d)) byDate.set(d, {});
+    byDate.get(d)[Math.round(Number(r.itemCode))] = Number(r.numericValue);
+  }
+  return [...byDate.entries()].sort((a, b) => b[0].localeCompare(a[0])); // newest first
+}
+
+const pctChange = (now, prev) =>
+  Number.isFinite(now) && Number.isFinite(prev) && prev !== 0 ? ((now - prev) / Math.abs(prev)) * 100 : null;
+
+// YoY growth (latest fiscal year vs the one before) + debt/equity from the
+// most recent quarterly balance sheet.
+async function fetchDerivedFundamentals(symbol) {
+  const incomeItems = [ITEM_REVENUE, ITEM_REVENUE_BANK, ITEM_NPATMI].join(",");
+  const balanceItems = [ITEM_LIABILITIES, ITEM_EQUITY].join(",");
+
+  const [annual, quarterly] = await Promise.all([
+    vndirectJson(
+      `${VNDIRECT_STATEMENTS}?q=code:${symbol}~reportType:ANNUAL~itemCode:${incomeItems}` +
+        `&sort=fiscalDate:desc&size=30`
+    ).catch(() => []),
+    vndirectJson(
+      `${VNDIRECT_STATEMENTS}?q=code:${symbol}~reportType:QUARTER~itemCode:${balanceItems}` +
+        `&sort=fiscalDate:desc&size=4`
+    ).catch(() => []),
+  ]);
+
+  const years = groupByFiscalDate(annual);
+  const [cur, prev] = [years[0]?.[1], years[1]?.[1]];
+  // Banks report Tổng thu nhập hoạt động instead of Doanh thu thuần.
+  const revenueOf = (y) => (y ? (y[ITEM_REVENUE] ?? y[ITEM_REVENUE_BANK]) : undefined);
+
+  const balance = groupByFiscalDate(quarterly)[0]?.[1];
+  const equity = balance?.[ITEM_EQUITY];
+
+  return {
+    revenueYoY: pctChange(revenueOf(cur), revenueOf(prev)),
+    netProfitYoY: pctChange(cur?.[ITEM_NPATMI], prev?.[ITEM_NPATMI]),
+    debtToEquity:
+      Number.isFinite(balance?.[ITEM_LIABILITIES]) && Number.isFinite(equity) && equity !== 0
+        ? balance[ITEM_LIABILITIES] / equity
+        : null,
+  };
+}
 const VNDIRECT_CODES = [
   "MARKETCAP",
   "PRICE_TO_EARNINGS",
@@ -364,13 +429,17 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const url =
-      `${VNDIRECT_RATIOS}?filter=ratioCode:${VNDIRECT_CODES.join(",")}` +
-      `&where=code:${symbol}&order=reportDate&fields=ratioCode,value,reportDate`;
-    const upstream = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!upstream.ok) throw new Error(`VNDirect ${upstream.status}`);
-
-    const rows = (await upstream.json()).data || [];
+    const [rows, derived] = await Promise.all([
+      vndirectJson(
+        `${VNDIRECT_RATIOS}?filter=ratioCode:${VNDIRECT_CODES.join(",")}` +
+          `&where=code:${symbol}&order=reportDate&fields=ratioCode,value,reportDate`
+      ),
+      // Derived metrics are best-effort: never fail the whole response for them.
+      fetchDerivedFundamentals(symbol).catch((err) => {
+        console.warn(`[fundamentals] derived ${symbol}: ${err.message}`);
+        return { revenueYoY: null, netProfitYoY: null, debtToEquity: null };
+      }),
+    ]);
     if (!rows.length) throw new Error(`VNDirect trả rỗng cho ${symbol}`);
 
     const v = {};
@@ -385,10 +454,7 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
       roe: has("ROAE_TR_AVG5Q") ? v.ROAE_TR_AVG5Q * 100 : null,
       roa: has("ROAA_TR_AVG5Q") ? v.ROAA_TR_AVG5Q * 100 : null,
       dividendYield: has("DIVIDEND_YIELD") ? v.DIVIDEND_YIELD * 100 : null,
-      // Not exposed by finfo ratios; would need /v4/financial_statements itemCode mapping.
-      revenueYoY: null,
-      netProfitYoY: null,
-      debtToEquity: null,
+      ...derived, // revenueYoY, netProfitYoY, debtToEquity
     };
 
     cacheSet(cacheKey, fundamentals, 6 * 3600_000); // 6h — fundamentals change slowly

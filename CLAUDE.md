@@ -137,13 +137,19 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 - **TCBS đã bỏ**: chặn request server-to-server (404) kể cả có header giả trình duyệt.
 - SSI **FCData lẫn FCTrading đều không có** fundamentals. FCTrading chỉ có đặt/
   sửa/hủy lệnh + truy vấn tài khoản (orderBook, stockPosition, cashAcctBal...).
-- Fundamentals dùng **VNDirect finfo** (`api-finfo.vndirect.com.vn/v4/ratios/latest`),
-  cho phép gọi server-to-server, không cần key. Chỉ có 8 ratioCode dùng được:
-  `MARKETCAP, PRICE_TO_EARNINGS, PRICE_TO_BOOK, DIVIDEND_YIELD, ROAE_TR_AVG5Q
-  (ROE), ROAA_TR_AVG5Q (ROA), EPS_TR, BVPS_CR`. Các tên kiểu `ROE`, `EPS`,
-  `DEBT_EQUITY`, `*_GROWTH` đều trả rỗng. `revenueYoY/netProfitYoY/debtToEquity`
-  hiện trả `null` → UI hiện "—"; muốn có phải map itemCode trong
-  `/v4/financial_statements`.
+- Fundamentals dùng **VNDirect finfo** (public, không cần key, cho gọi
+  server-to-server), ghép từ 2 nguồn:
+  - `/v4/ratios/latest` — chỉ 8 ratioCode dùng được: `MARKETCAP,
+    PRICE_TO_EARNINGS, PRICE_TO_BOOK, DIVIDEND_YIELD, ROAE_TR_AVG5Q (ROE),
+    ROAA_TR_AVG5Q (ROA), EPS_TR, BVPS_CR`. Tên kiểu `ROE`, `EPS`,
+    `DEBT_EQUITY`, `*_GROWTH` đều trả rỗng.
+  - `/v4/financial_statements` — tự tính `revenueYoY`, `netProfitYoY`
+    (ANNUAL, năm mới nhất vs năm trước) và `debtToEquity` (QUARTER mới nhất).
+- Catalog itemCode nằm ở `/v4/financial_models?q=codeList:<mã>` (trả
+  `itemCode` + `itemVnName` + `companyForm`). Code đang dùng:
+  `21001` Doanh thu thuần (NON_FINANCE), `421701` Tổng thu nhập hoạt động
+  (BANK), `23000` LNST công ty mẹ, `13000` Nợ phải trả, `14000` Vốn CSH.
+  **`13000/14000/23000` giống nhau ở mọi companyForm**, chỉ dòng doanh thu khác.
 - Render Free tier ngủ sau 15 phút → cần ping định kỳ (UptimeRobot) hoặc nâng gói.
 
 ## 7. Trạng thái hiện tại (cập nhật 22/07/2026)
@@ -174,8 +180,6 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
    sau 15 phút — lần tải đầu hiện mất ~30-50s nếu server đang ngủ
 2. Mở dashboard trong giờ giao dịch để kiểm tra ticker/watchlist/chart với dữ
    liệu thật (mọi test tới giờ đều ngoài giờ khớp lệnh)
-3. (Tùy chọn) Lấy `revenueYoY`, `netProfitYoY`, `debtToEquity` từ
-   `/v4/financial_statements` của VNDirect — cần map itemCode
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
 
