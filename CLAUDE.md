@@ -108,6 +108,24 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 
 - Regex `\b` **không hoạt động với tiếng Việt** → dùng lookaround Unicode
   `(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])` với cờ `u`.
+
+### Format SSI thật (đã xác nhận 22/07/2026 — hết mơ hồ)
+
+- Rows luôn nằm ở `raw.data` (mảng), **PascalCase**, **giá trị là chuỗi** →
+  phải `Number()`. Không thấy `dataList` hay lowercase ở đâu.
+- `PageSize` **chỉ nhận 10 / 20 / 50 / 100 / 1000** — số khác trả lỗi
+  `"Size of a page must 10, 20, 50, 100 or 1000"`.
+- `DailyOhlc`: `{Symbol, Market, TradingDate:"dd/mm/yyyy", Time, Open, High,
+  Low, Close, Volume, Value}` — trả **giảm dần theo ngày**.
+- `DailyIndex`: `{IndexId, IndexName, IndexValue, TradingDate, Change,
+  RatioChange, TotalMatchVol, Advances/Declines/Ceilings/Floors, ...}`.
+  **`IndexId=ALL` trả `NoDataFound`** → phải gọi từng mã một.
+  Dùng `RatioChange` làm `changePct`; **`Change` bị scale sai** (-0.6203 cho
+  cú giảm -62.03 điểm) — đừng dùng.
+- `IndexList` chỉ trả `{IndexCode, IndexName, Exchange}`, không có giá trị.
+  Mã thật: HOSE = `VNINDEX, VN30, VN100, VNMIDCAP, VNSMALLCAP, VNDIAMOND,
+  VNFINLEAD, VNX50...`; HNX = `HNXIndex, HNX30, HNXUpcomIndex`.
+- Token TTL 8h, xác nhận qua `/api/debug/token`.
 - SSI `DailyOhlc` giới hạn **tối đa 30 ngày/lần gọi** (chỉ ghi trong PDF v2.2)
   → phải chia đoạn (`fetchOhlcChunked`). Response phân trang bằng
   `pageIndex/pageSize`.
@@ -134,23 +152,27 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   `USE_MOCK: true` + `FALLBACK_TO_MOCK_ON_ERROR: true`.
 - Backend: đã deploy `dashboard-chung-khoan.onrender.com`, `/health` OK
   (nhưng bản đang chạy là code cũ, chưa có chunking/debug).
-- `server/index.js`: đã viết lại với `extractRows()`, `pickField()`,
-  `fetchOhlcChunked()` + các endpoint debug. **Phần SSI chưa test với
-  credentials thật** (đang chờ `server/.env`).
-- Fundamentals: ✅ chạy thật qua VNDirect finfo (test OK với FPT, VCB).
-- News: ✅ đã sửa regex tiếng Việt, feed CafeF sống, trả tin thật.
-- `index.js`/`package.json` ở root đã đồng bộ với `server/`.
+- **Toàn bộ backend đã chạy với dữ liệu THẬT** (test local 22/07/2026,
+  `server/.env` đã có credentials SSI):
+  - `/api/debug/token` ✅ auth SSI OK
+  - `/api/price/history` ✅ FPT 30 ngày → 23 nến; 180 ngày → 121 nến,
+    chunking không trùng lặp, giá nghìn VND, sort tăng dần
+  - `/api/price/indices` ✅ VNINDEX 1668.53 (-3.58%), VN30, HNXINDEX, UPCOM
+  - `/api/price/quote` ✅ FPT 64.6 (-0.31%)
+  - `/api/fundamentals/:symbol` ✅ VNDirect finfo (FPT, VCB)
+  - `/api/news` ✅ CafeF, lọc mã tiếng Việt đúng
+- `config.js`: baseUrl đã trỏ Render; **`USE_MOCK` vẫn `true`** — chỉ bật
+  `false` sau khi Render deploy code mới + set env vars.
 
 ### Việc cần làm tiếp theo (ưu tiên)
 
-1. Điền `server/.env` với credentials SSI thật → `cd server && npm install && npm start`
-2. Test `/api/debug/token` → `/api/debug/index-list` (xác nhận mã VNINDEX) →
-   `/api/price/history` (30 ngày rồi 180 ngày, kiểm tra chunking) →
-   `/api/price/indices` → `/api/price/quote`
-3. Ghi lại JSON thật nhận được → đơn giản hóa code parse phòng thủ
-4. Deploy lại Render với biến môi trường đã set
-5. `USE_MOCK: false`, cập nhật `baseUrl` trong `config.js`, push GitHub Pages
-6. (Tùy chọn) Lấy `revenueYoY`, `netProfitYoY`, `debtToEquity` từ
+1. Push code lên GitHub (cần `gh auth login` trên máy)
+2. Trên Render dashboard: set env `SSI_CONSUMER_ID`, `SSI_CONSUMER_SECRET`
+   → deploy lại → kiểm tra `https://dashboard-chung-khoan.onrender.com/health`
+   và `/api/price/indices`
+3. Đặt `USE_MOCK: false` trong `config.js` → push → kiểm tra GitHub Pages
+4. Ping định kỳ (UptimeRobot) chống Render Free ngủ sau 15 phút
+5. (Tùy chọn) Lấy `revenueYoY`, `netProfitYoY`, `debtToEquity` từ
    `/v4/financial_statements` của VNDirect — cần map itemCode
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)

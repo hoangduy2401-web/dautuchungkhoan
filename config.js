@@ -13,11 +13,12 @@ const APP_CONFIG = {
 
   DEFAULT_WATCHLIST: ["VNM", "FPT", "SSI", "VCB", "HPG", "MWG"],
 
-  // When USE_MOCK=false, point each baseUrl to your deployed backend, e.g.
-  //   baseUrl: "https://ten-app.onrender.com/api/price"
-  priceProvider:        { name: "SSI FCData", baseUrl: "/api/price" },
-  fundamentalsProvider: { name: "TCBS",       baseUrl: "/api/fundamentals" },
-  newsProvider:         { name: "CafeF RSS",  baseUrl: "/api/news" },
+  // Deployed backend proxy on Render. For local dev against `npm start`,
+  // swap BACKEND for "http://localhost:3001".
+  // BACKEND = "https://dashboard-chung-khoan.onrender.com"
+  priceProvider:        { name: "SSI FCData", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/price" },
+  fundamentalsProvider: { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/fundamentals" },
+  newsProvider:         { name: "CafeF RSS",  baseUrl: "https://dashboard-chung-khoan.onrender.com/api/news" },
 
   currency: "VND",
 };

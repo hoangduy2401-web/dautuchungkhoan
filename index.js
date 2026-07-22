@@ -242,39 +242,49 @@ app.get("/api/price/indices", async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    // DailyIndex gives value + change%; IndexList only lists index codes.
-    const today = new Date();
-    const raw = await ssiGet("/api/v2/Market/DailyIndex", {
-      IndexId: "ALL",
-      FromDate: fmtSsiDate(new Date(today.getTime() - 5 * 24 * 3600 * 1000)),
-      ToDate: fmtSsiDate(today),
-      PageIndex: 1,
-      PageSize: 100,
-      ascending: false,
-    });
+    // DailyIndex only accepts one IndexId per call (IndexId=ALL -> NoDataFound),
+    // so query each index we display. Left = SSI IndexId, right = UI code.
+    const WANTED = [
+      ["VNINDEX", "VNINDEX"],
+      ["VN30", "VN30"],
+      ["HNXIndex", "HNXINDEX"],
+      ["HNXUpcomIndex", "UPCOM"],
+    ];
 
-    // Keep only the most recent row per index code.
-    const latest = new Map();
-    for (const ix of extractRows(raw)) {
-      const code = String(pickField(ix, ["IndexId", "IndexCode", "Code"], "")).toUpperCase();
-      if (!code) continue;
-      const date = normalizeDate(pickField(ix, ["TradingDate", "Date"]));
-      const prev = latest.get(code);
-      if (prev && prev.date >= date) continue;
-      latest.set(code, {
-        date,
-        code,
+    const today = new Date();
+    const from = fmtSsiDate(new Date(today.getTime() - 7 * 24 * 3600 * 1000));
+    const to = fmtSsiDate(today);
+
+    const items = [];
+    for (const [indexId, uiCode] of WANTED) {
+      // Sequential on purpose: SSI rate-limits concurrent calls hard.
+      const raw = await ssiGet("/api/v2/Market/DailyIndex", {
+        IndexId: indexId,
+        FromDate: from,
+        ToDate: to,
+        PageIndex: 1,
+        PageSize: 10, // SSI only accepts 10 / 20 / 50 / 100 / 1000
+        ascending: false,
+      }).catch((err) => {
+        console.warn(`[indices] ${indexId}: ${err.message}`);
+        return null;
+      });
+
+      const rows = extractRows(raw)
+        .map((r) => ({ row: r, date: normalizeDate(pickField(r, ["TradingDate", "Date"])) }))
+        .sort((a, b) => b.date.localeCompare(a.date));
+      const d = rows[0]?.row;
+      if (!d) continue;
+
+      items.push({
+        code: uiCode,
         // Index values are already in points, do NOT divide by 1000.
-        value: num(pickField(ix, ["IndexValue", "Value", "IndexVal"])),
-        changePct: num(pickField(ix, ["PercentIndexChange", "PercentPriceChange", "ChangePct", "RatioChange"])),
+        value: num(pickField(d, ["IndexValue", "Value", "IndexVal"])),
+        // RatioChange is the % change. NOTE: the sibling `Change` field is
+        // scaled oddly (-0.6203 for a -62.03 point move) — do not use it.
+        changePct: num(pickField(d, ["RatioChange", "PercentIndexChange", "PercentPriceChange", "ChangePct"])),
       });
     }
-
-    const items = [...latest.values()].map(({ code, value, changePct }) => ({
-      code,
-      value,
-      changePct,
-    }));
 
     cacheSet(cacheKey, items, 15_000); // matches REFRESH_INTERVAL_MS
     res.json(items);
