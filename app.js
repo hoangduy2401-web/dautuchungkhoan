@@ -1,13 +1,36 @@
 /* ============================================================
    STATE
    ============================================================ */
+// The watchlist survives reloads; DEFAULT_WATCHLIST is only the first-run seed.
+const WATCHLIST_KEY = "vn_dashboard_watchlist_v1";
+
+function loadWatchlist() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WATCHLIST_KEY));
+    // An empty saved list is intentional (user removed everything) — keep it.
+    if (Array.isArray(saved)) return saved;
+  } catch {
+    /* corrupted entry -> fall back to the seed */
+  }
+  return [...APP_CONFIG.DEFAULT_WATCHLIST];
+}
+
+function saveWatchlist() {
+  try {
+    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(state.watchlist));
+  } catch (err) {
+    console.warn("[watchlist] không lưu được:", err.message);
+  }
+}
+
 const state = {
-  watchlist: [...APP_CONFIG.DEFAULT_WATCHLIST],
-  selected: APP_CONFIG.DEFAULT_WATCHLIST[0],
+  watchlist: loadWatchlist(),
+  selected: null, // set right below, once the watchlist is known
   range: 90,
   quotes: {}, // symbol -> {price, changePct, volume}
   chart: null,
 };
+state.selected = state.watchlist[0] || null;
 
 // Some upstream fields have no data source yet and arrive as null -> show a dash.
 const hasVal = (n) => n !== null && n !== undefined && Number.isFinite(Number(n));
@@ -164,6 +187,7 @@ function renderWatchlist() {
       const sym = btn.dataset.remove;
       state.watchlist = state.watchlist.filter((s) => s !== sym);
       if (state.selected === sym) state.selected = state.watchlist[0];
+      saveWatchlist();
       renderWatchlist();
       renderTickerTape();
       if (state.selected) loadSelectedSymbol();
@@ -180,6 +204,7 @@ function wireForms() {
     if (!sym) return;
     if (!state.watchlist.includes(sym)) state.watchlist.push(sym);
     state.selected = sym;
+    saveWatchlist();
     DataService.getQuote(sym)
       .then((q) => (state.quotes[sym] = q))
       .finally(() => {
