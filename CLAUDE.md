@@ -138,10 +138,10 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   Giao diện DNS Mắt Bão có vẻ chỉ cho 1 bản ghi A → nếu đúng vậy thì phải
   chuyển nameserver sang Cloudflare mới thêm đủ được.
 - **Cache 10 phút**: GitHub Pages trả `cache-control: max-age=600` cho JS/CSS.
-  Sau mỗi lần push, trình duyệt vẫn chạy code cũ tới 10 phút → phải hard
-  refresh (`Cmd+Shift+R`) trước khi kết luận "sửa không ăn". Đã mất một vòng
-  debug vì chuyện này. Cách dứt điểm: gắn `?v=N` vào các thẻ script trong
-  `index.html` (chưa làm).
+  Đã xử lý bằng cache busting: mọi thẻ `<script>`/`<link>` nội bộ trong
+  `index.html` mang `?v=YYYYMMDD`. **Sửa file JS/CSS nào cũng phải bump số
+  version này**, nếu không người dùng vẫn chạy code cũ tới 10 phút (đã mất một
+  vòng debug vì chuyện đó).
 
 ## 6. Key learnings (đừng lặp lại sai lầm cũ)
 
