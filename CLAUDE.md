@@ -104,6 +104,30 @@ GET /api/debug/raw?path=/api/v2/Market/DailyOhlc&Symbol=FPT&FromDate=01/07/2026&
 Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 `https://dashboard-chung-khoan.onrender.com/api/...`), điền `server/.env`.
 
+## 5b. Hạ tầng & tên miền
+
+| Thành phần | Địa chỉ |
+|---|---|
+| Dashboard (GitHub Pages) | **https://dashboardstock.io.vn** |
+| URL cũ (301 → tên miền mới) | https://hoangduy2401-web.github.io/dautuchungkhoan |
+| Backend proxy (Render Free) | https://dashboard-chung-khoan.onrender.com |
+| Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
+
+- Tên miền `dashboardstock.io.vn` mua tại **Mắt Bão** (nameserver `ns1/ns2.matbao.vn`),
+  **phải gia hạn hàng năm** — hết hạn là dashboard chết, GitHub không cảnh báo.
+- DNS: A `@` → `185.199.108.153` (GitHub Pages còn 3 IP dự phòng
+  `.109/.110/.111.153` nhưng giao diện Mắt Bão chỉ cho 1 bản ghi A — 1 IP là đủ
+  chạy, chỉ mất lớp dự phòng); CNAME `www` → `hoangduy2401-web.github.io.`
+- File **`CNAME` ở gốc repo là bắt buộc** — xóa là mất tên miền, trang rơi về
+  URL cũ. GitHub tự tạo file này khi khai báo custom domain trong Settings →
+  Pages, nên đừng commit trùng (đã bị một lần, phải `git reset --hard`).
+- HTTPS: chứng chỉ Let's Encrypt do GitHub cấp và tự gia hạn.
+- **Secrets sống ở 2 nơi tách biệt**: `server/.env` (chỉ ở máy local, bị
+  `.gitignore` chặn) và Environment vars trong Render dashboard. Sửa nơi này
+  không ảnh hưởng nơi kia.
+- Git: PAT lưu trong macOS osxkeychain, cần cả scope `repo` **và `workflow`**
+  (thiếu `workflow` thì mọi push đụng `.github/workflows/` đều bị từ chối).
+
 ## 6. Key learnings (đừng lặp lại sai lầm cũ)
 
 - Regex `\b` **không hoạt động với tiếng Việt** → dùng lookaround Unicode
@@ -125,15 +149,13 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 - `IndexList` chỉ trả `{IndexCode, IndexName, Exchange}`, không có giá trị.
   Mã thật: HOSE = `VNINDEX, VN30, VN100, VNMIDCAP, VNSMALLCAP, VNDIAMOND,
   VNFINLEAD, VNX50...`; HNX = `HNXIndex, HNX30, HNXUpcomIndex`.
-- Token TTL 8h, xác nhận qua `/api/debug/token`.
-- SSI `DailyOhlc` giới hạn **tối đa 30 ngày/lần gọi** (chỉ ghi trong PDF v2.2)
-  → phải chia đoạn (`fetchOhlcChunked`). Response phân trang bằng
-  `pageIndex/pageSize`.
-- Token SSI TTL thực tế **8 giờ** (không phải 6h).
-- Casing field response khác nhau giữa nguồn tài liệu (PascalCase trong
-  `data` vs lowercase trong `dataList`) → giữ parse phòng thủ
-  (`extractRows()`, `pickField()`) đến khi xác nhận format sống.
-- Giá SSI là VND thô → chia 1000.
+- `DailyOhlc` giới hạn **tối đa 30 ngày/lần gọi** (chỉ ghi trong PDF v2.2)
+  → phải chia đoạn (`fetchOhlcChunked`), phân trang `PageIndex/PageSize`.
+- Token TTL **8 giờ** (không phải 6h như một số nguồn ghi), xác nhận qua
+  `/api/debug/token`.
+- Giá SSI là VND thô → chia 1000. Giá trị chỉ số thì **không** chia.
+- `extractRows()`/`pickField()` vẫn giữ dù format đã rõ: ngắn, không tốn gì,
+  và là lớp đệm nếu SSI đổi version.
 - **TCBS đã bỏ**: chặn request server-to-server (404) kể cả có header giả trình duyệt.
 - SSI **FCData lẫn FCTrading đều không có** fundamentals. FCTrading chỉ có đặt/
   sửa/hủy lệnh + truy vấn tài khoản (orderBook, stockPosition, cashAcctBal...).
@@ -150,40 +172,37 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   `21001` Doanh thu thuần (NON_FINANCE), `421701` Tổng thu nhập hoạt động
   (BANK), `23000` LNST công ty mẹ, `13000` Nợ phải trả, `14000` Vốn CSH.
   **`13000/14000/23000` giống nhau ở mọi companyForm**, chỉ dòng doanh thu khác.
-- Render Free tier ngủ sau 15 phút → cần ping định kỳ (UptimeRobot) hoặc nâng gói.
+- Render Free tier ngủ sau 15 phút → giữ thức bằng GitHub Actions (xem mục 7).
 
 ## 7. Trạng thái hiện tại (cập nhật 22/07/2026)
 
-- Frontend: hoàn chỉnh, chạy tốt với mock trên GitHub Pages.
-  `USE_MOCK: true` + `FALLBACK_TO_MOCK_ON_ERROR: true`.
-- Backend: đã deploy `dashboard-chung-khoan.onrender.com`, `/health` OK
-  (nhưng bản đang chạy là code cũ, chưa có chunking/debug).
-- **Toàn bộ backend đã chạy với dữ liệu THẬT** (test local 22/07/2026,
-  `server/.env` đã có credentials SSI):
-  - `/api/debug/token` ✅ auth SSI OK
-  - `/api/price/history` ✅ FPT 30 ngày → 23 nến; 180 ngày → 121 nến,
-    chunking không trùng lặp, giá nghìn VND, sort tăng dần
-  - `/api/price/indices` ✅ VNINDEX 1668.53 (-3.58%), VN30, HNXINDEX, UPCOM
-  - `/api/price/quote` ✅ FPT 64.6 (-0.31%)
-  - `/api/fundamentals/:symbol` ✅ VNDirect finfo (FPT, VCB)
-  - `/api/news` ✅ CafeF, lọc mã tiếng Việt đúng
-- **Render đã live với credentials SSI** (env vars set trong dashboard, không
-  phải file `.env`): token OK, indices, history 180 ngày, quote đều chạy thật.
-- **`USE_MOCK: false`** — GitHub Pages
-  (https://hoangduy2401-web.github.io/dautuchungkhoan/) đang chạy dữ liệu thật.
-  `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
-- Git: máy đã lưu PAT trong osxkeychain, `git push` chạy thẳng không cần hỏi.
+**Dự án đã hoàn thành và chạy dữ liệu thật end-to-end tại
+https://dashboardstock.io.vn** — `USE_MOCK: false`,
+`FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
 
-- **Keep-alive**: `.github/workflows/keep-alive.yml` ping `/health` mỗi 10 phút
-  24/7 chống Render Free ngủ sau 15 phút. Lưu ý GitHub **tự tắt scheduled
-  workflow sau 60 ngày repo không có commit** → khi đó vào tab Actions bấm
-  *Enable workflow*. Sửa file trong `.github/workflows/` cần PAT có scope
-  `workflow` (scope `repo` không đủ).
+Đã kiểm chứng trên production (Render, 22/07/2026):
+
+| Endpoint | Kết quả |
+|---|---|
+| `/api/debug/token` | auth SSI OK |
+| `/api/price/history` | FPT 30 ngày → 23 nến; 180 ngày → 121 nến, chunking không trùng lặp |
+| `/api/price/indices` | VNINDEX 1668.53 (-3.58%), VN30, HNXINDEX, UPCOM |
+| `/api/price/quote` | FPT 64.6 (-0.31%), VNM 59.1 (+1.20%) |
+| `/api/fundamentals/:symbol` | đủ 10/10 chỉ số — FPT, VCB, HPG, MWG, VNM, SSI |
+| `/api/news` | CafeF, lọc mã tiếng Việt đúng |
+
+**Keep-alive**: `.github/workflows/keep-alive.yml` ping `/health` mỗi 10 phút
+24/7. Lưu ý GitHub **tự tắt scheduled workflow sau 60 ngày repo không có
+commit** → khi đó vào tab Actions bấm *Enable workflow*.
 
 ### Việc cần làm tiếp theo
 
-1. Mở dashboard trong giờ giao dịch để kiểm tra ticker/watchlist/chart với dữ
-   liệu thật (mọi test tới giờ đều ngoài giờ khớp lệnh)
+1. Mở dashboard trong giờ giao dịch (9h-15h, T2-T6) để kiểm tra
+   ticker/watchlist/chart với dữ liệu động — mọi test tới giờ đều ngoài giờ
+   khớp lệnh nên bảng điện đứng yên.
+2. Bật **Enforce HTTPS** trong Settings → Pages nếu chưa (lúc kiểm tra cuối,
+   `http://` vẫn trả 200 thay vì chuyển sang `https://`).
+3. Bật tự động gia hạn tên miền ở Mắt Bão.
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
 
