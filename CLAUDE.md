@@ -174,11 +174,15 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
 - Git: máy đã lưu PAT trong osxkeychain, `git push` chạy thẳng không cần hỏi.
 
-### Việc cần làm tiếp theo (ưu tiên)
+- **Keep-alive**: `.github/workflows/keep-alive.yml` ping `/health` mỗi 10 phút
+  24/7 chống Render Free ngủ sau 15 phút. Lưu ý GitHub **tự tắt scheduled
+  workflow sau 60 ngày repo không có commit** → khi đó vào tab Actions bấm
+  *Enable workflow*. Sửa file trong `.github/workflows/` cần PAT có scope
+  `workflow` (scope `repo` không đủ).
 
-1. Ping định kỳ (UptimeRobot, 10 phút/lần vào `/health`) chống Render Free ngủ
-   sau 15 phút — lần tải đầu hiện mất ~30-50s nếu server đang ngủ
-2. Mở dashboard trong giờ giao dịch để kiểm tra ticker/watchlist/chart với dữ
+### Việc cần làm tiếp theo
+
+1. Mở dashboard trong giờ giao dịch để kiểm tra ticker/watchlist/chart với dữ
    liệu thật (mọi test tới giờ đều ngoài giờ khớp lệnh)
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
