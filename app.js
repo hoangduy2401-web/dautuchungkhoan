@@ -9,8 +9,13 @@ const state = {
   chart: null,
 };
 
-const fmt = (n, d = 2) => Number(n).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtPct = (n) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+// Some upstream fields have no data source yet and arrive as null -> show a dash.
+const hasVal = (n) => n !== null && n !== undefined && Number.isFinite(Number(n));
+const fmt = (n, d = 2) =>
+  hasVal(n)
+    ? Number(n).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d })
+    : "—";
+const fmtPct = (n) => (hasVal(n) ? `${n >= 0 ? "+" : ""}${Number(n).toFixed(2)}%` : "—");
 const trendClass = (n) => (n > 0.001 ? "up" : n < -0.001 ? "down" : "flat");
 const arrow = (n) => (n > 0.001 ? "▲" : n < -0.001 ? "▼" : "•");
 

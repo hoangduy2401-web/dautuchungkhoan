@@ -14,42 +14,71 @@ const DataService = (function () {
     return res.json();
   }
 
+  // Run the real fetch; on failure fall back to mock so the UI stays alive
+  // while the backend is being wired up (APP_CONFIG.FALLBACK_TO_MOCK_ON_ERROR).
+  async function withFallback(label, realFn, mockFn) {
+    if (cfg.USE_MOCK) return mockFn();
+    try {
+      return await realFn();
+    } catch (err) {
+      if (!cfg.FALLBACK_TO_MOCK_ON_ERROR) throw err;
+      console.warn(`[DataService] ${label} lỗi, dùng mock:`, err.message);
+      return mockFn();
+    }
+  }
+
   // ---- Company info: static in both modes (no dedicated endpoint) ----
   function getCompanyInfo(symbol) {
     return COMPANY_INFO[symbol] || { name: symbol, exchange: "HOSE" };
   }
 
   // ---- Market indices: [{code, value, changePct}] ----
-  async function getIndices() {
-    if (cfg.USE_MOCK) return generateIndices();
-    return fetchJson(`${cfg.priceProvider.baseUrl}/indices`);
+  function getIndices() {
+    return withFallback(
+      "indices",
+      () => fetchJson(`${cfg.priceProvider.baseUrl}/indices`),
+      () => generateIndices()
+    );
   }
 
   // ---- Latest quote: {price, changePct, volume} ----
-  async function getQuote(symbol) {
-    if (cfg.USE_MOCK) return generateQuote(symbol);
-    return fetchJson(`${cfg.priceProvider.baseUrl}/quote?symbol=${encodeURIComponent(symbol)}`);
+  function getQuote(symbol) {
+    return withFallback(
+      `quote ${symbol}`,
+      () => fetchJson(`${cfg.priceProvider.baseUrl}/quote?symbol=${encodeURIComponent(symbol)}`),
+      () => generateQuote(symbol)
+    );
   }
 
   // ---- OHLCV history: [{date, open, high, low, close, volume}] ----
-  async function getHistory(symbol, days) {
-    if (cfg.USE_MOCK) return generateHistory(symbol, days);
-    return fetchJson(
-      `${cfg.priceProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`
+  function getHistory(symbol, days) {
+    return withFallback(
+      `history ${symbol}`,
+      () =>
+        fetchJson(
+          `${cfg.priceProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`
+        ),
+      () => generateHistory(symbol, days)
     );
   }
 
   // ---- Fundamentals: {marketCap, pe, pb, eps, roe, roa, ...} ----
-  async function getFundamentals(symbol) {
-    if (cfg.USE_MOCK) return generateFundamentals(symbol);
-    return fetchJson(`${cfg.fundamentalsProvider.baseUrl}/${encodeURIComponent(symbol)}`);
+  function getFundamentals(symbol) {
+    return withFallback(
+      `fundamentals ${symbol}`,
+      () => fetchJson(`${cfg.fundamentalsProvider.baseUrl}/${encodeURIComponent(symbol)}`),
+      () => generateFundamentals(symbol)
+    );
   }
 
   // ---- News: [{symbol, title, source, time, url}] ----
-  async function getNews(symbols) {
-    if (cfg.USE_MOCK) return generateNews(symbols);
+  function getNews(symbols) {
     const q = (symbols || []).join(",");
-    return fetchJson(`${cfg.newsProvider.baseUrl}?symbols=${encodeURIComponent(q)}`);
+    return withFallback(
+      "news",
+      () => fetchJson(`${cfg.newsProvider.baseUrl}?symbols=${encodeURIComponent(q)}`),
+      () => generateNews(symbols)
+    );
   }
 
   return { getCompanyInfo, getIndices, getQuote, getHistory, getFundamentals, getNews };
