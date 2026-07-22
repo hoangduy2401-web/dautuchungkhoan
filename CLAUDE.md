@@ -238,41 +238,41 @@ fundamentals, backend chưa test), dễ khiến phiên sau đi sai hướng.
 - Alert giá — toast khi vượt ngưỡng.
 - **SSI FastConnect Trading** (credentials đã có, chưa dùng) — xem mục 9.
 
-## 9. FastConnect Trading — khảo sát (CHƯA triển khai)
+## 9. FastConnect Trading — GĐ1 chỉ đọc (ĐÃ triển khai)
 
-Base URL: `https://fc-tradeapi.ssi.com.vn/api/v2/` (khác hẳn FCData).
+Base URL: `https://fc-tradeapi.ssi.com.vn` (khác hẳn FCData).
 
-**Yêu cầu xác thực nặng hơn FCData nhiều:**
-1. Cặp `ConsumerID`/`ConsumerSecret` **riêng của Trading** (không dùng chung
-   với Data).
-2. **2FA bắt buộc**: `AccessToken` nhận tham số `TwoFactorType` — 0 = PIN,
-   1 = OTP. `GetOTP` gửi mã về email đã đăng ký. Xin OTP quá 5 lần mà không
-   xác thực thì **bị khóa tạm thời**.
-3. **Chữ ký số RSA + SHA256** cho mọi lệnh làm thay đổi tiền/chứng khoán
-   (đặt/sửa/hủy lệnh). Private key dạng PEM, lấy khi tạo connection key trên
-   iBoard.
-4. Token nên cache ra file/bộ nhớ kèm refresh token để khỏi xin OTP liên tục.
+**Đã làm — chỉ đọc, không thể đặt lệnh:**
 
-**Không có môi trường UAT/paper trading trong tài liệu** → mọi lệnh test đều
-là lệnh thật, tiền thật.
+```
+POST /api/account/otp        → xin OTP (tài khoản dùng SMS/Email OTP)
+POST /api/account/login {code} → tạo phiên bằng PIN/OTP
+GET  /api/account/portfolio  → { positions[], cash{}, fetchedAt }
+```
 
-### Rào cản kiến trúc phải giải quyết TRƯỚC khi viết dòng code nào
+- `positions`: `{symbol, qty, sellableQty, avgCost, marketPrice, marketValue,
+  unrealizedPL, unrealizedPLPct}` — giá nghìn VND, giá trị triệu VND.
+- `cash`: `{cashBal, withdrawable, purchasingPower, debt, totalAssets}` —
+  triệu VND.
+- Nguồn: `Trading/stockPosition` + `Trading/cashAcctBal`, token TTL 8h.
 
-Backend hiện tại là **public, `cors()` mở cho mọi origin, không có xác thực**.
-Với dữ liệu đọc thì vô hại. Nhưng nếu gắn endpoint đặt lệnh vào đó thì bất kỳ
-ai biết URL Render đều đặt được lệnh trên tài khoản thật. Bắt buộc phải có
-trước:
-- Xác thực phía backend (shared secret trong header, so sánh
-  `crypto.timingSafeEqual`), secret lưu trong env Render.
-- Giới hạn CORS về đúng `https://dashboardstock.io.vn`.
-- Rate limit + log mọi lệnh.
-- PIN/OTP **không bao giờ** lưu ở frontend hay localStorage.
+**Bảo mật (khác hẳn các route giá):**
+- Bắt buộc header `x-dashboard-key` khớp `DASHBOARD_API_KEY`, so sánh bằng
+  `crypto.timingSafeEqual`. **Không set env = tính năng tắt hoàn toàn (503)**.
+- Origin allowlist: chỉ `dashboardstock.io.vn`, `hoangduy2401-web.github.io`,
+  localhost. Origin lạ → 403.
+- PIN/OTP **không bao giờ** lưu ở frontend; người dùng nhập khi backend trả
+  428, mã được chuyển thẳng cho SSI trong một lần login.
+- Frontend lưu `DASHBOARD_API_KEY` ở localStorage `vn_dashboard_api_key_v1` —
+  đây là khóa của dashboard, KHÔNG phải credential SSI.
+- Dữ liệu tài khoản **không bao giờ fallback sang mock** (khác các route giá):
+  bảng trống còn hơn số liệu bịa.
 
-### Lộ trình đề xuất (2 giai đoạn)
+**GĐ2 — đặt lệnh: CHƯA làm và cố ý chưa làm.** Cần chữ ký RSA-SHA256 bằng
+private key PEM; server hiện không giữ private key nào, nên kể cả bị lộ
+`DASHBOARD_API_KEY` thì kẻ tấn công cũng chỉ đọc được, không giao dịch được.
+Trước khi làm GĐ2 phải có: xác nhận 2 bước trên UI, giới hạn giá trị lệnh,
+nút hủy khẩn cấp, và log mọi lệnh.
 
-- **GĐ 1 — chỉ đọc, không rủi ro**: `stockPosition`, `cashAcctBal`,
-  `orderBook`, `orderHistory` → tự đồng bộ danh mục thật thay vì gõ tay vào
-  `portfolio.js`. Không cần chữ ký RSA, chỉ cần token + 2FA.
-- **GĐ 2 — đặt lệnh**: chỉ làm sau khi GĐ 1 chạy ổn và đã có xác thực backend.
-  Cần thêm: xác nhận 2 bước trên UI, giới hạn giá trị lệnh tối đa, và nút
-  hủy khẩn cấp.
+**Không có môi trường UAT/paper trading** — mọi lệnh test ở GĐ2 sẽ là lệnh
+thật, tiền thật. Xin OTP quá 5 lần không xác thực thì SSI khóa tạm dịch vụ.
