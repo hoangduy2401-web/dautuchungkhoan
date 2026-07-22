@@ -1,0 +1,25 @@
+name: Keep Render backend awake
+
+# Render Free sleeps after 15 minutes without traffic, so ping /health more
+# often than that. /health does not call SSI, so this costs no API quota.
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes, 24/7 (UTC)
+  workflow_dispatch: # allows a manual run from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          for i in 1 2 3; do
+            # --max-time 120: a sleeping instance takes ~30-50s to wake up.
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 \
+              https://dashboard-chung-khoan.onrender.com/health) || code=000
+            echo "attempt $i -> HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "backend không phản hồi sau 3 lần thử"
+          exit 1
