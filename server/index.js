@@ -6,11 +6,13 @@
 
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto");
 const Parser = require("rss-parser");
 require("dotenv").config();
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 const rssParser = new Parser({
@@ -518,6 +520,194 @@ app.get("/api/news", async (req, res) => {
   } catch (err) {
     console.error("[/api/news]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
+// SSI FastConnect TRADING — READ ONLY (phase 1).
+// Separate host and separate credentials from FCData. Nothing here can
+// place, modify or cancel an order: those need an RSA-SHA256 signature
+// with a private key, which this server deliberately does not hold.
+//
+// These routes expose personal account data, so unlike the price routes
+// they are gated by a shared secret (DASHBOARD_API_KEY) and an origin
+// allowlist. Without the env var set the whole feature stays off.
+// ============================================================
+const SSI_TRADE_BASE = process.env.SSI_TRADE_BASE_URL || "https://fc-tradeapi.ssi.com.vn";
+
+const ACCOUNT_ORIGINS = new Set([
+  "https://dashboardstock.io.vn",
+  "https://www.dashboardstock.io.vn",
+  "https://hoangduy2401-web.github.io",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+]);
+
+function requireAllowedOrigin(req, res, next) {
+  const origin = req.get("origin");
+  // No Origin header = curl/server-side call; the API key below still applies.
+  if (origin && !ACCOUNT_ORIGINS.has(origin)) {
+    return res.status(403).json({ error: "origin_not_allowed", detail: origin });
+  }
+  next();
+}
+
+function requireDashboardKey(req, res, next) {
+  const expected = process.env.DASHBOARD_API_KEY || "";
+  if (!expected) {
+    return res.status(503).json({
+      error: "account_api_disabled",
+      detail: "Chưa set DASHBOARD_API_KEY — tính năng tài khoản đang tắt.",
+    });
+  }
+  const got = String(req.get("x-dashboard-key") || "");
+  const a = Buffer.from(got);
+  const b = Buffer.from(expected);
+  // timingSafeEqual throws on length mismatch, so check length first.
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  next();
+}
+
+const accountGuards = [requireAllowedOrigin, requireDashboardKey];
+
+let tradeToken = null;
+let tradeTokenExpiry = 0;
+
+async function tradePost(path, body) {
+  const res = await fetch(`${SSI_TRADE_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`FCTrading ${path}: ${res.status} ${json.message || ""}`);
+  return json;
+}
+
+// `code` = PIN or OTP. Falls back to SSI_TRADING_PIN so a PIN-based account
+// can refresh silently; OTP accounts must post a fresh code each session.
+async function loginTrading(code) {
+  const consumerID = process.env.SSI_TRADING_CONSUMER_ID;
+  const consumerSecret = process.env.SSI_TRADING_CONSUMER_SECRET;
+  if (!consumerID || !consumerSecret) {
+    throw new Error("Thiếu SSI_TRADING_CONSUMER_ID / SSI_TRADING_CONSUMER_SECRET");
+  }
+
+  const twoFactorType = String(process.env.SSI_TRADING_2FA_TYPE ?? "0"); // 0 = PIN, 1 = OTP
+  const finalCode = code || process.env.SSI_TRADING_PIN || "";
+  if (!finalCode) throw new Error("Cần mã PIN/OTP để lấy token FCTrading");
+
+  const json = await tradePost("/api/v2/Trading/AccessToken", {
+    consumerID,
+    consumerSecret,
+    code: finalCode,
+    twoFactorType,
+    isSave: true,
+  });
+
+  const token = json.data?.accessToken || json.data?.AccessToken;
+  if (!token) throw new Error(`FCTrading không trả accessToken: ${json.message || "unknown"}`);
+
+  tradeToken = token;
+  tradeTokenExpiry = Date.now() + 7 * 60 * 60 * 1000; // TTL 8h, refresh sớm 1h
+  return token;
+}
+
+async function getTradeToken() {
+  if (tradeToken && Date.now() < tradeTokenExpiry) return tradeToken;
+  return loginTrading(); // silent refresh only works for PIN accounts
+}
+
+async function tradeGet(path, params) {
+  const token = await getTradeToken();
+  const url = new URL(`${SSI_TRADE_BASE}${path}`);
+  Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`FCTrading ${path}: ${res.status} ${json.message || ""}`);
+  return json;
+}
+
+// POST /api/account/otp — ask SSI to send an OTP (email/SMS accounts only)
+app.post("/api/account/otp", accountGuards, async (req, res) => {
+  try {
+    const json = await tradePost("/api/v2/Trading/GetOTP", {
+      consumerID: process.env.SSI_TRADING_CONSUMER_ID,
+      consumerSecret: process.env.SSI_TRADING_CONSUMER_SECRET,
+    });
+    res.json({ ok: true, message: json.message || "OTP đã gửi" });
+  } catch (err) {
+    console.error("[/api/account/otp]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// POST /api/account/login { code } — establish a session with a PIN/OTP
+app.post("/api/account/login", accountGuards, async (req, res) => {
+  try {
+    await loginTrading(String(req.body?.code || ""));
+    res.json({ ok: true, expiresAt: new Date(tradeTokenExpiry).toISOString() });
+  } catch (err) {
+    console.error("[/api/account/login]", err.message);
+    res.status(502).json({ error: "login_failed", detail: err.message });
+  }
+});
+
+// GET /api/account/portfolio — real positions + cash balance
+app.get("/api/account/portfolio", accountGuards, async (req, res) => {
+  const account = String(req.query.account || process.env.SSI_ACCOUNT || "");
+  if (!account) return res.status(400).json({ error: "missing_account" });
+
+  try {
+    const [posRaw, cashRaw] = await Promise.all([
+      tradeGet("/api/v2/Trading/stockPosition", { account }),
+      tradeGet("/api/v2/Trading/cashAcctBal", { account }),
+    ]);
+
+    const rows = posRaw.data?.stockPositions || posRaw.dataList || [];
+    const positions = rows
+      .map((p) => {
+        const qty = num(pickField(p, ["onHand"]));
+        const avgCost = toThousandVnd(pickField(p, ["avgPrice"]));
+        const marketPrice = toThousandVnd(pickField(p, ["marketPrice"]));
+        return {
+          symbol: String(pickField(p, ["instrumentID", "symbol"], "")).toUpperCase(),
+          qty,
+          sellableQty: num(pickField(p, ["sellableQty"])),
+          avgCost,
+          marketPrice,
+          marketValue: (qty * marketPrice) / 1000, // -> triệu đồng
+          unrealizedPL: (qty * (marketPrice - avgCost)) / 1000,
+          unrealizedPLPct: avgCost > 0 ? ((marketPrice - avgCost) / avgCost) * 100 : 0,
+        };
+      })
+      .filter((p) => p.symbol && p.qty > 0)
+      .sort((a, b) => b.marketValue - a.marketValue);
+
+    const c = cashRaw.data || {};
+    const toMillion = (v) => num(v) / 1e6;
+    const cash = {
+      cashBal: toMillion(pickField(c, ["cashBal"])),
+      withdrawable: toMillion(pickField(c, ["withdrawable"])),
+      purchasingPower: toMillion(pickField(c, ["purchasingPower"])),
+      debt: toMillion(pickField(c, ["debt"])),
+      totalAssets: toMillion(pickField(c, ["totalAssets"])),
+    };
+
+    res.json({ account, positions, cash, fetchedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error("[/api/account/portfolio]", err.message);
+    // 428 tells the UI to ask the user for a fresh OTP/PIN.
+    const needsLogin = /PIN\/OTP|accessToken|token/i.test(err.message);
+    res.status(needsLogin ? 428 : 502).json({
+      error: needsLogin ? "login_required" : "upstream_failed",
+      detail: err.message,
+    });
   }
 });
 

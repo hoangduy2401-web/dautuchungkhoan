@@ -299,3 +299,13 @@ tr:hover td { background: var(--panel-2); }
   border-top: 1px solid var(--border);
 }
 .app-footer code { color: var(--amber); }
+
+/* ---- SSI account panel ---- */
+.account-actions { display: flex; align-items: center; gap: 10px; }
+.account-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.account-status.up { color: var(--up); }
+.account-status.down { color: var(--down); }

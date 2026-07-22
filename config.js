@@ -19,6 +19,9 @@ const APP_CONFIG = {
   priceProvider:        { name: "SSI FCData", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/price" },
   fundamentalsProvider: { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/fundamentals" },
   newsProvider:         { name: "CafeF RSS",  baseUrl: "https://dashboard-chung-khoan.onrender.com/api/news" },
+  // Read-only SSI account sync. Needs a dashboard API key entered by the user;
+  // never mocked — an empty account panel is better than fake holdings.
+  accountProvider:      { name: "SSI FCTrading", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/account" },
 
   currency: "VND",
 };

@@ -81,5 +81,42 @@ const DataService = (function () {
     );
   }
 
-  return { getCompanyInfo, getIndices, getQuote, getHistory, getFundamentals, getNews };
+  // ---- SSI account (read-only) ----------------------------------------
+  // Never falls back to mock: showing invented holdings would be worse than
+  // showing nothing. Errors propagate so the UI can ask for a PIN/OTP.
+  async function accountFetch(path, apiKey, options = {}) {
+    const res = await fetch(`${cfg.accountProvider.baseUrl}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "x-dashboard-key": apiKey,
+        ...(options.headers || {}),
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(json.detail || json.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.code = json.error;
+      throw err;
+    }
+    return json;
+  }
+
+  const getAccountPortfolio = (apiKey) => accountFetch("/portfolio", apiKey);
+  const requestAccountOtp = (apiKey) => accountFetch("/otp", apiKey, { method: "POST" });
+  const loginAccount = (apiKey, code) =>
+    accountFetch("/login", apiKey, { method: "POST", body: JSON.stringify({ code }) });
+
+  return {
+    getCompanyInfo,
+    getIndices,
+    getQuote,
+    getHistory,
+    getFundamentals,
+    getNews,
+    getAccountPortfolio,
+    requestAccountOtp,
+    loginAccount,
+  };
 })();

@@ -52,6 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   renderRangeTabs();
   wireForms();
+  wireAccountSync();
   ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
   wireChartToolbar();
 
@@ -377,4 +378,90 @@ function renderPortfolio() {
       renderPortfolio();
     });
   });
+}
+
+/* ============================================================
+   SSI ACCOUNT SYNC (read-only)
+   The dashboard API key unlocks the account endpoints on the proxy.
+   It is NOT an SSI credential — PIN/OTP are never stored, they are
+   passed straight through to the backend for one login call.
+   ============================================================ */
+const API_KEY_STORAGE = "vn_dashboard_api_key_v1";
+
+function getApiKey({ prompt: askAgain = false } = {}) {
+  let key = localStorage.getItem(API_KEY_STORAGE);
+  if (!key || askAgain) {
+    key = window.prompt("Nhập khóa truy cập dashboard (DASHBOARD_API_KEY):", key || "");
+    if (!key) return null;
+    localStorage.setItem(API_KEY_STORAGE, key.trim());
+  }
+  return key.trim();
+}
+
+function setAccountStatus(text, kind = "") {
+  const el = document.getElementById("accountStatus");
+  el.textContent = text;
+  el.className = `account-status ${kind}`;
+}
+
+function wireAccountSync() {
+  document.getElementById("syncAccountBtn").addEventListener("click", () => syncAccount());
+}
+
+async function syncAccount(retryCode) {
+  const key = getApiKey();
+  if (!key) return;
+
+  setAccountStatus("Đang đồng bộ...", "");
+  try {
+    if (retryCode) await DataService.loginAccount(key, retryCode);
+    const data = await DataService.getAccountPortfolio(key);
+    renderAccount(data);
+  } catch (err) {
+    if (err.status === 401) {
+      setAccountStatus("Sai khóa truy cập", "down");
+      getApiKey({ prompt: true });
+      return;
+    }
+    if (err.status === 428 && !retryCode) {
+      // PIN/OTP session expired — ask for a fresh code and retry once.
+      const code = window.prompt("Nhập mã PIN hoặc OTP của SSI để đăng nhập:");
+      if (code) return syncAccount(code.trim());
+      setAccountStatus("Cần mã PIN/OTP", "down");
+      return;
+    }
+    setAccountStatus(`Lỗi: ${err.message}`, "down");
+    console.warn("[account]", err);
+  }
+}
+
+function renderAccount({ positions, cash, fetchedAt }) {
+  const time = new Date(fetchedAt).toLocaleTimeString("vi-VN");
+  setAccountStatus(`Cập nhật ${time}`, "up");
+
+  document.getElementById("accountSummary").innerHTML = `
+    <div class="stat"><div class="label">Tổng tài sản</div><div class="val">${fmt(cash.totalAssets, 1)} tr đ</div></div>
+    <div class="stat"><div class="label">Tiền mặt</div><div class="val">${fmt(cash.cashBal, 1)} tr đ</div></div>
+    <div class="stat"><div class="label">Sức mua</div><div class="val">${fmt(cash.purchasingPower, 1)} tr đ</div></div>
+    <div class="stat"><div class="label">Dư nợ</div><div class="val ${cash.debt > 0 ? "down" : ""}">${fmt(cash.debt, 1)} tr đ</div></div>
+  `;
+
+  document.getElementById("accountTable").innerHTML = positions.length
+    ? `<table>
+        <thead><tr><th>Mã</th><th class="num">KL</th><th class="num">Bán được</th><th class="num">Giá vốn</th><th class="num">Giá TT</th><th class="num">Giá trị</th><th class="num">Lãi/lỗ</th></tr></thead>
+        <tbody>${positions
+          .map(
+            (p) => `<tr>
+              <td>${p.symbol}</td>
+              <td class="num">${fmt(p.qty, 0)}</td>
+              <td class="num">${fmt(p.sellableQty, 0)}</td>
+              <td class="num">${fmt(p.avgCost)}</td>
+              <td class="num">${fmt(p.marketPrice)}</td>
+              <td class="num">${fmt(p.marketValue, 1)}</td>
+              <td class="num ${trendClass(p.unrealizedPL)}">${fmt(p.unrealizedPL, 1)} (${fmtPct(p.unrealizedPLPct)})</td>
+            </tr>`
+          )
+          .join("")}</tbody>
+      </table>`
+    : `<div class="empty-state">Tài khoản không có mã nào đang nắm giữ.</div>`;
 }
