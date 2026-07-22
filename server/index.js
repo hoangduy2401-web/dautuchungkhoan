@@ -575,6 +575,17 @@ const accountGuards = [requireAllowedOrigin, requireDashboardKey];
 let tradeToken = null;
 let tradeTokenExpiry = 0;
 
+// FCTrading answers HTTP 200 even for failures, putting the real outcome in
+// `status` (200 = success) and `message`. Checking res.ok alone silently
+// swallows errors like "2FA type is invalid".
+function assertTradeOk(path, json) {
+  const status = Number(json.status);
+  if (Number.isFinite(status) && status !== 200) {
+    throw new Error(`FCTrading ${path}: ${json.message || `status ${status}`}`);
+  }
+  return json;
+}
+
 async function tradePost(path, body) {
   const res = await fetch(`${SSI_TRADE_BASE}${path}`, {
     method: "POST",
@@ -583,7 +594,7 @@ async function tradePost(path, body) {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`FCTrading ${path}: ${res.status} ${json.message || ""}`);
-  return json;
+  return assertTradeOk(path, json);
 }
 
 // `code` = PIN or OTP. Falls back to SSI_TRADING_PIN so a PIN-based account
@@ -630,7 +641,7 @@ async function tradeGet(path, params) {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`FCTrading ${path}: ${res.status} ${json.message || ""}`);
-  return json;
+  return assertTradeOk(path, json);
 }
 
 // POST /api/account/otp — ask SSI to send an OTP (email/SMS accounts only)
