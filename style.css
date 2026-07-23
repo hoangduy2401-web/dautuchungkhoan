@@ -287,6 +287,8 @@ tr:hover td { background: var(--panel-2); }
 .del-btn:hover { color: var(--red); }
 
 .holdings-summary { display: flex; gap: 20px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+/* An empty summary (account not synced yet) would show a bare bordered strip. */
+.holdings-summary:empty { display: none; }
 .holdings-summary .stat .label { font-size: 10.5px; color: var(--text-dim); }
 .holdings-summary .stat .val { font-family: var(--font-mono); font-size: 17px; margin-top: 2px; }
 
@@ -309,3 +311,31 @@ tr:hover td { background: var(--panel-2); }
 }
 .account-status.up { color: var(--up); }
 .account-status.down { color: var(--down); }
+
+/* ============================================================
+   MOBILE — the desktop layout uses 28px side padding and tight
+   header rows that cramp on a phone. Loosen spacing under 640px.
+   ============================================================ */
+@media (max-width: 640px) {
+  .app-header,
+  .index-strip,
+  .main-grid,
+  .app-footer { padding-left: 14px; padding-right: 14px; }
+  .portfolio-section { padding-left: 14px; padding-right: 14px; }
+
+  /* Stack the two portfolio sections with breathing room. */
+  .main-grid { gap: 14px; }
+  .portfolio-section { padding-top: 14px; }
+
+  /* Title + status + button no longer fight for one line. */
+  .panel-head {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+  .account-actions { width: 100%; justify-content: space-between; }
+
+  /* Larger tap targets and roomier form fields. */
+  .tx-form { gap: 12px; }
+  .tx-form input, .tx-form select { padding: 10px 12px; font-size: 14px; }
+  .holdings-summary { gap: 14px 24px; }
+}
