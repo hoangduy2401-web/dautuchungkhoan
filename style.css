@@ -281,6 +281,8 @@ a { color: inherit; }
 .watch-item:last-child { border-bottom: none; }
 .watch-item:hover { background: var(--panel-2); }
 .watch-item.active { background: var(--amber-dim); border-left-color: var(--amber); }
+/* Left block eats the slack so price/chg align on one right edge (before ✕) */
+.watch-item > div:first-child { flex: 1; min-width: 0; }
 .watch-item .sym { font-weight: 700; font-size: 14px; }
 .watch-item .name { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
 .watch-item .right { text-align: right; font-variant-numeric: tabular-nums; }
@@ -331,9 +333,15 @@ a { color: inherit; }
 .fund-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-top: 16px; }
 .fund-cell {
   background: var(--field-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px;
+  display: flex; flex-direction: column;
 }
-.fund-cell .label { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
-.fund-cell .value { font-size: 16px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+/* Reserve 2 label lines so the value sits on the same baseline across cells,
+   whether the label wraps ("EPS (NGHÌN Đ)") or not ("P/E"). */
+.fund-cell .label {
+  font-size: 10.5px; line-height: 1.3; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .04em; min-height: 2.6em;
+}
+.fund-cell .value { font-size: 16px; font-weight: 700; margin-top: auto; font-variant-numeric: tabular-nums; }
 
 /* News */
 .news-item { padding: 12px 16px; border-bottom: 1px solid var(--border); transition: background 0.2s; }
