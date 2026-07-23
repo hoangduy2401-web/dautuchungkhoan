@@ -132,10 +132,12 @@ a { color: inherit; }
   overflow: hidden; white-space: nowrap; position: relative;
   height: 40px; display: flex; align-items: center;
 }
-.ticker-tape .live-dot {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
-  padding: 0 14px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
-  color: var(--up); height: 100%;
+/* LIVE badge — now sits beside the BẢNG ĐIỆN wordmark, not in the ticker */
+.live-dot {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--up-dim); color: var(--up);
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
 }
 .live-dot::before {
   content: ""; width: 7px; height: 7px; border-radius: 50%;
@@ -168,12 +170,14 @@ a { color: inherit; }
   box-shadow: 0 10px 30px -12px var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight);
   flex-wrap: wrap;
 }
-.brand { display: flex; flex-direction: column; gap: 2px; }
+.brand { display: flex; flex-direction: column; gap: 4px; }
+.brand-top { display: flex; align-items: center; gap: 10px; }
 .brand .mark {
   font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em;
 }
 .brand .mark span { color: var(--amber); }
 .brand .sub { font-size: 12.5px; color: var(--text-muted); }
+.brand .clock { margin-top: 2px; }
 
 .header-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .mock-badge {
