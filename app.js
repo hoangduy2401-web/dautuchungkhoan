@@ -57,8 +57,18 @@ document.addEventListener("DOMContentLoaded", () => {
   wireChartToolbar();
 
   refreshAll();
-  setInterval(refreshAll, APP_CONFIG.REFRESH_INTERVAL_MS);
+  scheduleRefreshLoop();
 });
+
+// Self-scheduling loop: the next refresh is queued only AFTER the current one
+// finishes, so a slow cycle can never stack on top of another (which used to
+// multiply concurrent SSI calls and choke the backend).
+function scheduleRefreshLoop() {
+  setTimeout(async () => {
+    await refreshAll();
+    scheduleRefreshLoop();
+  }, APP_CONFIG.REFRESH_INTERVAL_MS);
+}
 
 function wireChartToolbar() {
   document.getElementById("chkMA10").addEventListener("change", (e) => ChartModule.toggleSeries("ma10", e.target.checked));
@@ -85,12 +95,19 @@ function tickClock() {
   document.getElementById("clock").textContent = new Date().toLocaleString("vi-VN");
 }
 
+let refreshInFlight = false;
 async function refreshAll() {
-  await Promise.all([loadIndices(), loadWatchlistQuotes()]);
-  renderTickerTape();
-  renderWatchlist();
-  await loadSelectedSymbol();
-  renderPortfolio();
+  if (refreshInFlight) return; // never run two refresh cycles at once
+  refreshInFlight = true;
+  try {
+    await Promise.all([loadIndices(), loadWatchlistQuotes()]);
+    renderTickerTape();
+    renderWatchlist();
+    await loadSelectedSymbol();
+    renderPortfolio();
+  } finally {
+    refreshInFlight = false;
+  }
 }
 
 /* ============================================================

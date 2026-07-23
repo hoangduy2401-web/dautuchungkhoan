@@ -55,6 +55,13 @@ Toàn bộ dashboard chạy dữ liệu thật end-to-end (`USE_MOCK: false`,
 Đã kiểm chứng số liệu tài khoản khớp: giá trị cổ phiếu + tiền mặt = `totalAssets`
 SSI báo (149,3 tr). Holdings thật hiện tại: ACB 4.364cp, SSI 2.240cp.
 
+**Fix hiệu năng (23/07/2026):** dashboard từng load >5 phút. Nguyên nhân: SSI
+throttle call song song/dồn dập (6 quote đồng thời → 3 cái kẹt ~32s), không có
+timeout, và `setInterval` refresh 15s chồng lấn tạo vòng xoáy tự bóp nghẹt. Đã
+sửa: backend limiter concurrency=1 + cache stale-while-revalidate + warm-up nền
+5 phút + timeout; frontend chặn refresh chồng lấn + chu kỳ 45s + timeout 12s.
+Chi tiết trong `CLAUDE.md` mục 6 (Hiệu năng). Cold load ~15s, load lại ~tức thì.
+
 ---
 
 ## 3. SSI Trading GĐ1 (chỉ đọc) — đã xong, đang chạy
@@ -102,6 +109,18 @@ trading → mọi lệnh test là tiền thật.
 2. Mặc định Tối hay Sáng?
 3. Quầng teal/xanh lá ở giữa — giữ hay đổi (xanh lá trùng màu "tăng giá")?
 4. Có chỗ nào chữ khó đọc trên thiết bị của user?
+
+**CẬP NHẬT 23/07/2026 — user đã duyệt & mình đã tinh chỉnh `mock-liquid-glass.html`
+(LOCAL, CHƯA PUSH — cố ý giữ lại, chỉ push riêng phần fix hiệu năng):**
+- Kính trong hơn + thêm **thanh trượt độ trong/đục** dưới nút Sáng/Tối.
+- Mặc định **Sáng**.
+- **Bỏ hẳn quầng teal/xanh lá** (đổi palette aurora sang amber + indigo/tím, dịu hơn).
+- **BẢNG ĐIỆN** thêm dấu cách.
+- Biểu đồ đổi sang **nến** (mặc định) + khối chart thành kính trong.
+- Thêm **trục giá** (phải) + **nhãn giá hiện tại** + **trục ngày** (đáy).
+- Thêm bộ chọn **khung 1M / 3M / 6M** (mặc định 3M).
+→ Việc còn lại: user xem bản mock mới trên thiết bị thật, chốt xong thì áp phong
+cách vào `style.css`/`index.html` thật rồi push.
 
 **Khi user duyệt xong** → áp phong cách vào `style.css` + `index.html` thật,
 giữ nguyên 100% chức năng, chỉ thay lớp giao diện, rồi bump `?v=`.

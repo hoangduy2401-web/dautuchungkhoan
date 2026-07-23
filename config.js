@@ -9,7 +9,10 @@ const APP_CONFIG = {
   // any failing API call silently falls back to mock data.
   FALLBACK_TO_MOCK_ON_ERROR: true,
 
-  REFRESH_INTERVAL_MS: 15000,
+  // 45s, not 15s: the SSI backend rate-limits hard, and outside trading hours
+  // the board is static anyway. A shorter interval used to stack overlapping
+  // refresh cycles into a self-inflicted slowdown.
+  REFRESH_INTERVAL_MS: 45000,
 
   DEFAULT_WATCHLIST: ["VNM", "FPT", "SSI", "VCB", "HPG", "MWG"],
 

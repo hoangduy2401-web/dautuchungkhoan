@@ -19,6 +19,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 const rssParser = new Parser({
+  timeout: 8000, // don't let a slow CafeF feed hang the /api/news request
   headers: {
     "User-Agent":
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -37,6 +38,92 @@ function cacheGet(key) {
 }
 function cacheSet(key, data, ttlMs) {
   cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+
+// ------------------------------------------------------------
+// fetch() has no default timeout in Node/undici, so a stalled upstream
+// (SSI throttling in particular) hangs the whole request. Abort after a
+// deadline so the handler fails fast and the client can fall back.
+// ------------------------------------------------------------
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ------------------------------------------------------------
+// Concurrency limiter. SSI hard-throttles concurrent Market calls: firing 6
+// quotes at once leaves ~3 of them stalling for ~30s. Funnelling every SSI
+// data call through a tiny queue (default 2 in-flight) keeps us under that
+// threshold, so calls stay ~1s each instead of stacking into minutes.
+// ------------------------------------------------------------
+function createLimiter(concurrency) {
+  let active = 0;
+  const queue = [];
+  const pump = () => {
+    if (active >= concurrency || queue.length === 0) return;
+    active++;
+    const { fn, resolve, reject } = queue.shift();
+    Promise.resolve()
+      .then(fn)
+      .then(resolve, reject)
+      .finally(() => {
+        active--;
+        pump();
+      });
+  };
+  return (fn) =>
+    new Promise((resolve, reject) => {
+      queue.push({ fn, resolve, reject });
+      pump();
+    });
+}
+// Default 1: SSI throttles even 2-3 concurrent Market calls (some stall past a
+// 10s timeout). Fully sequential is reliable; the warm-cache loop below keeps
+// user requests off the critical path anyway. Tunable via env if SSI relaxes.
+const ssiLimit = createLimiter(Number(process.env.SSI_CONCURRENCY) || 1);
+
+// ------------------------------------------------------------
+// Stale-while-revalidate cache with in-flight de-duplication.
+//   - fresh entry            -> return it
+//   - stale (within staleMs) -> return it NOW, refresh in the background
+//   - missing / too old      -> await one producer call (deduped)
+// This keeps SSI's slow, concurrency-throttled calls entirely off the user's
+// critical path: after the first population, every request is served instantly
+// from cache while freshness is restored in the background.
+// ------------------------------------------------------------
+const inFlight = new Map(); // key -> Promise
+const DEFAULT_STALE_MS = 10 * 60_000; // how long a stale entry may still be served
+
+function revalidate(key, ttlMs, producer) {
+  if (inFlight.has(key)) return inFlight.get(key);
+  const p = Promise.resolve()
+    .then(producer)
+    .then((data) => {
+      cacheSet(key, data, ttlMs);
+      return data;
+    })
+    .finally(() => inFlight.delete(key));
+  inFlight.set(key, p);
+  p.catch(() => {}); // a background refresh failure must not crash the process
+  return p;
+}
+
+function withCache(key, ttlMs, producer, { staleMs = DEFAULT_STALE_MS } = {}) {
+  const entry = cache.get(key);
+  const now = Date.now();
+  if (entry) {
+    if (now < entry.expiresAt) return Promise.resolve(entry.data); // fresh
+    if (now < entry.expiresAt + staleMs) {
+      revalidate(key, ttlMs, producer); // serve stale, refresh in background
+      return Promise.resolve(entry.data);
+    }
+  }
+  return revalidate(key, ttlMs, producer); // nothing usable -> must produce now
 }
 
 // ------------------------------------------------------------
@@ -118,14 +205,18 @@ async function getSsiToken() {
     throw new Error("Missing SSI_CONSUMER_ID / SSI_CONSUMER_SECRET in server/.env");
   }
 
-  const res = await fetch(`${SSI_BASE}/api/v2/Market/AccessToken`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      consumerID: process.env.SSI_CONSUMER_ID,
-      consumerSecret: process.env.SSI_CONSUMER_SECRET,
-    }),
-  });
+  const res = await fetchWithTimeout(
+    `${SSI_BASE}/api/v2/Market/AccessToken`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consumerID: process.env.SSI_CONSUMER_ID,
+        consumerSecret: process.env.SSI_CONSUMER_SECRET,
+      }),
+    },
+    15000
+  );
 
   if (!res.ok) {
     throw new Error(`SSI auth failed: ${res.status} ${await res.text()}`);
@@ -141,20 +232,28 @@ async function getSsiToken() {
 }
 
 async function ssiGet(path, params) {
+  // Resolve the token BEFORE entering the limiter so a token refresh never
+  // deadlocks behind queued data calls that are themselves waiting for it.
   const token = await getSsiToken();
   const url = new URL(`${SSI_BASE}${path}`);
   Object.entries(params || {}).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
   });
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
+  // Serialise through the SSI limiter (+ per-call timeout) to dodge SSI's
+  // punitive concurrent-call throttling.
+  return ssiLimit(async () => {
+    // 18s: SSI single calls are occasionally slow; since calls are serialised
+    // this can't stack. The frontend has its own 12s cap, so a slow call still
+    // finishes server-side and populates cache for the next refresh.
+    const res = await fetchWithTimeout(
+      url,
+      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
+      18000
+    );
+    if (!res.ok) throw new Error(`SSI ${path} failed: ${res.status} ${await res.text()}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`SSI ${path} failed: ${res.status} ${await res.text()}`);
-  return res.json();
 }
 
 // ------------------------------------------------------------
@@ -211,28 +310,25 @@ function mapOhlcRow(d) {
   };
 }
 
+async function computeHistory(symbol, days) {
+  const rows = await fetchOhlcChunked(symbol, days);
+  // Dedupe by date (chunk boundaries / paging can overlap) and sort ascending.
+  const byDate = new Map();
+  for (const r of rows) {
+    const item = mapOhlcRow(r);
+    if (item.date) byDate.set(item.date, item);
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // GET /api/price/history?symbol=VNM&days=90
 app.get("/api/price/history", async (req, res) => {
   const symbol = String(req.query.symbol || "").toUpperCase();
   const days = Number(req.query.days) || 90;
   if (!symbol) return res.status(400).json({ error: "missing symbol" });
 
-  const cacheKey = `history:${symbol}:${days}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
-
   try {
-    const rows = await fetchOhlcChunked(symbol, days);
-
-    // Dedupe by date (chunk boundaries / paging can overlap) and sort ascending.
-    const byDate = new Map();
-    for (const r of rows) {
-      const item = mapOhlcRow(r);
-      if (item.date) byDate.set(item.date, item);
-    }
-    const items = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-
-    cacheSet(cacheKey, items, 60_000); // 1 min
+    const items = await withCache(`history:${symbol}:${days}`, 60_000, () => computeHistory(symbol, days));
     res.json(items);
   } catch (err) {
     console.error("[/api/price/history]", err.message);
@@ -240,58 +336,57 @@ app.get("/api/price/history", async (req, res) => {
   }
 });
 
+async function computeIndices() {
+  // DailyIndex only accepts one IndexId per call (IndexId=ALL -> NoDataFound),
+  // so query each index we display. Left = SSI IndexId, right = UI code.
+  const WANTED = [
+    ["VNINDEX", "VNINDEX"],
+    ["VN30", "VN30"],
+    ["HNXIndex", "HNXINDEX"],
+    ["HNXUpcomIndex", "UPCOM"],
+  ];
+
+  const today = new Date();
+  const from = fmtSsiDate(new Date(today.getTime() - 7 * 24 * 3600 * 1000));
+  const to = fmtSsiDate(today);
+
+  const items = [];
+  for (const [indexId, uiCode] of WANTED) {
+    // Sequential on purpose: SSI rate-limits concurrent calls hard.
+    const raw = await ssiGet("/api/v2/Market/DailyIndex", {
+      IndexId: indexId,
+      FromDate: from,
+      ToDate: to,
+      PageIndex: 1,
+      PageSize: 10, // SSI only accepts 10 / 20 / 50 / 100 / 1000
+      ascending: false,
+    }).catch((err) => {
+      console.warn(`[indices] ${indexId}: ${err.message}`);
+      return null;
+    });
+
+    const rows = extractRows(raw)
+      .map((r) => ({ row: r, date: normalizeDate(pickField(r, ["TradingDate", "Date"])) }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const d = rows[0]?.row;
+    if (!d) continue;
+
+    items.push({
+      code: uiCode,
+      // Index values are already in points, do NOT divide by 1000.
+      value: num(pickField(d, ["IndexValue", "Value", "IndexVal"])),
+      // RatioChange is the % change. NOTE: the sibling `Change` field is
+      // scaled oddly (-0.6203 for a -62.03 point move) — do not use it.
+      changePct: num(pickField(d, ["RatioChange", "PercentIndexChange", "PercentPriceChange", "ChangePct"])),
+    });
+  }
+  return items;
+}
+
 // GET /api/price/indices
 app.get("/api/price/indices", async (req, res) => {
-  const cacheKey = "indices";
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
-
   try {
-    // DailyIndex only accepts one IndexId per call (IndexId=ALL -> NoDataFound),
-    // so query each index we display. Left = SSI IndexId, right = UI code.
-    const WANTED = [
-      ["VNINDEX", "VNINDEX"],
-      ["VN30", "VN30"],
-      ["HNXIndex", "HNXINDEX"],
-      ["HNXUpcomIndex", "UPCOM"],
-    ];
-
-    const today = new Date();
-    const from = fmtSsiDate(new Date(today.getTime() - 7 * 24 * 3600 * 1000));
-    const to = fmtSsiDate(today);
-
-    const items = [];
-    for (const [indexId, uiCode] of WANTED) {
-      // Sequential on purpose: SSI rate-limits concurrent calls hard.
-      const raw = await ssiGet("/api/v2/Market/DailyIndex", {
-        IndexId: indexId,
-        FromDate: from,
-        ToDate: to,
-        PageIndex: 1,
-        PageSize: 10, // SSI only accepts 10 / 20 / 50 / 100 / 1000
-        ascending: false,
-      }).catch((err) => {
-        console.warn(`[indices] ${indexId}: ${err.message}`);
-        return null;
-      });
-
-      const rows = extractRows(raw)
-        .map((r) => ({ row: r, date: normalizeDate(pickField(r, ["TradingDate", "Date"])) }))
-        .sort((a, b) => b.date.localeCompare(a.date));
-      const d = rows[0]?.row;
-      if (!d) continue;
-
-      items.push({
-        code: uiCode,
-        // Index values are already in points, do NOT divide by 1000.
-        value: num(pickField(d, ["IndexValue", "Value", "IndexVal"])),
-        // RatioChange is the % change. NOTE: the sibling `Change` field is
-        // scaled oddly (-0.6203 for a -62.03 point move) — do not use it.
-        changePct: num(pickField(d, ["RatioChange", "PercentIndexChange", "PercentPriceChange", "ChangePct"])),
-      });
-    }
-
-    cacheSet(cacheKey, items, 15_000); // matches REFRESH_INTERVAL_MS
+    const items = await withCache("indices", 45_000, computeIndices);
     res.json(items);
   } catch (err) {
     console.error("[/api/price/indices]", err.message);
@@ -301,11 +396,7 @@ app.get("/api/price/indices", async (req, res) => {
 
 // Latest quote for one symbol, in thousands of VND. Shared by /api/price/quote
 // and the account panel (FCTrading returns marketPrice = 0 outside market hours).
-async function fetchQuote(symbol) {
-  const cacheKey = `quote:${symbol}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return cached;
-
+async function computeQuote(symbol) {
   // DailyStockPrice carries close + reference price for the change% calc.
   const today = new Date();
   const raw = await ssiGet("/api/v2/Market/DailyStockPrice", {
@@ -326,13 +417,16 @@ async function fetchQuote(symbol) {
   const price = toThousandVnd(pickField(d, ["ClosePrice", "MatchPrice", "MatchedPrice", "Close"]));
   const refPrice = toThousandVnd(pickField(d, ["RefPrice", "BasicPrice", "PriorClosePrice"]));
 
-  const quote = {
+  return {
     price,
     changePct: refPrice ? ((price - refPrice) / refPrice) * 100 : 0,
     volume: num(pickField(d, ["TotalMatchVol", "TotalVol", "Volume"])),
   };
-  cacheSet(cacheKey, quote, 10_000);
-  return quote;
+}
+
+// Cached + de-duplicated. 45s TTL: outside trading hours the quote barely moves.
+function fetchQuote(symbol) {
+  return withCache(`quote:${symbol}`, 45_000, () => computeQuote(symbol));
 }
 
 // GET /api/price/quote?symbol=VNM  (used by dataService.getQuote)
@@ -368,7 +462,7 @@ const ITEM_LIABILITIES = 13000; // Nợ phải trả
 const ITEM_EQUITY = 14000; // Vốn chủ sở hữu
 
 async function vndirectJson(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 8000);
   if (!res.ok) throw new Error(`VNDirect ${res.status}`);
   return (await res.json()).data || [];
 }
@@ -432,42 +526,41 @@ const VNDIRECT_CODES = [
   "BVPS_CR",
 ];
 
+async function computeFundamentals(symbol) {
+  const [rows, derived] = await Promise.all([
+    vndirectJson(
+      `${VNDIRECT_RATIOS}?filter=ratioCode:${VNDIRECT_CODES.join(",")}` +
+        `&where=code:${symbol}&order=reportDate&fields=ratioCode,value,reportDate`
+    ),
+    // Derived metrics are best-effort: never fail the whole response for them.
+    fetchDerivedFundamentals(symbol).catch((err) => {
+      console.warn(`[fundamentals] derived ${symbol}: ${err.message}`);
+      return { revenueYoY: null, netProfitYoY: null, debtToEquity: null };
+    }),
+  ]);
+  if (!rows.length) throw new Error(`VNDirect trả rỗng cho ${symbol}`);
+
+  const v = {};
+  for (const r of rows) v[r.ratioCode] = Number(r.value);
+  const has = (k) => v[k] !== undefined && Number.isFinite(v[k]);
+
+  return {
+    marketCap: has("MARKETCAP") ? v.MARKETCAP / 1e12 : null, // -> nghìn tỷ
+    pe: has("PRICE_TO_EARNINGS") ? v.PRICE_TO_EARNINGS : null,
+    pb: has("PRICE_TO_BOOK") ? v.PRICE_TO_BOOK : null,
+    eps: has("EPS_TR") ? v.EPS_TR / 1000 : null, // -> nghìn đ
+    roe: has("ROAE_TR_AVG5Q") ? v.ROAE_TR_AVG5Q * 100 : null,
+    roa: has("ROAA_TR_AVG5Q") ? v.ROAA_TR_AVG5Q * 100 : null,
+    dividendYield: has("DIVIDEND_YIELD") ? v.DIVIDEND_YIELD * 100 : null,
+    ...derived, // revenueYoY, netProfitYoY, debtToEquity
+  };
+}
+
 app.get("/api/fundamentals/:symbol", async (req, res) => {
   const symbol = String(req.params.symbol || "").toUpperCase();
-  const cacheKey = `fund:${symbol}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
-
   try {
-    const [rows, derived] = await Promise.all([
-      vndirectJson(
-        `${VNDIRECT_RATIOS}?filter=ratioCode:${VNDIRECT_CODES.join(",")}` +
-          `&where=code:${symbol}&order=reportDate&fields=ratioCode,value,reportDate`
-      ),
-      // Derived metrics are best-effort: never fail the whole response for them.
-      fetchDerivedFundamentals(symbol).catch((err) => {
-        console.warn(`[fundamentals] derived ${symbol}: ${err.message}`);
-        return { revenueYoY: null, netProfitYoY: null, debtToEquity: null };
-      }),
-    ]);
-    if (!rows.length) throw new Error(`VNDirect trả rỗng cho ${symbol}`);
-
-    const v = {};
-    for (const r of rows) v[r.ratioCode] = Number(r.value);
-    const has = (k) => v[k] !== undefined && Number.isFinite(v[k]);
-
-    const fundamentals = {
-      marketCap: has("MARKETCAP") ? v.MARKETCAP / 1e12 : null, // -> nghìn tỷ
-      pe: has("PRICE_TO_EARNINGS") ? v.PRICE_TO_EARNINGS : null,
-      pb: has("PRICE_TO_BOOK") ? v.PRICE_TO_BOOK : null,
-      eps: has("EPS_TR") ? v.EPS_TR / 1000 : null, // -> nghìn đ
-      roe: has("ROAE_TR_AVG5Q") ? v.ROAE_TR_AVG5Q * 100 : null,
-      roa: has("ROAA_TR_AVG5Q") ? v.ROAA_TR_AVG5Q * 100 : null,
-      dividendYield: has("DIVIDEND_YIELD") ? v.DIVIDEND_YIELD * 100 : null,
-      ...derived, // revenueYoY, netProfitYoY, debtToEquity
-    };
-
-    cacheSet(cacheKey, fundamentals, 6 * 3600_000); // 6h — fundamentals change slowly
+    // 6h TTL — fundamentals change slowly.
+    const fundamentals = await withCache(`fund:${symbol}`, 6 * 3600_000, () => computeFundamentals(symbol));
     res.json(fundamentals);
   } catch (err) {
     console.error("[/api/fundamentals]", err.message);
@@ -489,41 +582,39 @@ function makeSymbolRegex(sym) {
   return new RegExp(`(?<![\\p{L}\\p{N}])${sym}(?![\\p{L}\\p{N}])`, "u");
 }
 
+async function computeNews(symbols) {
+  const feeds = await Promise.all(
+    CAFEF_FEEDS.map((url) => rssParser.parseURL(url).catch(() => ({ items: [] })))
+  );
+  const allItems = feeds.flatMap((f) => f.items || []);
+  const matchers = symbols.map((sym) => ({ sym, re: makeSymbolRegex(sym) }));
+
+  return allItems
+    .map((item) => {
+      const haystack = `${item.title || ""} ${item.contentSnippet || ""}`.toUpperCase();
+      const hit = matchers.find((m) => m.re.test(haystack));
+      if (!hit) return null;
+      return {
+        symbol: hit.sym,
+        title: item.title,
+        source: "CafeF",
+        time: item.isoDate || new Date().toISOString(),
+        url: item.link,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.time) - new Date(a.time))
+    .slice(0, 30);
+}
+
 app.get("/api/news", async (req, res) => {
   const symbols = String(req.query.symbols || "")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);
 
-  const cacheKey = `news:${symbols.join(",")}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
-
   try {
-    const feeds = await Promise.all(
-      CAFEF_FEEDS.map((url) => rssParser.parseURL(url).catch(() => ({ items: [] })))
-    );
-    const allItems = feeds.flatMap((f) => f.items || []);
-    const matchers = symbols.map((sym) => ({ sym, re: makeSymbolRegex(sym) }));
-
-    const news = allItems
-      .map((item) => {
-        const haystack = `${item.title || ""} ${item.contentSnippet || ""}`.toUpperCase();
-        const hit = matchers.find((m) => m.re.test(haystack));
-        if (!hit) return null;
-        return {
-          symbol: hit.sym,
-          title: item.title,
-          source: "CafeF",
-          time: item.isoDate || new Date().toISOString(),
-          url: item.link,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => new Date(b.time) - new Date(a.time))
-      .slice(0, 30);
-
-    cacheSet(cacheKey, news, 5 * 60_000);
+    const news = await withCache(`news:${symbols.join(",")}`, 5 * 60_000, () => computeNews(symbols));
     res.json(news);
   } catch (err) {
     console.error("[/api/news]", err.message);
@@ -819,6 +910,41 @@ app.get("/api/debug/raw", async (req, res) => {
 
 // ============================================================
 app.get("/health", (req, res) => res.json({ ok: true }));
+
+// ------------------------------------------------------------
+// Warm-cache loop. Sequentially (concurrency 1) refresh the hot data —
+// indices + the default watchlist quotes — a little before the 45s TTL
+// expires, so real user requests hit fresh cache instead of waiting on SSI.
+// Mirrors DEFAULT_WATCHLIST in config.js. WARM_SYMBOLS can override via env.
+// ------------------------------------------------------------
+const WARM_SYMBOLS = (process.env.WARM_SYMBOLS || "VNM,FPT,SSI,VCB,HPG,MWG")
+  .split(",")
+  .map((s) => s.trim().toUpperCase())
+  .filter(Boolean);
+
+async function warmCache() {
+  // revalidate() refreshes in place WITHOUT evicting, so any user request during
+  // the refresh is still served the previous value instantly (never blocks on
+  // SSI). Sequential + the SSI limiter keep these calls single-file.
+  await revalidate("indices", 45_000, computeIndices).catch((e) =>
+    console.warn("[warm] indices:", e.message)
+  );
+  for (const sym of WARM_SYMBOLS) {
+    await revalidate(`quote:${sym}`, 45_000, () => computeQuote(sym)).catch((e) =>
+      console.warn(`[warm] quote ${sym}:`, e.message)
+    );
+  }
+}
+
+// 5 min, not 40s: SSI also rate-throttles by request *frequency*, so a tight
+// warm loop backfires (every call balloons to 10-30s). A gentle sweep keeps
+// entries within staleMs (10 min) so users are always served instantly via
+// stale-while-revalidate, without hammering SSI.
+const WARM_INTERVAL_MS = Number(process.env.WARM_INTERVAL_MS) || 300_000;
+if (process.env.DISABLE_WARM !== "1") {
+  warmCache(); // prime on boot
+  setInterval(warmCache, WARM_INTERVAL_MS);
+}
 
 app.listen(PORT, () => {
   console.log(`Bảng Điện backend proxy chạy tại http://localhost:${PORT}`);

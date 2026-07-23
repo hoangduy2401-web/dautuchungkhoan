@@ -8,10 +8,18 @@
 const DataService = (function () {
   const cfg = APP_CONFIG;
 
-  async function fetchJson(url) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`${url} -> ${res.status}`);
-    return res.json();
+  // Time the request out so a stalled backend call fails fast and
+  // withFallback() can drop to mock instead of leaving a widget spinning.
+  async function fetchJson(url, timeoutMs = 12000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // Run the real fetch; on failure fall back to mock so the UI stays alive

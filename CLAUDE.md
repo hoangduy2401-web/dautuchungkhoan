@@ -189,6 +189,34 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   **`13000/14000/23000` giống nhau ở mọi companyForm**, chỉ dòng doanh thu khác.
 - Render Free tier ngủ sau 15 phút → giữ thức bằng GitHub Actions (xem mục 7).
 
+### Hiệu năng — SSI throttle & kiến trúc cache (fix 23/07/2026)
+
+Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
+
+- **SSI bóp băng thông theo CẢ đồng thời LẪN tần suất.** 6 quote gọi song song →
+  3 cái xong nhanh (~4s), **3 cái kẹt 32–33s**. Gọi tuần tự & thưa: chỉ ~1–2s/call,
+  ổn định. Nện dồn dập (warm-up 40s/lần) cũng làm mọi call phình 10–30s.
+- `fetch()` (Node/undici) **không có timeout mặc định** → 1 call SSI kẹt = treo
+  cả request. Đã bọc `fetchWithTimeout` (AbortController): SSI 18s, VNDirect/RSS 8s.
+  Frontend `dataService.fetchJson` có timeout riêng 12s.
+- Frontend cũ `setInterval(refreshAll, 15s)` **không chặn chồng lấn** → vòng mới
+  đè vòng cũ đang kẹt → nhân đôi số call song song → vòng xoáy tự bóp nghẹt (đây
+  là thủ phạm chính của con số "5 phút"). Đã đổi sang vòng lặp tự lên lịch
+  (`scheduleRefreshLoop`) + cờ `refreshInFlight`, chu kỳ 15s→45s.
+- Backend: mọi call SSI qua **limiter concurrency=1** (`ssiLimit`, env
+  `SSI_CONCURRENCY`) để né throttle đồng thời — mỗi call về lại ~1–2s.
+- Backend cache đổi sang **stale-while-revalidate + dedup** (`withCache`): entry
+  còn hạn → trả luôn; hết hạn nhưng trong `staleMs` (10 phút) → **trả bản cũ ngay
+  lập tức + làm mới ở nền**; chỉ lần đầu tuyệt đối mới phải chờ. → user gần như
+  không bao giờ chờ SSI. TTL quote/indices 45s.
+- **Warm-up cache nền 5 phút/lần** (`warmCache`, env `WARM_INTERVAL_MS`,
+  `DISABLE_WARM=1` để tắt) dùng `revalidate` (KHÔNG xoá cache, nên user vẫn được
+  phục vụ bản cũ trong lúc làm mới). **Đừng để interval ngắn** (từng thử 40s) —
+  nện SSI dày làm throttle theo tần suất, phản tác dụng.
+- Kết quả: cold load ~15s (tuần tự, tất cả OK), load lại cache ấm ~0.002s.
+- Mỗi endpoint tách `computeX()` (thuần logic) khỏi route (`withCache` + trả JSON)
+  để warm-up gọi lại được logic mà không qua HTTP.
+
 ## 7. Trạng thái hiện tại (cập nhật 22/07/2026)
 
 **Dự án đã hoàn thành và chạy dữ liệu thật end-to-end tại
