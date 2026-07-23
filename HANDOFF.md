@@ -111,7 +111,7 @@ trading → mọi lệnh test là tiền thật.
 4. Có chỗ nào chữ khó đọc trên thiết bị của user?
 
 **CẬP NHẬT 23/07/2026 — user đã duyệt & mình đã tinh chỉnh `mock-liquid-glass.html`
-(LOCAL, CHƯA PUSH — cố ý giữ lại, chỉ push riêng phần fix hiệu năng):**
+(ĐÃ PUSH, live tại https://dashboardstock.io.vn/mock-liquid-glass.html):**
 - Kính trong hơn + thêm **thanh trượt độ trong/đục** dưới nút Sáng/Tối.
 - Mặc định **Sáng**.
 - **Bỏ hẳn quầng teal/xanh lá** (đổi palette aurora sang amber + indigo/tím, dịu hơn).
