@@ -40,11 +40,19 @@ const DataService = (function () {
     return COMPANY_INFO[symbol] || { name: symbol, exchange: "HOSE" };
   }
 
+  // Per-endpoint timeouts. Fast endpoints abort quickly so a throttled symbol
+  // falls back to mock/last value fast instead of stalling the widget. History
+  // is chunked (up to ~3 sequential SSI calls) so it gets a longer budget.
+  // The backend keeps a longer (18s) SSI timeout, so a slow-but-valid call
+  // still finishes server-side and caches for the next 45s refresh.
+  const T_FAST = 6000; // quote / indices / fundamentals / news
+  const T_HISTORY = 12000;
+
   // ---- Market indices: [{code, value, changePct}] ----
   function getIndices() {
     return withFallback(
       "indices",
-      () => fetchJson(`${cfg.priceProvider.baseUrl}/indices`),
+      () => fetchJson(`${cfg.priceProvider.baseUrl}/indices`, T_FAST),
       () => generateIndices()
     );
   }
@@ -53,7 +61,7 @@ const DataService = (function () {
   function getQuote(symbol) {
     return withFallback(
       `quote ${symbol}`,
-      () => fetchJson(`${cfg.priceProvider.baseUrl}/quote?symbol=${encodeURIComponent(symbol)}`),
+      () => fetchJson(`${cfg.priceProvider.baseUrl}/quote?symbol=${encodeURIComponent(symbol)}`, T_FAST),
       () => generateQuote(symbol)
     );
   }
@@ -64,7 +72,8 @@ const DataService = (function () {
       `history ${symbol}`,
       () =>
         fetchJson(
-          `${cfg.priceProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`
+          `${cfg.priceProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`,
+          T_HISTORY
         ),
       () => generateHistory(symbol, days)
     );
@@ -74,7 +83,7 @@ const DataService = (function () {
   function getFundamentals(symbol) {
     return withFallback(
       `fundamentals ${symbol}`,
-      () => fetchJson(`${cfg.fundamentalsProvider.baseUrl}/${encodeURIComponent(symbol)}`),
+      () => fetchJson(`${cfg.fundamentalsProvider.baseUrl}/${encodeURIComponent(symbol)}`, T_FAST),
       () => generateFundamentals(symbol)
     );
   }
@@ -84,7 +93,7 @@ const DataService = (function () {
     const q = (symbols || []).join(",");
     return withFallback(
       "news",
-      () => fetchJson(`${cfg.newsProvider.baseUrl}?symbols=${encodeURIComponent(q)}`),
+      () => fetchJson(`${cfg.newsProvider.baseUrl}?symbols=${encodeURIComponent(q)}`, T_FAST),
       () => generateNews(symbols)
     );
   }
