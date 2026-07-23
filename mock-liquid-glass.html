@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bảng Điện — Liquid Glass (Mock)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
+<style>
+/* ============================================================
+   LIQUID GLASS MOCK — design tokens
+   Ground: deep blue-black. Glass: translucent white over an
+   aurora content layer. Accent: amber (app identity). Semantic
+   up/down use the iOS system green/red.
+   ============================================================ */
+:root {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* dark (default) */
+  --ground: #070b16;
+  --ground-2: #0a1120;
+  --text: #f3f6ff;
+  --text-muted: #9fabc4;
+  --text-dim: #6b7896;
+
+  --glass: rgba(255, 255, 255, 0.075);
+  --glass-raised: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-strong: rgba(255, 255, 255, 0.22);
+  --glass-highlight: rgba(255, 255, 255, 0.45);
+  --glass-shadow: rgba(2, 6, 18, 0.55);
+
+  --accent: #f2a93b;
+  --accent-soft: rgba(242, 169, 59, 0.16);
+  --up: #30d158;      /* iOS system green */
+  --up-soft: rgba(48, 209, 88, 0.15);
+  --down: #ff453a;    /* iOS system red */
+  --down-soft: rgba(255, 69, 58, 0.15);
+
+  --radius-lg: 26px;
+  --radius: 20px;
+  --radius-sm: 14px;
+  --blur: 28px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ground: #e9edf6;
+    --ground-2: #dde3f0;
+    --text: #0b1324;
+    --text-muted: #4a566f;
+    --text-dim: #7a869e;
+    --glass: rgba(255, 255, 255, 0.55);
+    --glass-raised: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.8);
+    --glass-border-strong: rgba(255, 255, 255, 0.95);
+    --glass-highlight: rgba(255, 255, 255, 0.9);
+    --glass-shadow: rgba(31, 45, 80, 0.18);
+    --accent-soft: rgba(242, 169, 59, 0.2);
+    --up-soft: rgba(40, 175, 75, 0.16);
+    --down-soft: rgba(230, 55, 45, 0.14);
+    --up: #1faa4c;
+    --down: #e5342a;
+  }
+}
+/* Explicit toggle wins over the OS media query in both directions */
+:root[data-theme="light"] {
+  --ground: #e9edf6; --ground-2: #dde3f0;
+  --text: #0b1324; --text-muted: #4a566f; --text-dim: #7a869e;
+  --glass: rgba(255,255,255,0.55); --glass-raised: rgba(255,255,255,0.72);
+  --glass-border: rgba(255,255,255,0.8); --glass-border-strong: rgba(255,255,255,0.95);
+  --glass-highlight: rgba(255,255,255,0.9); --glass-shadow: rgba(31,45,80,0.18);
+  --accent-soft: rgba(242,169,59,0.2);
+  --up: #1faa4c; --up-soft: rgba(40,175,75,0.16);
+  --down: #e5342a; --down-soft: rgba(230,55,45,0.14);
+}
+:root[data-theme="dark"] {
+  --ground: #070b16; --ground-2: #0a1120;
+  --text: #f3f6ff; --text-muted: #9fabc4; --text-dim: #6b7896;
+  --glass: rgba(255,255,255,0.075); --glass-raised: rgba(255,255,255,0.12);
+  --glass-border: rgba(255,255,255,0.14); --glass-border-strong: rgba(255,255,255,0.22);
+  --glass-highlight: rgba(255,255,255,0.45); --glass-shadow: rgba(2,6,18,0.55);
+  --accent-soft: rgba(242,169,59,0.16);
+  --up: #30d158; --up-soft: rgba(48,209,88,0.15);
+  --down: #ff453a; --down-soft: rgba(255,69,58,0.15);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--ground);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* ---- Content layer: aurora that the glass refracts ---- */
+.aurora {
+  position: fixed;
+  inset: -20vmax;
+  z-index: -2;
+  filter: blur(64px) saturate(135%);
+  opacity: 0.78;
+}
+.aurora span {
+  position: absolute;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  animation: drift 26s ease-in-out infinite alternate;
+}
+:root[data-theme="light"] .aurora span { mix-blend-mode: multiply; opacity: 0.5; }
+/* Distributed across the whole viewport so glass refracts colour anywhere
+   on the page (the layer is fixed, so this covers every scroll position). */
+.aurora .b1 { width: 40vmax; height: 40vmax; left: -4vmax; top: -6vmax; background: radial-gradient(circle, #f2a93b, transparent 62%); }
+.aurora .b2 { width: 38vmax; height: 38vmax; right: -6vmax; top: -4vmax; background: radial-gradient(circle, #4a6cf7, transparent 62%); animation-delay: -6s; }
+.aurora .b3 { width: 40vmax; height: 40vmax; left: 30vmax; top: 26vmax; background: radial-gradient(circle, #17d9a0, transparent 62%); animation-delay: -13s; }
+.aurora .b4 { width: 34vmax; height: 34vmax; right: 2vmax; bottom: -6vmax; background: radial-gradient(circle, #d84af7, transparent 62%); animation-delay: -3s; }
+.aurora .b5 { width: 32vmax; height: 32vmax; left: -4vmax; bottom: -8vmax; background: radial-gradient(circle, #f27a3b, transparent 62%); animation-delay: -18s; }
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(4vmax, 5vmax) scale(1.12); }
+}
+.grain { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 3px 3px; }
+
+/* ---- The glass material ---- */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow:
+    0 10px 30px -12px var(--glass-shadow),
+    inset 0 1px 0 0 var(--glass-highlight),
+    inset 0 0 0 0.5px rgba(255,255,255,0.04);
+  position: relative;
+}
+.glass-raised { background: var(--glass-raised); }
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.wrap { max-width: 1280px; margin: 0 auto; padding: 18px 22px 60px; }
+
+/* Ticker — floating pill bar */
+.ticker {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 16px; margin-bottom: 16px;
+  border-radius: 999px; overflow: hidden;
+}
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.1em; color: var(--up); flex-shrink: 0; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--up);
+  box-shadow: 0 0 0 0 var(--up-soft); animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--up-soft);} 70%{box-shadow:0 0 0 8px transparent;} 100%{box-shadow:0 0 0 0 transparent;} }
+.ticker-track { display: flex; gap: 26px; white-space: nowrap; font-size: 13px;
+  font-variant-numeric: tabular-nums; animation: scroll 30s linear infinite; }
+.ticker-track b { font-weight: 600; margin-right: 6px; }
+@keyframes scroll { from { transform: translateX(0);} to { transform: translateX(-50%);} }
+
+/* Header */
+.header { display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 18px 22px; margin-bottom: 16px; }
+.brand-mark { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.brand-mark span { color: var(--accent); }
+.brand-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.clock { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Segmented control (theme toggle) — Apple style */
+.segmented { display: inline-flex; padding: 3px; border-radius: 999px; gap: 2px;
+  background: var(--glass-raised); border: 1px solid var(--glass-border); }
+.segmented button { border: 0; background: transparent; color: var(--text-muted);
+  font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px;
+  border-radius: 999px; cursor: pointer; transition: all 0.25s; }
+.segmented button.on { background: var(--accent); color: #1a1205; box-shadow: 0 2px 8px -2px var(--accent); }
+
+/* Index strip */
+.index-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+.index-card { padding: 16px 18px; transition: transform 0.35s cubic-bezier(.2,.8,.2,1); }
+.index-card:hover { transform: translateY(-3px); }
+.index-card .code { font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em; font-weight: 600; }
+.index-card .val { font-size: 26px; font-weight: 700; margin-top: 6px; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; }
+.index-card .chg { font-size: 13px; margin-top: 4px; font-weight: 600; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; }
+
+/* Main grid */
+.main { display: grid; grid-template-columns: 260px minmax(0,1fr) 300px; gap: 16px; align-items: start; }
+.panel { padding: 0; overflow: hidden; }
+.panel-head { display: flex; align-items: center; justify-content: space-between;
+  padding: 15px 18px; border-bottom: 1px solid var(--glass-border); }
+.panel-head h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-muted); }
+.panel-body { padding: 16px 18px; }
+
+/* Watchlist */
+.wl-add { display: flex; gap: 8px; padding: 14px 16px; }
+.wl-add input { flex: 1; min-width: 0; }
+.field { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text);
+  border-radius: 12px; padding: 10px 12px; font-family: inherit; font-size: 13px; transition: all 0.2s; }
+.field:focus { outline: none; border-color: var(--accent); background: var(--accent-soft); }
+.btn { border: 0; border-radius: 12px; font-family: inherit; font-weight: 600; font-size: 13px;
+  cursor: pointer; padding: 10px 16px; transition: all 0.25s cubic-bezier(.2,.8,.2,1); }
+.btn-accent { background: var(--accent); color: #1a1205; box-shadow: 0 4px 14px -4px var(--accent); }
+.btn-accent:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -6px var(--accent); }
+.btn-ghost { background: var(--glass-raised); color: var(--text); border: 1px solid var(--glass-border); }
+.btn-ghost:hover { border-color: var(--glass-border-strong); background: var(--glass); }
+
+.wl-item { display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 16px; cursor: pointer; transition: background 0.2s; border-left: 2px solid transparent; }
+.wl-item:hover { background: var(--glass); }
+.wl-item.active { background: var(--accent-soft); border-left-color: var(--accent); }
+.wl-item .sym { font-weight: 700; font-size: 14px; }
+.wl-item .name { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+.wl-item .price { font-size: 14px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.wl-item .chg { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Chart */
+.sym-title { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.sym-title .s { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.sym-title .n { font-size: 13px; color: var(--text-muted); }
+.sym-title .p { margin-left: auto; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; background: var(--glass); border: 1px solid var(--glass-border);
+  color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+.chart-wrap { border-radius: var(--radius-sm); overflow: hidden; background: rgba(0,0,0,0.12);
+  border: 1px solid var(--glass-border); }
+:root[data-theme="light"] .chart-wrap { background: rgba(255,255,255,0.35); }
+
+/* Fundamentals grid */
+.fund-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 16px; }
+.fund-cell { padding: 12px; border-radius: var(--radius-sm); background: var(--glass);
+  border: 1px solid var(--glass-border); }
+.fund-cell .label { font-size: 10.5px; color: var(--text-dim); }
+.fund-cell .value { font-size: 16px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+/* News */
+.news-item { padding: 12px 16px; border-bottom: 1px solid var(--glass-border); cursor: pointer;
+  transition: background 0.2s; }
+.news-item:hover { background: var(--glass); }
+.news-item .t { font-size: 13px; line-height: 1.4; font-weight: 500; }
+.news-item .m { font-size: 11px; color: var(--text-dim); margin-top: 5px; display: flex; gap: 8px; }
+.tag { font-size: 10px; font-weight: 700; color: var(--accent); }
+
+/* Account + portfolio */
+.section { margin-top: 16px; }
+.summary { display: flex; flex-wrap: wrap; gap: 22px; padding: 16px 18px; border-bottom: 1px solid var(--glass-border); }
+.summary .stat .label { font-size: 11px; color: var(--text-dim); }
+.summary .stat .val { font-size: 19px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 11px 18px; border-bottom: 1px solid var(--glass-border); }
+th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr { transition: background 0.15s; }
+tbody tr:hover td { background: var(--glass); }
+.pill { padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; }
+.pill.buy { background: var(--up-soft); color: var(--up); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; }
+.tx-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tx-form label { font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 5px; }
+.tx-form .field { width: 100%; }
+.tx-form .full { grid-column: 1 / -1; }
+
+.up { color: var(--up); }
+.down { color: var(--down); }
+.bg-up { background: var(--up-soft); color: var(--up); }
+.bg-down { background: var(--down-soft); color: var(--down); }
+
+.mock-flag { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 50;
+  max-width: calc(100vw - 28px); padding: 9px 18px; border-radius: 999px; font-size: 12px;
+  font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.mock-flag b { color: var(--accent); }
+@media (max-width: 640px) { .mock-flag .long { display: none; } }
+
+@media (max-width: 1080px) { .main { grid-template-columns: 1fr; } .two-col { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .wrap { padding: 14px 14px 60px; }
+  .index-strip { grid-template-columns: 1fr 1fr; }
+  .fund-grid { grid-template-columns: repeat(2, 1fr); }
+  .header { flex-wrap: wrap; }
+  .tx-form { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora span, .ticker-track, .live::before { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="aurora"><span class="b1"></span><span class="b2"></span><span class="b3"></span><span class="b4"></span><span class="b5"></span></div>
+<div class="grain"></div>
+
+<div class="wrap">
+
+  <!-- Ticker -->
+  <div class="ticker glass">
+    <span class="live">LIVE</span>
+    <div class="ticker-track">
+      <span><b>VNM</b> 59,10 <span class="up">▲ +1,20%</span></span>
+      <span><b>FPT</b> 64,60 <span class="down">▼ −0,31%</span></span>
+      <span><b>SSI</b> 22,65 <span class="down">▼ −2,37%</span></span>
+      <span><b>VCB</b> 54,50 <span class="down">▼ −3,88%</span></span>
+      <span><b>HPG</b> 27,80 <span class="up">▲ +0,72%</span></span>
+      <span><b>MWG</b> 61,40 <span class="up">▲ +0,49%</span></span>
+      <span><b>ACB</b> 22,40 <span class="down">▼ −1,97%</span></span>
+      <span><b>VNM</b> 59,10 <span class="up">▲ +1,20%</span></span>
+      <span><b>FPT</b> 64,60 <span class="down">▼ −0,31%</span></span>
+      <span><b>SSI</b> 22,65 <span class="down">▼ −2,37%</span></span>
+      <span><b>VCB</b> 54,50 <span class="down">▼ −3,88%</span></span>
+      <span><b>HPG</b> 27,80 <span class="up">▲ +0,72%</span></span>
+      <span><b>MWG</b> 61,40 <span class="up">▲ +0,49%</span></span>
+      <span><b>ACB</b> 22,40 <span class="down">▼ −1,97%</span></span>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="header glass">
+    <div>
+      <div class="brand-mark">BẢNG<span>ĐIỆN</span></div>
+      <div class="brand-sub">Dashboard tổng hợp cổ phiếu &amp; danh mục cá nhân</div>
+    </div>
+    <div class="header-right">
+      <span class="clock" id="clock">09:12:45 · 23/07/2026</span>
+      <div class="segmented">
+        <button id="tLight" onclick="setTheme('light')">Sáng</button>
+        <button id="tDark" class="on" onclick="setTheme('dark')">Tối</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Index strip -->
+  <div class="index-strip">
+    <div class="index-card glass">
+      <div class="code">VNINDEX</div>
+      <div class="val">1.668,53</div>
+      <div class="chg bg-down">▼ −3,58%</div>
+    </div>
+    <div class="index-card glass">
+      <div class="code">VN30</div>
+      <div class="val">1.826,90</div>
+      <div class="chg bg-down">▼ −2,89%</div>
+    </div>
+    <div class="index-card glass">
+      <div class="code">HNXINDEX</div>
+      <div class="val">275,49</div>
+      <div class="chg bg-down">▼ −1,87%</div>
+    </div>
+    <div class="index-card glass">
+      <div class="code">UPCOM</div>
+      <div class="val">125,10</div>
+      <div class="chg bg-up">▲ +0,22%</div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Watchlist -->
+    <div class="panel glass">
+      <div class="panel-head"><h2>Danh mục theo dõi</h2></div>
+      <div class="wl-add">
+        <input class="field" placeholder="Mã CK, vd: VIC" />
+        <button class="btn btn-accent">+ Thêm</button>
+      </div>
+      <div>
+        <div class="wl-item active">
+          <div><div class="sym">FPT</div><div class="name">FPT Corp</div></div>
+          <div><div class="price">64,60</div><div class="chg down">−0,31%</div></div>
+        </div>
+        <div class="wl-item">
+          <div><div class="sym">VNM</div><div class="name">Vinamilk</div></div>
+          <div><div class="price">59,10</div><div class="chg up">+1,20%</div></div>
+        </div>
+        <div class="wl-item">
+          <div><div class="sym">SSI</div><div class="name">Chứng khoán SSI</div></div>
+          <div><div class="price">22,65</div><div class="chg down">−2,37%</div></div>
+        </div>
+        <div class="wl-item">
+          <div><div class="sym">VCB</div><div class="name">Vietcombank</div></div>
+          <div><div class="price">54,50</div><div class="chg down">−3,88%</div></div>
+        </div>
+        <div class="wl-item">
+          <div><div class="sym">ACB</div><div class="name">ACB</div></div>
+          <div><div class="price">22,40</div><div class="chg down">−1,97%</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart + fundamentals -->
+    <div class="panel glass">
+      <div class="panel-head"><h2>Biểu đồ giá &amp; chỉ số cơ bản</h2></div>
+      <div class="panel-body">
+        <div class="sym-title">
+          <span class="s">FPT</span>
+          <span class="n">FPT Corp · HOSE</span>
+          <span class="p down">64,60 <small style="font-size:13px">−0,31%</small></span>
+        </div>
+        <div class="toolbar">
+          <span class="chip on"><span class="dot" style="background:#2a78d6"></span>MA10</span>
+          <span class="chip on"><span class="dot" style="background:#7a5cf0"></span>MA20</span>
+          <span class="chip"><span class="dot" style="background:#17d9a0"></span>Bollinger</span>
+          <span class="chip on">Khối lượng</span>
+          <span class="chip on">RSI</span>
+          <span class="chip">✏ Vẽ trendline</span>
+        </div>
+        <div class="chart-wrap">
+          <svg viewBox="0 0 720 300" width="100%" height="260" preserveAspectRatio="none" aria-label="Biểu đồ nến mẫu">
+            <defs>
+              <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.28"/>
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <g stroke="var(--glass-border)" stroke-width="1">
+              <line x1="0" y1="60" x2="720" y2="60"/><line x1="0" y1="120" x2="720" y2="120"/>
+              <line x1="0" y1="180" x2="720" y2="180"/><line x1="0" y1="240" x2="720" y2="240"/>
+            </g>
+            <path d="M0,150 C60,140 90,110 140,120 C200,132 230,90 290,100 C350,110 380,70 440,95 C500,118 540,150 600,140 C660,132 700,150 720,145 L720,300 L0,300 Z" fill="url(#area)"/>
+            <path d="M0,150 C60,140 90,110 140,120 C200,132 230,90 290,100 C350,110 380,70 440,95 C500,118 540,150 600,140 C660,132 700,150 720,145" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+            <g fill="none" stroke-width="2">
+              <path d="M0,160 C80,150 160,128 240,120 C360,108 480,110 600,128 C660,136 700,140 720,142" stroke="#2a78d6" opacity="0.8"/>
+              <path d="M0,175 C120,168 240,150 360,142 C480,134 600,142 720,150" stroke="#7a5cf0" opacity="0.8"/>
+            </g>
+            <circle cx="440" cy="95" r="4" fill="var(--accent)"/>
+          </svg>
+        </div>
+        <div class="fund-grid">
+          <div class="fund-cell"><div class="label">Vốn hóa (nghìn tỷ)</div><div class="value">110,4</div></div>
+          <div class="fund-cell"><div class="label">P/E</div><div class="value">11,4</div></div>
+          <div class="fund-cell"><div class="label">P/B</div><div class="value">2,96</div></div>
+          <div class="fund-cell"><div class="label">EPS (nghìn đ)</div><div class="value">5,69</div></div>
+          <div class="fund-cell"><div class="label">ROE (%)</div><div class="value">23,7</div></div>
+          <div class="fund-cell"><div class="label">ROA (%)</div><div class="value">12,3</div></div>
+          <div class="fund-cell"><div class="label">Cổ tức (%)</div><div class="value">2,9</div></div>
+          <div class="fund-cell"><div class="label">DT YoY (%)</div><div class="value up">+11,6</div></div>
+          <div class="fund-cell"><div class="label">LNST YoY (%)</div><div class="value up">+19,3</div></div>
+          <div class="fund-cell"><div class="label">Nợ/Vốn CSH</div><div class="value">0,71</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- News -->
+    <div class="panel glass">
+      <div class="panel-head"><h2>Tin tức liên quan</h2></div>
+      <div>
+        <div class="news-item">
+          <div class="t">Một "cá mập" chứng khoán tạm lỗ hơn 400 tỷ đồng vì FPT, KDH và MWG</div>
+          <div class="m"><span class="tag">FPT</span><span>CafeF · 2 giờ trước</span></div>
+        </div>
+        <div class="news-item">
+          <div class="t">SSI và nhiều công ty chứng khoán cắt margin PNJ</div>
+          <div class="m"><span class="tag">SSI</span><span>CafeF · 4 giờ trước</span></div>
+        </div>
+        <div class="news-item">
+          <div class="t">Chuyện gì đang xảy ra với MWG?</div>
+          <div class="m"><span class="tag">MWG</span><span>CafeF · 5 giờ trước</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account (read-only, real) -->
+  <div class="section panel glass">
+    <div class="panel-head">
+      <h2>Tài khoản SSI (chỉ đọc)</h2>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;color:var(--up)">Cập nhật 09:12:45</span>
+        <button class="btn btn-ghost">Đồng bộ</button>
+      </div>
+    </div>
+    <div class="summary">
+      <div class="stat"><div class="label">Tổng tài sản</div><div class="val">149,3 tr</div></div>
+      <div class="stat"><div class="label">Tiền mặt</div><div class="val">0,8 tr</div></div>
+      <div class="stat"><div class="label">Sức mua</div><div class="val">0,8 tr</div></div>
+      <div class="stat"><div class="label">Dư nợ</div><div class="val">0,0 tr</div></div>
+    </div>
+    <table>
+      <thead><tr><th>Mã</th><th class="num">KL</th><th class="num">Bán được</th><th class="num">Giá vốn</th><th class="num">Giá TT</th><th class="num">Giá trị</th><th class="num">Lãi/lỗ</th></tr></thead>
+      <tbody>
+        <tr><td><b>ACB</b></td><td class="num">4.364</td><td class="num">4.364</td><td class="num">22,56</td><td class="num">22,40</td><td class="num">97,8 tr</td><td class="num down">−0,7 tr (−0,70%)</td></tr>
+        <tr><td><b>SSI</b></td><td class="num">2.240</td><td class="num">2.240</td><td class="num">27,39</td><td class="num">22,65</td><td class="num">50,7 tr</td><td class="num down">−10,6 tr (−17,29%)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Manual portfolio -->
+  <div class="section two-col">
+    <div class="panel glass">
+      <div class="panel-head"><h2>Thêm giao dịch</h2></div>
+      <div class="panel-body">
+        <div class="tx-form">
+          <div><label>Mã CK</label><input class="field" placeholder="VNM" /></div>
+          <div><label>Loại lệnh</label>
+            <select class="field"><option>Mua</option><option>Bán</option></select></div>
+          <div><label>Khối lượng</label><input class="field" type="number" placeholder="1.000" /></div>
+          <div><label>Giá (nghìn đồng)</label><input class="field" type="number" placeholder="59,10" /></div>
+          <div><label>Ngày</label><input class="field" type="date" /></div>
+          <div><label>Ghi chú</label><input class="field" placeholder="Tùy chọn" /></div>
+          <button class="btn btn-accent full">Lưu giao dịch</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel glass">
+      <div class="panel-head"><h2>Danh mục &amp; lịch sử giao dịch</h2></div>
+      <div class="summary">
+        <div class="stat"><div class="label">Giá trị danh mục</div><div class="val">148,5 tr</div></div>
+        <div class="stat"><div class="label">Lãi/lỗ tạm tính</div><div class="val down">−11,3 tr</div></div>
+        <div class="stat"><div class="label">Lãi/lỗ đã chốt</div><div class="val up">+4,2 tr</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Ngày</th><th>Mã</th><th>Loại</th><th class="num">KL</th><th class="num">Giá</th></tr></thead>
+        <tbody>
+          <tr><td>18/07/2026</td><td><b>ACB</b></td><td><span class="pill buy">MUA</span></td><td class="num">2.000</td><td class="num">22,80</td></tr>
+          <tr><td>10/07/2026</td><td><b>SSI</b></td><td><span class="pill buy">MUA</span></td><td class="num">1.240</td><td class="num">28,10</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="mock-flag glass">
+  <b>MOCK</b> Liquid Glass · Inter<span class="long"> · dữ liệu mẫu — bấm <b>Sáng/Tối</b> để xem 2 chế độ</span>
+</div>
+
+<script>
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('tDark').classList.toggle('on', t === 'dark');
+  document.getElementById('tLight').classList.toggle('on', t === 'light');
+}
+// live clock, just for feel
+setInterval(() => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  document.getElementById('clock').textContent =
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} · 23/07/2026`;
+}, 1000);
+</script>
+</body>
+</html>
