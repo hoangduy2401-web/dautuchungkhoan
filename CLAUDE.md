@@ -2,9 +2,9 @@
 
 ## 1. Mục tiêu
 
-Dashboard theo dõi chứng khoán Việt Nam cá nhân: web tĩnh (HTML/CSS/JS thuần,
-không build tool), host trên GitHub Pages, lấy dữ liệu thật qua backend proxy
-Node.js/Express deploy trên Render.com (nguồn chính: SSI FastConnect Data API).
+Dashboard chứng khoán Việt Nam cá nhân: web tĩnh (HTML/CSS/JS thuần,
+không build tool), host GitHub Pages, lấy dữ liệu thật qua backend proxy
+Node.js/Express trên Render.com (nguồn chính: SSI FastConnect Data API).
 
 Tính năng: ticker tape chạy liên tục, bảng chỉ số thị trường (VNINDEX, HNX,
 VN30...), watchlist tùy biến, biểu đồ nến (Lightweight Charts: MA10/MA20,
@@ -14,14 +14,14 @@ nghiệp, tin tức theo mã, lịch sử giao dịch cá nhân tính lãi/lỗ 
 ## 2. Quy ước làm việc (BẮT BUỘC)
 
 - Trả lời bằng **tiếng Việt**. Comment trong code bằng **tiếng Anh**.
-- Code thẳng, ít giải thích dài dòng — trừ khi task phức tạp/rủi ro.
-- KHÔNG hỏi xác nhận trước khi sửa file, kể cả sửa nhiều file cùng lúc.
+- Code thẳng, ít giải thích dài dòng — trừ task phức tạp/rủi ro.
+- KHÔNG hỏi xác nhận trước khi sửa file, kể cả nhiều file cùng lúc.
 - CHỈ hỏi xác nhận khi: xóa file/tính năng, hoặc đổi cấu trúc lớn (đổi kiến
   trúc module, đổi thư viện chart, đổi format dữ liệu giữa `dataService.js` ↔
   `app.js` ↔ `server`).
-- Sau thay đổi lớn: tự cập nhật mục "Trạng thái hiện tại" + "Việc cần làm
-  tiếp theo" trong file này, không cần hỏi. Vá lỗi nhỏ thì không cần.
-- **KHÔNG commit `server/.env`** hay bất kỳ credentials nào.
+- Sau thay đổi lớn: tự cập nhật "Trạng thái hiện tại" + "Việc cần làm
+  tiếp theo" trong file này, không cần hỏi. Vá lỗi nhỏ: khỏi cần.
+- **KHÔNG commit `server/.env`** hay credentials nào.
 
 ## 3. Ràng buộc kỹ thuật đã chốt (KHÔNG tự ý đổi)
 
@@ -30,21 +30,20 @@ nghiệp, tin tức theo mã, lịch sử giao dịch cá nhân tính lãi/lỗ 
   (`https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js`).
   Không quay lại Chart.js.
 - Trendline vẽ trên `<canvas id="trendOverlay">` phủ lên chart, neo theo
-  time/price để bám đúng vị trí khi pan/zoom.
+  time/price, bám đúng vị trí khi pan/zoom.
 - RSI ở chart phụ riêng (`#rsiChartContainer`), đồng bộ trục thời gian 2 chiều
   với chart chính qua `subscribeVisibleLogicalRangeChange`. MACD (nếu thêm)
   theo đúng khuôn mẫu này.
 - Bollinger Bands (20, 2σ) tắt mặc định, bật qua checkbox; 3 series
   Upper/Basis/Lower màu `#1baf7a`.
 - **Đơn vị giá: nghìn đồng VND.** SSI trả đồng → chia 1000 ở backend.
-- CORS: mọi API chứng khoán VN chặn gọi thẳng từ trình duyệt → backend proxy là
-  bắt buộc, không phải tùy chọn.
+- CORS: API chứng khoán VN chặn gọi thẳng từ trình duyệt → backend proxy
+  bắt buộc, không tùy chọn.
 - `localStorage` keys: `vn_dashboard_transactions_v1` (lịch sử giao dịch),
   `vn_dashboard_watchlist_v1` (watchlist). Lãi/lỗ tính theo **giá vốn bình
   quân gia quyền**.
-- `DEFAULT_WATCHLIST` trong `config.js` chỉ là **seed lần đầu**; sau đó
-  watchlist đọc/ghi localStorage. Danh sách rỗng được tôn trọng, không tự nạp
-  lại seed.
+- `DEFAULT_WATCHLIST` trong `config.js` chỉ seed lần đầu; sau đó watchlist
+  đọc/ghi localStorage. Danh sách rỗng: tôn trọng, không tự nạp lại seed.
 - Font: Space Grotesk (display) / Be Vietnam Pro (body) / JetBrains Mono (số).
 - Theme tối: nền `#0a0f1c`, amber `#f2a93b`, xanh `#17d980`, đỏ `#ff4d5e`.
 - Mọi widget lấy dữ liệu qua `dataService.js` — không `fetch()` thẳng trong
@@ -73,10 +72,10 @@ Thứ tự nạp script trong `index.html` (đừng đổi):
 lightweight-charts → `config.js` → `mockData.js` → `dataService.js` →
 `portfolio.js` → `chartModule.js` → `app.js`
 
-> Lưu ý: repo còn `index.js` + `package.json` **ở thư mục gốc** — bản sao của
-> server để Render deploy từ root. **Nguồn sự thật là `server/index.js`**; sau
-> mỗi lần sửa phải chạy `cp server/index.js index.js` (và `package.json` nếu
-> đổi dependency) để giữ đồng bộ.
+> Lưu ý: repo còn `index.js` + `package.json` ở thư mục gốc — bản sao server
+> để Render deploy từ root. Nguồn sự thật: `server/index.js`; sửa xong phải
+> chạy `cp server/index.js index.js` (và `package.json` nếu đổi dependency)
+> để đồng bộ.
 
 ## 5. Hợp đồng dữ liệu backend (giữ nguyên format)
 
@@ -97,7 +96,7 @@ GET /api/news?symbols=A,B,C
 → [{ symbol, title, source, time (ISO), url }, ...]
 ```
 
-Endpoint debug (chỉ để dò format SSI, không dùng ở frontend):
+Endpoint debug (chỉ dò format SSI, không dùng ở frontend):
 ```
 GET /health
 GET /api/debug/token          → kiểm tra auth SSI
@@ -118,30 +117,29 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 
 - Tên miền `dashboardstock.io.vn` mua tại **Mắt Bão** (nameserver `ns1/ns2.matbao.vn`),
-  **phải gia hạn hàng năm** — hết hạn là dashboard chết, GitHub không cảnh báo.
+  **phải gia hạn hàng năm** — hết hạn: dashboard chết, GitHub không cảnh báo.
 - DNS: A `@` → `185.199.108.153` (GitHub Pages còn 3 IP dự phòng
-  `.109/.110/.111.153` nhưng giao diện Mắt Bão chỉ cho 1 bản ghi A — 1 IP là đủ
-  chạy, chỉ mất lớp dự phòng); CNAME `www` → `hoangduy2401-web.github.io.`
-- File **`CNAME` ở gốc repo là bắt buộc** — xóa là mất tên miền, trang rơi về
-  URL cũ. GitHub tự tạo file này khi khai báo custom domain trong Settings →
-  Pages, nên đừng commit trùng (đã bị một lần, phải `git reset --hard`).
+  `.109/.110/.111.153` nhưng Mắt Bão chỉ cho 1 bản ghi A — 1 IP đủ chạy, chỉ
+  mất lớp dự phòng); CNAME `www` → `hoangduy2401-web.github.io.`
+- File **`CNAME` ở gốc repo bắt buộc** — xóa: mất tên miền, trang rơi về URL
+  cũ. GitHub tự tạo file này khi khai báo custom domain (Settings → Pages),
+  đừng commit trùng (bị 1 lần, phải `git reset --hard`).
 - HTTPS: chứng chỉ Let's Encrypt do GitHub cấp và tự gia hạn.
-- **Secrets sống ở 2 nơi tách biệt**: `server/.env` (chỉ ở máy local, bị
-  `.gitignore` chặn) và Environment vars trong Render dashboard. Sửa nơi này
-  không ảnh hưởng nơi kia.
-- Git: PAT lưu trong macOS osxkeychain, cần cả scope `repo` **và `workflow`**
-  (thiếu `workflow` thì mọi push đụng `.github/workflows/` đều bị từ chối).
-- **Enforce HTTPS đang bị chặn**: GitHub báo "domain is not properly
-  configured" vì tên miền gốc mới chỉ có **1 bản ghi A** (`185.199.108.153`) —
+- **Secrets sống 2 nơi tách biệt**: `server/.env` (local only, `.gitignore`
+  chặn) và Environment vars ở Render dashboard. Sửa nơi này không ảnh hưởng
+  nơi kia.
+- Git: PAT lưu macOS osxkeychain, cần scope `repo` **và `workflow`**
+  (thiếu `workflow`: push đụng `.github/workflows/` bị từ chối).
+- **Enforce HTTPS bị chặn**: GitHub báo "domain is not properly
+  configured" vì tên miền gốc chỉ có **1 bản ghi A** (`185.199.108.153`) —
   GitHub đòi đủ 4 IP (`.108/.109/.110/.111.153`). Trang vẫn chạy HTTPS
-  (chứng chỉ đã cấp), chỉ là chưa ép được `http://` chuyển sang `https://`.
-  Giao diện DNS Mắt Bão có vẻ chỉ cho 1 bản ghi A → nếu đúng vậy thì phải
-  chuyển nameserver sang Cloudflare mới thêm đủ được.
+  (chứng chỉ đã cấp), chỉ chưa ép được `http://` → `https://`.
+  Mắt Bão có vẻ chỉ cho 1 bản ghi A → nếu đúng, phải chuyển nameserver sang
+  Cloudflare mới thêm đủ.
 - **Cache 10 phút**: GitHub Pages trả `cache-control: max-age=600` cho JS/CSS.
-  Đã xử lý bằng cache busting: mọi thẻ `<script>`/`<link>` nội bộ trong
-  `index.html` mang `?v=YYYYMMDD`. **Sửa file JS/CSS nào cũng phải bump số
-  version này**, nếu không người dùng vẫn chạy code cũ tới 10 phút (đã mất một
-  vòng debug vì chuyện đó).
+  Xử lý bằng cache busting: thẻ `<script>`/`<link>` nội bộ trong `index.html`
+  mang `?v=YYYYMMDD`. **Sửa JS/CSS nào cũng phải bump version này**, không thì
+  user chạy code cũ tới 10 phút (từng mất 1 vòng debug vì vậy).
 
 ## 6. Key learnings (đừng lặp lại sai lầm cũ)
 
@@ -150,8 +148,8 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 
 ### Format SSI thật (đã xác nhận 22/07/2026 — hết mơ hồ)
 
-- Rows luôn nằm ở `raw.data` (mảng), **PascalCase**, **giá trị là chuỗi** →
-  phải `Number()`. Không thấy `dataList` hay lowercase ở đâu.
+- Rows luôn ở `raw.data` (mảng), **PascalCase**, giá trị là chuỗi →
+  phải `Number()`. Không thấy `dataList` hay lowercase đâu.
 - `PageSize` **chỉ nhận 10 / 20 / 50 / 100 / 1000** — số khác trả lỗi
   `"Size of a page must 10, 20, 50, 100 or 1000"`.
 - `DailyOhlc`: `{Symbol, Market, TradingDate:"dd/mm/yyyy", Time, Open, High,
@@ -169,10 +167,10 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 - Token TTL **8 giờ** (không phải 6h như một số nguồn ghi), xác nhận qua
   `/api/debug/token`.
 - Giá SSI là VND thô → chia 1000. Giá trị chỉ số thì **không** chia.
-- `extractRows()`/`pickField()` vẫn giữ dù format đã rõ: ngắn, không tốn gì,
-  và là lớp đệm nếu SSI đổi version.
+- `extractRows()`/`pickField()` giữ dù format đã rõ: ngắn, rẻ, lớp đệm
+  phòng SSI đổi version.
 - **TCBS đã bỏ**: chặn request server-to-server (404) kể cả có header giả trình duyệt.
-- SSI **FCData lẫn FCTrading đều không có** fundamentals. FCTrading chỉ có đặt/
+- SSI **FCData lẫn FCTrading đều không có** fundamentals. FCTrading chỉ đặt/
   sửa/hủy lệnh + truy vấn tài khoản (orderBook, stockPosition, cashAcctBal...).
 - Fundamentals dùng **VNDirect finfo** (public, không cần key, cho gọi
   server-to-server), ghép từ 2 nguồn:
@@ -193,33 +191,33 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
 
 Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
 
-- **SSI bóp băng thông theo CẢ đồng thời LẪN tần suất.** 6 quote gọi song song →
-  3 cái xong nhanh (~4s), **3 cái kẹt 32–33s**. Gọi tuần tự & thưa: chỉ ~1–2s/call,
+- **SSI bóp băng thông theo cả đồng thời lẫn tần suất.** 6 quote gọi song song →
+  3 xong nhanh (~4s), **3 kẹt 32–33s**. Gọi tuần tự & thưa: chỉ ~1–2s/call,
   ổn định. Nện dồn dập (warm-up 40s/lần) cũng làm mọi call phình 10–30s.
-- `fetch()` (Node/undici) **không có timeout mặc định** → 1 call SSI kẹt = treo
+- `fetch()` (Node/undici) **không timeout mặc định** → 1 call SSI kẹt = treo
   cả request. Đã bọc `fetchWithTimeout` (AbortController): SSI 18s, VNDirect/RSS 8s.
-  Frontend `dataService.fetchJson` có timeout riêng 12s.
-- Frontend cũ `setInterval(refreshAll, 15s)` **không chặn chồng lấn** → vòng mới
-  đè vòng cũ đang kẹt → nhân đôi số call song song → vòng xoáy tự bóp nghẹt (đây
-  là thủ phạm chính của con số "5 phút"). Đã đổi sang vòng lặp tự lên lịch
+  Frontend `dataService.fetchJson` timeout riêng 12s.
+- Frontend cũ `setInterval(refreshAll, 15s)` **không chặn chồng lấn** → vòng
+  mới đè vòng cũ đang kẹt → nhân đôi call song song → vòng xoáy tự bóp nghẹt
+  (thủ phạm chính của "5 phút"). Đã đổi sang vòng lặp tự lên lịch
   (`scheduleRefreshLoop`) + cờ `refreshInFlight`, chu kỳ 15s→45s.
 - Backend: mọi call SSI qua **limiter concurrency=1** (`ssiLimit`, env
   `SSI_CONCURRENCY`) để né throttle đồng thời — mỗi call về lại ~1–2s.
 - Backend cache đổi sang **stale-while-revalidate + dedup** (`withCache`): entry
   còn hạn → trả luôn; hết hạn nhưng trong `staleMs` (10 phút) → **trả bản cũ ngay
-  lập tức + làm mới ở nền**; chỉ lần đầu tuyệt đối mới phải chờ. → user gần như
-  không bao giờ chờ SSI. TTL quote/indices 45s.
+  + làm mới nền**; chỉ lần đầu tuyệt đối phải chờ. → user gần như không bao giờ
+  chờ SSI. TTL quote/indices 45s.
 - **Warm-up cache nền 5 phút/lần** (`warmCache`, env `WARM_INTERVAL_MS`,
-  `DISABLE_WARM=1` để tắt) dùng `revalidate` (KHÔNG xoá cache, nên user vẫn được
-  phục vụ bản cũ trong lúc làm mới). **Đừng để interval ngắn** (từng thử 40s) —
-  nện SSI dày làm throttle theo tần suất, phản tác dụng.
+  `DISABLE_WARM=1` để tắt) dùng `revalidate` (không xoá cache, user vẫn dùng
+  bản cũ khi làm mới). **Đừng để interval ngắn** (từng thử 40s) — nện SSI dày
+  làm throttle theo tần suất, phản tác dụng.
 - Kết quả: cold load ~15s (tuần tự, tất cả OK), load lại cache ấm ~0.002s.
 - Mỗi endpoint tách `computeX()` (thuần logic) khỏi route (`withCache` + trả JSON)
   để warm-up gọi lại được logic mà không qua HTTP.
 
 ## 7. Trạng thái hiện tại (cập nhật 22/07/2026)
 
-**Dự án đã hoàn thành và chạy dữ liệu thật end-to-end tại
+**Dự án hoàn thành, chạy dữ liệu thật end-to-end tại
 https://dashboardstock.io.vn** — `USE_MOCK: false`,
 `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
 
@@ -235,12 +233,12 @@ https://dashboardstock.io.vn** — `USE_MOCK: false`,
 | `/api/news` | CafeF, lọc mã tiếng Việt đúng |
 
 **Keep-alive**: `.github/workflows/keep-alive.yml` ping `/health` mỗi 10 phút
-24/7. Lưu ý GitHub **tự tắt scheduled workflow sau 60 ngày repo không có
-commit** → khi đó vào tab Actions bấm *Enable workflow*.
+24/7. Lưu ý: GitHub **tự tắt scheduled workflow sau 60 ngày repo không có
+commit** → vào tab Actions bấm *Enable workflow*.
 
-**Watchlist đã lưu localStorage** (22/07/2026): trước đó `state.watchlist` chỉ
-nằm trong RAM nên mỗi lần F5 là về lại `DEFAULT_WATCHLIST`. Đã xác nhận chạy
-đúng trên Edge sau hard refresh (`typeof saveWatchlist === "function"`).
+**Watchlist đã lưu localStorage** (22/07/2026): trước đó `state.watchlist`
+chỉ ở RAM, F5 là về lại `DEFAULT_WATCHLIST`. Đã xác nhận chạy đúng trên Edge
+sau hard refresh (`typeof saveWatchlist === "function"`).
 
 `REBOOT_SCRIPT.md` đã xóa — mô tả trạng thái tiền-viết-lại (TCBS làm
 fundamentals, backend chưa test), dễ khiến phiên sau đi sai hướng.
@@ -249,9 +247,8 @@ fundamentals, backend chưa test), dễ khiến phiên sau đi sai hướng.
 
 1. Thêm 3 bản ghi A còn thiếu (hoặc chuyển DNS sang Cloudflare) → bật
    **Enforce HTTPS**
-2. Mở dashboard trong giờ giao dịch (9h-15h, T2-T6) để kiểm tra
-   ticker/watchlist/chart với dữ liệu động — mọi test tới giờ đều ngoài giờ
-   khớp lệnh nên bảng điện đứng yên
+2. Mở dashboard giờ giao dịch (9h-15h, T2-T6) kiểm tra ticker/watchlist/chart
+   với dữ liệu động — test tới giờ đều ngoài giờ khớp lệnh, bảng điện đứng yên
 3. Bật tự động gia hạn tên miền ở Mắt Bão
 4. (Cân nhắc) Gắn `?v=N` vào thẻ script trong `index.html` để khỏi phải hard
    refresh sau mỗi lần deploy
@@ -289,8 +286,8 @@ GET  /api/account/portfolio  → { positions[], cash{}, fetchedAt }
   `crypto.timingSafeEqual`. **Không set env = tính năng tắt hoàn toàn (503)**.
 - Origin allowlist: chỉ `dashboardstock.io.vn`, `hoangduy2401-web.github.io`,
   localhost. Origin lạ → 403.
-- PIN/OTP **không bao giờ** lưu ở frontend; người dùng nhập khi backend trả
-  428, mã được chuyển thẳng cho SSI trong một lần login.
+- PIN/OTP **không bao giờ** lưu ở frontend; user nhập khi backend trả
+  428, mã chuyển thẳng cho SSI trong một lần login.
 - Frontend lưu `DASHBOARD_API_KEY` ở localStorage `vn_dashboard_api_key_v1` —
   đây là khóa của dashboard, KHÔNG phải credential SSI.
 - Dữ liệu tài khoản **không bao giờ fallback sang mock** (khác các route giá):
@@ -307,20 +304,19 @@ GET  /api/account/portfolio  → { positions[], cash{}, fetchedAt }
 - **`GetOTP` trả "2FA type is invalid" với tài khoản Smart OTP** — endpoint này
   chỉ dành cho SMS/Email OTP. Smart OTP thì lấy mã trong app rồi gọi thẳng
   `AccessToken`.
-- Token cache ra `os.tmpdir()/ssi-trade-token.json` (mode 600) để restart không
-  phải nhập OTP lại. **Render ngủ dậy = instance mới = mất cache** → tài khoản
-  Smart OTP phải nhập lại mỗi lần server cold start. Muốn tự động hoàn toàn thì
+- Token cache ra `os.tmpdir()/ssi-trade-token.json` (mode 600) để restart
+  khỏi nhập lại OTP. **Render ngủ dậy = instance mới = mất cache** → tài khoản
+  Smart OTP phải nhập lại mỗi lần server cold start. Muốn tự động hoàn toàn:
   phải chuyển sang xác thực PIN.
 - Sai OTP quá 5 lần → SSI khóa tạm dịch vụ. Đừng đoán mò.
 
 **Đã kiểm chứng số liệu**: tổng giá trị cổ phiếu + tiền mặt khớp chính xác
 `totalAssets` do SSI trả về.
 
-**GĐ2 — đặt lệnh: CHƯA làm và cố ý chưa làm.** Cần chữ ký RSA-SHA256 bằng
-private key PEM; server hiện không giữ private key nào, nên kể cả bị lộ
-`DASHBOARD_API_KEY` thì kẻ tấn công cũng chỉ đọc được, không giao dịch được.
-Trước khi làm GĐ2 phải có: xác nhận 2 bước trên UI, giới hạn giá trị lệnh,
-nút hủy khẩn cấp, và log mọi lệnh.
+**GĐ2 — đặt lệnh: CHƯA làm, cố ý chưa làm.** Cần chữ ký RSA-SHA256 bằng
+private key PEM; server không giữ private key nào, nên lộ `DASHBOARD_API_KEY`
+kẻ tấn công cũng chỉ đọc được, không giao dịch được. Trước GĐ2 phải có: xác
+nhận 2 bước trên UI, giới hạn giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 
-**Không có môi trường UAT/paper trading** — mọi lệnh test ở GĐ2 sẽ là lệnh
-thật, tiền thật. Xin OTP quá 5 lần không xác thực thì SSI khóa tạm dịch vụ.
+**Không có môi trường UAT/paper trading** — lệnh test ở GĐ2 đều là lệnh
+thật, tiền thật. Xin OTP quá 5 lần không xác thực → SSI khóa tạm dịch vụ.
