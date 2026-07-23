@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Bảng Điện — Liquid Glass (Mock)</title>
+<!-- Build token: bump on every mock change; the self-update script below uses
+     it to auto-refresh clients past GitHub Pages' 10-min cache. -->
+<meta name="build" content="20260723d" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
@@ -774,6 +777,32 @@ setInterval(() => {
   document.getElementById('clock').textContent =
     `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} · 23/07/2026`;
 }, 1000);
+</script>
+
+<script>
+// ---- Auto cache-bust ----
+// This page is opened directly by URL, so a ?v= query can't be pre-applied.
+// On load, fetch the live copy (bypassing cache) and read its <meta build>.
+// If the server has a newer token than the one baked into THIS (possibly
+// cached) page, navigate to ?v=<token> — a fresh URL that the cache can't
+// serve stale — so the user always ends up on the latest deploy.
+(function () {
+  var current = document.querySelector('meta[name="build"]');
+  current = current ? current.getAttribute("content") : "";
+  fetch(location.pathname + "?_=" + Date.now(), { cache: "no-store" })
+    .then(function (r) { return r.text(); })
+    .then(function (html) {
+      var m = html.match(/name="build"\s+content="([^"]+)"/);
+      if (!m) return;
+      var latest = m[1];
+      // Redirect only when the server is genuinely newer AND we aren't already
+      // showing that version (prevents a reload loop).
+      if (latest !== current && location.search.indexOf("v=" + latest) === -1) {
+        location.replace(location.pathname + "?v=" + latest);
+      }
+    })
+    .catch(function () { /* offline / fetch blocked -> keep current page */ });
+})();
 </script>
 </body>
 </html>
