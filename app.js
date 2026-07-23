@@ -55,10 +55,54 @@ document.addEventListener("DOMContentLoaded", () => {
   wireAccountSync();
   ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
   wireChartToolbar();
+  wireThemeControls();
 
   refreshAll();
   scheduleRefreshLoop();
 });
+
+/* ============================================================
+   LIQUID GLASS THEME CONTROLS — Sáng/Tối toggle + Trong/Đục slider
+   Mirrors the approved mock. The slider drives the glass fill alpha;
+   toggling the theme re-applies chart colours (chart reads CSS vars).
+   ============================================================ */
+// Per-theme glass alpha range for the slider (0 = Trong/clear, 100 = Đục).
+const GLASS = {
+  light: { min: 0.20, max: 0.85, raiseDelta: 0.18, def: 29 },
+  dark: { min: 0.02, max: 0.22, raiseDelta: 0.045, def: 15 },
+};
+let currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+
+function setGlass(v) {
+  const g = GLASS[currentTheme] || GLASS.light;
+  const a = g.min + (g.max - g.min) * (v / 100);
+  const root = document.documentElement;
+  root.style.setProperty("--glass-a", a.toFixed(3));
+  root.style.setProperty("--glass-raised-a", Math.min(a + g.raiseDelta, 0.98).toFixed(3));
+}
+
+function setTheme(t) {
+  currentTheme = t;
+  document.documentElement.setAttribute("data-theme", t);
+  const dark = document.getElementById("tDark");
+  const light = document.getElementById("tLight");
+  if (dark) dark.classList.toggle("on", t === "dark");
+  if (light) light.classList.toggle("on", t === "light");
+  const range = document.getElementById("glassRange");
+  if (range) { range.value = GLASS[t].def; setGlass(range.value); }
+  // Chart colours (grid/text) come from CSS vars — re-apply after theme swap.
+  if (typeof ChartModule.applyTheme === "function") ChartModule.applyTheme();
+}
+
+function wireThemeControls() {
+  const light = document.getElementById("tLight");
+  const dark = document.getElementById("tDark");
+  const range = document.getElementById("glassRange");
+  if (light) light.addEventListener("click", () => setTheme("light"));
+  if (dark) dark.addEventListener("click", () => setTheme("dark"));
+  if (range) range.addEventListener("input", (e) => setGlass(e.target.value));
+  setTheme(currentTheme); // sync button state + slider + glass to the initial theme
+}
 
 // Self-scheduling loop: the next refresh is queued only AFTER the current one
 // finishes, so a slow cycle can never stack on top of another (which used to

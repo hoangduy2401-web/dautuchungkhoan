@@ -1,14 +1,19 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="light">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Bảng Điện — Dashboard Chứng Khoán</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260723c" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20260723d" />
 </head>
 <body>
+
+  <!-- Liquid Glass background: aurora colour layer the glass panels refract -->
+  <div class="aurora"><span class="b1"></span><span class="b2"></span><span class="b3"></span><span class="b4"></span><span class="b5"></span></div>
+  <div class="grain"></div>
 
   <!-- Ticker tape: dải giá chạy liên tục kiểu bảng điện sàn giao dịch -->
   <div class="ticker-tape">
@@ -18,12 +23,23 @@
 
   <header class="app-header">
     <div class="brand">
-      <div class="mark">BẢNG<span>ĐIỆN</span></div>
+      <div class="mark">BẢNG <span>ĐIỆN</span></div>
       <div class="sub">Dashboard tổng hợp cổ phiếu &amp; danh mục cá nhân</div>
     </div>
     <div class="header-right">
       <span class="mock-badge" id="mockBadge">DỮ LIỆU MẪU — XEM config.js</span>
       <span class="clock" id="clock"></span>
+      <div class="controls">
+        <div class="segmented">
+          <button type="button" id="tLight">Sáng</button>
+          <button type="button" id="tDark">Tối</button>
+        </div>
+        <div class="glass-slider" title="Độ trong / đục của kính">
+          <span class="gs-label">Trong</span>
+          <input id="glassRange" type="range" min="0" max="100" value="29" aria-label="Độ trong đục của kính" />
+          <span class="gs-label">Đục</span>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -144,11 +160,11 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="config.js?v=20260723c"></script>
-  <script src="mockData.js?v=20260723c"></script>
-  <script src="dataService.js?v=20260723c"></script>
-  <script src="portfolio.js?v=20260723c"></script>
-  <script src="chartModule.js?v=20260723c"></script>
-  <script src="app.js?v=20260723c"></script>
+  <script src="config.js?v=20260723d"></script>
+  <script src="mockData.js?v=20260723d"></script>
+  <script src="dataService.js?v=20260723d"></script>
+  <script src="portfolio.js?v=20260723d"></script>
+  <script src="chartModule.js?v=20260723d"></script>
+  <script src="app.js?v=20260723d"></script>
 </body>
 </html>

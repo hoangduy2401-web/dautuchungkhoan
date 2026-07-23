@@ -70,7 +70,7 @@ const ChartModule = (function () {
       layout: {
         background: { color: "transparent" },
         textColor: css.getPropertyValue("--text-muted").trim() || "#8493b3",
-        fontFamily: "'Be Vietnam Pro', sans-serif",
+        fontFamily: "'Inter', sans-serif",
         fontSize: 11,
       },
       grid: {
@@ -258,5 +258,14 @@ const ChartModule = (function () {
     if (name === "rsi") rsiContainer.style.display = visible ? "block" : "none";
   }
 
-  return { init, setData, setDrawMode, clearTrendline, toggleSeries, redrawTrendline };
+  // Re-apply theme-dependent colours (grid/text/borders read from CSS vars).
+  // Called by app.js when the Sáng/Tối toggle flips. Candle up/down stay fixed.
+  function applyTheme() {
+    if (!priceChart) return;
+    const t = chartTheme();
+    priceChart.applyOptions(t);
+    rsiChart.applyOptions(t);
+  }
+
+  return { init, setData, setDrawMode, clearTrendline, toggleSeries, redrawTrendline, applyTheme };
 })();

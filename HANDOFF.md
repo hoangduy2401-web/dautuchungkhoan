@@ -119,8 +119,13 @@ trading → mọi lệnh test là tiền thật.
 - Biểu đồ đổi sang **nến** (mặc định) + khối chart thành kính trong.
 - Thêm **trục giá** (phải) + **nhãn giá hiện tại** + **trục ngày** (đáy).
 - Thêm bộ chọn **khung 1M / 3M / 6M** (mặc định 3M).
-→ Việc còn lại: user xem bản mock mới trên thiết bị thật, chốt xong thì áp phong
-cách vào `style.css`/`index.html` thật rồi push.
+**ĐÃ ÁP liquid glass vào dashboard thật (23/07/2026, đã push):** full parity với
+mock — `style.css` rewrite (tokens glass + aurora + light default + `[data-theme]`),
+`index.html` (font Inter, `data-theme="light"`, aurora div, toggle Sáng/Tối +
+slider Trong/Đục, `BẢNG ĐIỆN`), `app.js` (`setTheme`/`setGlass`/`wireThemeControls`),
+`chartModule.js` (`applyTheme()` re-theme chart khi đổi Sáng/Tối, font Inter).
+Giữ 100% chức năng (Lightweight Charts, trendline, widget). Backup CSS cũ:
+`style.css.pre-glass.bak` (local, không commit). `?v=20260723d`.
 
 **Khi user duyệt xong** → áp phong cách vào `style.css` + `index.html` thật,
 giữ nguyên 100% chức năng, chỉ thay lớp giao diện, rồi bump `?v=`.
