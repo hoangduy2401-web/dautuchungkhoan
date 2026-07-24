@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260724m" />
+<link rel="stylesheet" href="style.css?v=20260724n" />
 </head>
 <body>
 
@@ -55,6 +55,7 @@
         <button type="button" data-mtab="heatmap" class="active">Bản đồ nhiệt</button>
         <button type="button" data-mtab="sector">Theo ngành</button>
         <button type="button" data-mtab="rank">Top tăng/giảm</button>
+        <button type="button" data-mtab="foreign">Khối ngoại</button>
       </div>
 
       <!-- Heatmap: whole-basket colour map, green up / red down by % -->
@@ -73,6 +74,12 @@
       <!-- Sector: average % change of the VN30 members in each sector -->
       <div class="mtab-pane" data-pane="sector" hidden>
         <div class="sector-list" id="sectorList"></div>
+      </div>
+
+      <!-- Foreign flow: net foreign buy/sell value per VN30 ticker (tỷ đồng) -->
+      <div class="mtab-pane" data-pane="foreign" hidden>
+        <div class="sector-list" id="foreignList"></div>
+        <div class="foreign-note">Đơn vị: tỷ đồng · dương = mua ròng, âm = bán ròng · rổ VN30</div>
       </div>
 
       <!-- Rankings: top 5 gainers / losers within the VN30 basket -->
@@ -206,11 +213,11 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="config.js?v=20260724m"></script>
-  <script src="mockData.js?v=20260724m"></script>
-  <script src="dataService.js?v=20260724m"></script>
-  <script src="portfolio.js?v=20260724m"></script>
-  <script src="chartModule.js?v=20260724m"></script>
-  <script src="app.js?v=20260724m"></script>
+  <script src="config.js?v=20260724n"></script>
+  <script src="mockData.js?v=20260724n"></script>
+  <script src="dataService.js?v=20260724n"></script>
+  <script src="portfolio.js?v=20260724n"></script>
+  <script src="chartModule.js?v=20260724n"></script>
+  <script src="app.js?v=20260724n"></script>
 </body>
 </html>

@@ -440,10 +440,17 @@ async function computeQuote(symbol) {
   const price = toThousandVnd(pickField(d, ["ClosePrice", "MatchPrice", "MatchedPrice", "Close"]));
   const refPrice = toThousandVnd(pickField(d, ["RefPrice", "BasicPrice", "PriorClosePrice"]));
 
+  // Foreign flow is already in the same DailyStockPrice row — no extra SSI call.
+  // Net foreign value (buy - sell) in raw VND, exposed to the client in tỷ đồng
+  // (billions): positive = net foreign buying, negative = net foreign selling.
+  const fBuyVal = num(pickField(d, ["ForeignBuyValTotal", "ForeignBuyValueTotal"]));
+  const fSellVal = num(pickField(d, ["ForeignSellValTotal", "ForeignSellValueTotal"]));
+
   return {
     price,
     changePct: refPrice ? ((price - refPrice) / refPrice) * 100 : 0,
     volume: num(pickField(d, ["TotalMatchVol", "TotalVol", "Volume"])),
+    netForeignVal: (fBuyVal - fSellVal) / 1e9,
   };
 }
 

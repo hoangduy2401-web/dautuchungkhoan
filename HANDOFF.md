@@ -119,10 +119,17 @@ mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel 
   - **Theo ngành** — `SECTOR_MAP` (VN30→ngành), %TB mỗi ngành, bar `|avg|/max`, sort desc.
   - **Top tăng/giảm** — top5 tăng/giảm trong VN30, click row = chọn mã.
   - Tab thứ 4 **Khối ngoại** CHƯA làm (Phase 4).
-- Phase 4 (Khối ngoại mua/bán ròng, HNX/UPCoM rankings): CHƯA làm — cần endpoint
-  backend mới.
+- **Phase 4 khối ngoại (24/07) — ĐÃ làm:** tab thứ 4 "Khối ngoại" (`renderForeign`,
+  `#foreignList`). Mua/bán ròng ngoại theo mã VN30 (tỷ đồng), bar `|net|/max`, xanh
+  mua ròng / đỏ bán ròng, sort |net| desc, top 15. **Nguồn:** `DailyStockPrice` đã
+  gọi sẵn ở `computeQuote` — thêm `netForeignVal=(ForeignBuyValTotal−ForeignSellValTotal)/1e9`
+  vào payload quote → **0 call SSI thêm**. Verify live backend: HPG +87.2 tỷ, VHM/VPB
+  −77.7 tỷ. **Đụng `server/index.js` → đã `cp` sang `index.js` gốc, Render deploy khi push.**
+  Mock `generateQuote` cũng thêm `netForeignVal` cho fallback.
+- Còn treo Phase 4: **HNX/UPCoM rankings** (top tăng/giảm cho 2 sàn kia) — cần warm
+  2 rổ mã mới, CHƯA làm.
 
-Version hiện `?v=20260724m`.
+Version hiện `?v=20260724n`.
 
 ---
 

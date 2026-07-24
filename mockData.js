@@ -94,6 +94,7 @@ function generateQuote(symbol) {
     price: +price.toFixed(2),
     changePct: +changePct.toFixed(2),
     volume: Math.round((0.5 + rnd() * 3) * 1_000_000),
+    netForeignVal: +((rnd() - 0.5) * 200).toFixed(1), // tỷ đồng, mock foreign flow
   };
 }
 

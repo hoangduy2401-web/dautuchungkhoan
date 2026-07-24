@@ -167,6 +167,12 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
     phiên trước, đã verify 30.85/1668.53=1.85%). Sau đóng cửa dùng thẳng
     `IndexValue`. **Đừng chỉ lấy "row mới nhất có value>0"** — trong phiên nó
     trả số đóng cửa hôm qua, đứng im, trông như "không cập nhật".
+- `DailyStockPrice` (đã dùng ở `computeQuote`) trả **cả khối ngoại trong cùng
+  row**: `ForeignBuyValTotal`, `ForeignSellValTotal` (VND), `ForeignBuyVolTotal`,
+  `ForeignSellVolTotal`, `ForeignCurrentRoom`, `NetBuySellVal/Vol`. Mua ròng ngoại
+  = `ForeignBuyValTotal − ForeignSellValTotal` (verify VNM 24/07: 73.93 − 50.36 =
+  +23,57 tỷ, khớp `NetBuySellVal`). → tab Khối ngoại **0 call SSI thêm**, chỉ nhét
+  `netForeignVal` (tỷ) vào payload quote.
 - `IndexList` chỉ trả `{IndexCode, IndexName, Exchange}`, không có giá trị.
   Mã thật: HOSE = `VNINDEX, VN30, VN100, VNMIDCAP, VNSMALLCAP, VNDIAMOND,
   VNFINLEAD, VNX50...`; HNX = `HNXIndex, HNX30, HNXUpcomIndex`.
@@ -228,7 +234,7 @@ Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
 **Dự án hoàn thành, chạy dữ liệu thật end-to-end tại
 https://dashboardstock.io.vn** — `USE_MOCK: false`,
 `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
-Cache busting hiện `?v=20260724m` (bump mỗi lần sửa JS/CSS).
+Cache busting hiện `?v=20260724n` (bump mỗi lần sửa JS/CSS).
 
 **Tính năng thêm phiên 24/07/2026:**
 - **Ticker tape chạy rổ VN30** (30 mã, tách khỏi watchlist). Config `APP_CONFIG.VN30`;

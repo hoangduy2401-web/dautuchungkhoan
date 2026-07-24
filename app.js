@@ -183,6 +183,7 @@ async function refreshAll() {
     renderHeatmap();
     renderSectors();
     renderRankings();
+    renderForeign();
     renderWatchlist();
     await loadSelectedSymbol();
     await refreshPortfolio();
@@ -352,6 +353,35 @@ function renderRankings() {
       });
     })
   );
+}
+
+// Foreign flow: net foreign buy/sell value per VN30 symbol (tỷ đồng), sorted by
+// magnitude. Reuses the netForeignVal already carried on each warmed quote.
+function renderForeign() {
+  const el = document.getElementById("foreignList");
+  if (!el) return;
+  const rows = APP_CONFIG.VN30
+    .map((s) => ({ s, v: state.quotes[s] ? state.quotes[s].netForeignVal : null }))
+    .filter((r) => hasVal(r.v))
+    .sort((a, b) => Math.abs(b.v) - Math.abs(a.v))
+    .slice(0, 15);
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="empty-state">Chưa có dữ liệu khối ngoại.</div>`;
+    return;
+  }
+  const maxAbs = Math.max(...rows.map((r) => Math.abs(r.v)), 0.1);
+  el.innerHTML = rows
+    .map((r) => {
+      const buy = r.v >= 0;
+      const color = buy ? "var(--up)" : "var(--down)";
+      const w = (Math.abs(r.v) / maxAbs) * 100;
+      return `<div class="sector-row">
+        <div class="s-name">${r.s}</div>
+        <div class="s-track"><div class="s-fill" style="width:${w.toFixed(1)}%;background:${color}"></div></div>
+        <div class="s-val" style="color:${color}">${buy ? "+" : ""}${r.v.toFixed(1)} tỷ</div>
+      </div>`;
+    })
+    .join("");
 }
 
 // Tab switcher: toggle active button + which pane is visible. Data for all panes

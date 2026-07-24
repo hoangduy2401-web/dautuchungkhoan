@@ -281,7 +281,7 @@ a { color: inherit; }
 .sector-row .s-name { width: 140px; flex-shrink: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sector-row .s-track { flex: 1; height: 8px; background: var(--field-bg); border-radius: 999px; overflow: hidden; }
 .sector-row .s-fill { height: 100%; border-radius: 999px; }
-.sector-row .s-val { width: 62px; flex-shrink: 0; text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sector-row .s-val { width: 78px; flex-shrink: 0; text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* Rankings tab: two ranked columns of rows */
 .rank-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; padding: 16px 18px; }
@@ -294,6 +294,8 @@ a { color: inherit; }
 .rank-row .r-sym { width: 52px; flex-shrink: 0; font-size: 12px; font-weight: 800; }
 .rank-row .r-price { flex: 1; text-align: right; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .rank-row .r-chg { width: 72px; flex-shrink: 0; text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.foreign-note { font-size: 11px; color: var(--text-dim); padding: 0 18px 14px; }
 .heat-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; padding: 12px 6px; min-height: 62px;
