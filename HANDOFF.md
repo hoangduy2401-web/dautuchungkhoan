@@ -134,7 +134,7 @@ mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel 
   endpoint quote sẵn có — **frontend-only, 0 đổi backend**. Verify live: HNX TNG
   +3.55%/BVS −7.12%, UPCoM BSR +2.78%/BVB −4.21%. Cập nhật rổ khi sàn rebalance.
 
-Version hiện `?v=20260724o`.
+Version hiện `?v=20260724p`.
 
 ---
 

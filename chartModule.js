@@ -274,7 +274,12 @@ const ChartModule = (function () {
       bbLowerSeries.applyOptions({ visible });
     }
     if (name === "volume") volumeSeries.applyOptions({ visible });
-    if (name === "rsi") rsiContainer.style.display = visible ? "block" : "none";
+    if (name === "rsi") {
+      rsiContainer.style.display = visible ? "block" : "none";
+      // A resize while hidden leaves the RSI chart at width 0 (clientWidth of a
+      // display:none element). Re-measure on show so the line paints full-width.
+      if (visible) resize();
+    }
   }
 
   // Re-apply theme-dependent colours (grid/text/borders read from CSS vars).
