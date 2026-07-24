@@ -317,8 +317,10 @@ a { color: inherit; }
 .watch-item:last-child { border-bottom: none; }
 .watch-item:hover { background: var(--panel-2); }
 .watch-item.active { background: var(--amber-dim); border-left-color: var(--amber); }
-/* Left block eats the slack so price/chg align on one right edge (before ✕) */
-.watch-item > div:first-child { flex: 1; min-width: 0; }
+/* The name block (first div — the ☰ handle is a span before it) eats the slack
+   so price/chg align on one right edge before ✕. Use :first-of-type, not
+   :first-child, or the handle span steals the match and the row misaligns. */
+.watch-item > div:first-of-type { flex: 1; min-width: 0; }
 .watch-item .sym { font-weight: 700; font-size: 14px; }
 .watch-item .name { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
 .watch-item .right { text-align: right; font-variant-numeric: tabular-nums; }

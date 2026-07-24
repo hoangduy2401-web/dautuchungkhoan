@@ -375,23 +375,32 @@ async function computeIndices() {
         row: r,
         date: normalizeDate(pickField(r, ["TradingDate", "Date"])),
         value: num(pickField(r, ["IndexValue", "Value", "IndexVal"])),
+        // RatioChange = % vs the previous close (verified: 30.85/1668.53 = 1.85%).
+        // The sibling `Change` field is scaled oddly, so never use it.
+        ratio: num(pickField(r, ["RatioChange", "PercentIndexChange", "PercentPriceChange", "ChangePct"])),
       }))
       .sort((a, b) => b.date.localeCompare(a.date));
-    // Pick the newest row with a real (non-zero) value. During the ATO auction /
-    // early session SSI sometimes returns a today-row with IndexValue=0 while
-    // RatioChange is already filled, which showed the index flickering to 0.
-    // Falling back to the last row that actually has points fixes that.
-    const picked = rows.find((r) => r.value > 0) || rows[0];
-    if (!picked) continue;
-    const d = picked.row;
+
+    const newest = rows[0];
+    if (!newest) continue;
+    // KEY: during the session (TradingSession "LO"/"ATO") SSI publishes today's
+    // row with IndexValue=0 but a LIVE RatioChange. The real intraday points
+    // aren't in DailyIndex until close, so reconstruct them from the previous
+    // close × (1 + todayRatio/100). After close the today-row carries the final
+    // IndexValue and we use it directly.
+    let value = newest.value;
+    let changePct = newest.ratio;
+    if (newest.value <= 0) {
+      const prevClose = rows.find((r) => r.value > 0);
+      if (prevClose) value = prevClose.value * (1 + newest.ratio / 100);
+    }
+    if (!(value > 0)) continue; // still nothing usable — skip rather than show 0
 
     items.push({
       code: uiCode,
       // Index values are already in points, do NOT divide by 1000.
-      value: picked.value,
-      // RatioChange is the % change. NOTE: the sibling `Change` field is
-      // scaled oddly (-0.6203 for a -62.03 point move) — do not use it.
-      changePct: num(pickField(d, ["RatioChange", "PercentIndexChange", "PercentPriceChange", "ChangePct"])),
+      value: Math.round(value * 100) / 100,
+      changePct,
     });
   }
   return items;

@@ -159,6 +159,14 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   **`IndexId=ALL` trả `NoDataFound`** → phải gọi từng mã một.
   Dùng `RatioChange` làm `changePct`; **`Change` bị scale sai** (-0.6203 cho
   cú giảm -62.03 điểm) — đừng dùng.
+  - **QUAN TRỌNG — intraday `IndexValue=0` (fix 24/07/2026):** trong phiên
+    (`TradingSession` = `LO`/`ATO`) SSI trả row hôm nay với `IndexValue="0"`
+    nhưng `RatioChange` LÀ SỐ LIVE. Giá trị điểm thật chỉ có sau đóng cửa
+    (`TradingSession="C"`). → `computeIndices` tái tạo giá trị intraday =
+    **đóng cửa hôm qua × (1 + RatioChange/100)** (RatioChange là % so đóng cửa
+    phiên trước, đã verify 30.85/1668.53=1.85%). Sau đóng cửa dùng thẳng
+    `IndexValue`. **Đừng chỉ lấy "row mới nhất có value>0"** — trong phiên nó
+    trả số đóng cửa hôm qua, đứng im, trông như "không cập nhật".
 - `IndexList` chỉ trả `{IndexCode, IndexName, Exchange}`, không có giá trị.
   Mã thật: HOSE = `VNINDEX, VN30, VN100, VNMIDCAP, VNSMALLCAP, VNDIAMOND,
   VNFINLEAD, VNX50...`; HNX = `HNXIndex, HNX30, HNXUpcomIndex`.
