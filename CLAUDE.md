@@ -223,11 +223,36 @@ Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
 - Mỗi endpoint tách `computeX()` (thuần logic) khỏi route (`withCache` + trả JSON)
   để warm-up gọi lại được logic mà không qua HTTP.
 
-## 7. Trạng thái hiện tại (cập nhật 22/07/2026)
+## 7. Trạng thái hiện tại (cập nhật 24/07/2026)
 
 **Dự án hoàn thành, chạy dữ liệu thật end-to-end tại
 https://dashboardstock.io.vn** — `USE_MOCK: false`,
 `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
+Cache busting hiện `?v=20260724h` (bump mỗi lần sửa JS/CSS).
+
+**Tính năng thêm phiên 24/07/2026:**
+- **Ticker tape chạy rổ VN30** (30 mã, tách khỏi watchlist). Config `APP_CONFIG.VN30`;
+  `renderTickerTape` lặp VN30; `loadTapeQuotes` fetch VN30 ∪ watchlist (dedup).
+  Backend `WARM_SYMBOLS` = cả 30 mã → tape phục vụ từ cache. Tốc độ cuộn CSS
+  `scroll-left` 90s (chỉnh ở đây nếu muốn nhanh/chậm).
+- **Bản đồ nhiệt VN30** (`renderHeatmap`, section dưới index-strip): 30 ô màu
+  xanh/đỏ theo %, đậm theo biên độ (clamp ±3%), sort tăng→giảm, click ô = load
+  chart. Dùng lại quote đã warm, 0 call thêm. **Chưa** làm sizing theo vốn hóa
+  (hoãn — cần 30 call fundamentals, gộp khi làm dòng tiền).
+- **Chart thêm khung 1Y + 5Y** (`renderRangeTabs`: 30/90/180/365/1825 ngày).
+  Timeout history frontend co giãn (1Y 30s, 5Y 75s). Backend history TTL co giãn
+  (30 phút cho khung >270 ngày) để 1Y/5Y không refresh nền hàng loạt call SSI.
+- **Tài khoản SSI mobile**: bảng 7 cột stack thành thẻ label:value ở ≤640px
+  (mỗi `<td>` có `data-label`), bảng giao dịch tay scroll ngang.
+- **Watchlist kéo thả**: burger ☰ mỗi mã + pointer-drag reorder (chuột+cảm ứng),
+  lưu localStorage. CSS dùng `:first-of-type` cho khối tên (không phải
+  `:first-child` — handle span chiếm mất).
+
+**Fix quan trọng phiên 24/07/2026:**
+- **Index intraday** (xem mục 6): VNINDEX/VN30 từng hiện đóng cửa hôm qua đứng im
+  trong phiên. Đã tái tạo giá trị live từ đóng cửa hôm qua × RatioChange.
+- **Rà soát code**: escape regex mã trong news (né 502), escape XSS tin tức +
+  chặn `javascript:` URL, timeout cho trade call FCTrading.
 
 Đã kiểm chứng trên production (Render, 22/07/2026):
 
@@ -253,13 +278,15 @@ fundamentals, backend chưa test), dễ khiến phiên sau đi sai hướng.
 
 ### Việc cần làm tiếp theo
 
-1. Thêm 3 bản ghi A còn thiếu (hoặc chuyển DNS sang Cloudflare) → bật
+1. **Tính năng #3 — Theo dõi dòng tiền** (user đã chọn, chưa làm): phát hiện
+   đột biến khối lượng/giá trị giao dịch (spike vs trung bình 20 phiên). Sẽ đụng
+   `server/index.js` (endpoint mới, `cp` sang root). Gộp luôn: sizing heatmap
+   theo vốn hóa (cần marketcap VN30 — thêm endpoint warmed 1 call thay 30).
+2. (Cải tiến) Portfolio thủ công: mã ngoài watchlist+VN30 dùng giá vốn làm giá
+   hiện tại (P&L=0) vì `state.quotes` không có — fetch thêm quote nếu muốn P&L live.
+3. Thêm 3 bản ghi A còn thiếu (hoặc chuyển DNS sang Cloudflare) → bật
    **Enforce HTTPS**
-2. Mở dashboard giờ giao dịch (9h-15h, T2-T6) kiểm tra ticker/watchlist/chart
-   với dữ liệu động — test tới giờ đều ngoài giờ khớp lệnh, bảng điện đứng yên
-3. Bật tự động gia hạn tên miền ở Mắt Bão
-4. (Cân nhắc) Gắn `?v=N` vào thẻ script trong `index.html` để khỏi phải hard
-   refresh sau mỗi lần deploy
+4. Bật tự động gia hạn tên miền ở Mắt Bão
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
 

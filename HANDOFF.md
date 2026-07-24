@@ -1,4 +1,4 @@
-# HANDOFF — Dashboard "Bảng Điện" (cập nhật 24/07/2026)
+# HANDOFF — Dashboard "Bảng Điện" (cập nhật 24/07/2026, phiên 2)
 
 > Dán file này làm prompt đầu tiên của phiên mới để tiếp tục không mất bối cảnh.
 > **`CLAUDE.md` ở cùng repo là tài liệu kỹ thuật đầy đủ** (format API, cạm bẫy,
@@ -27,8 +27,8 @@ frontend GitHub Pages. Không build tool — HTML/CSS/JS thuần.
 - KHÔNG hỏi xác nhận trước khi sửa file. CHỈ hỏi khi: xóa file/tính năng, đổi
   cấu trúc lớn (đổi kiến trúc module, thư viện chart, format dữ liệu giữa
   `dataService.js` ↔ `app.js` ↔ `server`).
-- **Sửa file JS/CSS xong PHẢI bump `?v=YYYYMMDD`** trong `index.html` (hiện
-  `20260724b`), nếu không người dùng chạy code cũ tới 10 phút do cache Pages.
+- **Sửa file JS/CSS xong PHẢI bump `?v=YYYYMMDD<chữ>`** trong `index.html` (hiện
+  `20260724h`), nếu không người dùng chạy code cũ tới 10 phút do cache Pages.
 - **Nguồn sự thật server là `server/index.js`**; sau mỗi lần sửa chạy
   `cp server/index.js index.js` (Render deploy từ root).
 - KHÔNG commit `server/.env`. Đã có `.gitignore` chặn.
@@ -43,11 +43,13 @@ Toàn bộ dashboard chạy dữ liệu thật end-to-end (`USE_MOCK: false`,
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
-| Giá / nến / chỉ số | SSI FastConnect **Data** | chunking 30 ngày, index dùng `DailyIndex` từng mã |
-| **Ticker tape (chạy đầu trang)** | rổ **VN30** | tách khỏi watchlist cá nhân; xem note 24/07 |
+| Giá / nến / chỉ số | SSI FastConnect **Data** | chunking 30 ngày; index intraday tái tạo từ đóng cửa × RatioChange (xem CLAUDE mục 6) |
+| Chart khung thời gian | — | 1M / 3M / 6M / **1Y** / **5Y** (30/90/180/365/1825 ngày) |
+| **Ticker tape (chạy đầu trang)** | rổ **VN30** | tách khỏi watchlist; cuộn 90s; backend warm cả 30 mã |
+| **Bản đồ nhiệt VN30** | quote VN30 (đã warm) | 30 ô màu %, click = load chart; chưa sizing theo vốn hóa |
 | Chỉ số cơ bản (10/10 ô) | VNDirect finfo | ratios + tự tính YoY & nợ/VCSH từ financial_statements |
 | Tin tức theo mã | CafeF RSS | đã sửa regex tiếng Việt (`\b` không dùng được) |
-| Watchlist | localStorage `vn_dashboard_watchlist_v1` | seed đầu = `DEFAULT_WATCHLIST` |
+| Watchlist | localStorage `vn_dashboard_watchlist_v1` | seed đầu = `DEFAULT_WATCHLIST`; burger ☰ kéo thả sắp xếp |
 | Lịch sử giao dịch nhập tay | localStorage `vn_dashboard_transactions_v1` | giá vốn bình quân gia quyền |
 | **Danh mục thật SSI (chỉ đọc)** | SSI FastConnect **Trading** | GĐ1, xem mục 3 |
 | Keep-alive | GitHub Actions ping `/health` mỗi 10 phút | chống Render ngủ |
@@ -74,7 +76,27 @@ mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel 
   concurrency=1) trước khi warm sweep đầu chạy; sau đó tức thì.
 - **Tốc độ cuộn:** track dài gấp ~5 nên `style.css` `scroll-left` chỉnh 32s → **90s**
   (chỉnh ở đây nếu muốn nhanh/chậm hơn). Hover vào tape vẫn pause.
-- `style.css.pre-glass.bak` đã thêm vào `.gitignore`. Version hiện `?v=20260724b`.
+- `style.css.pre-glass.bak` đã thêm vào `.gitignore`.
+
+**Thêm phiên 24/07 (phiên 2):**
+- **Heatmap VN30** (`renderHeatmap`, section dưới index-strip): 30 ô màu %,
+  `heatColor` clamp ±3%, sort tăng→giảm, click ô = load chart. 0 call thêm.
+  Chưa sizing theo vốn hóa (hoãn — gộp khi làm dòng tiền, cần marketcap VN30).
+- **Chart 1Y + 5Y** (`renderRangeTabs`). Timeout history frontend co giãn
+  (`dataService.getHistory`: 1Y 30s, 5Y 75s); backend TTL co giãn (>270 ngày = 30 phút).
+  Cold load 5Y ~40 call SSI (~60s), sau đó cache.
+- **Tài khoản SSI mobile**: ≤640px bảng 7 cột → thẻ label:value (`data-label` mỗi td).
+- **Watchlist kéo thả**: burger ☰ + `enableWatchlistDrag` (pointer, chuột+cảm ứng),
+  lưu localStorage. CSS khối tên dùng `:first-of-type` (handle span là first child).
+
+**Fix quan trọng phiên 2:**
+- **Index intraday** (`computeIndices`): trong phiên SSI trả `IndexValue=0` +
+  RatioChange live → tái tạo value = đóng cửa hôm qua × (1+ratio/100). Trước đó
+  hiện đóng cửa hôm qua đứng im. Verify live: VNINDEX 1684.77 -0.86%. (CLAUDE mục 6.)
+- **Rà soát code**: escape regex mã trong news (né 502 khi mã có ký tự regex),
+  escape XSS tin tức + chặn `javascript:` URL, timeout FCTrading trade call.
+
+Version hiện `?v=20260724h`.
 
 ---
 
@@ -105,60 +127,37 @@ trading → mọi lệnh test là tiền thật.
 
 ---
 
-## 4. ĐANG CHỜ QUYẾT ĐỊNH — Liquid Glass redesign
+## 4. Liquid Glass redesign — ĐÃ XONG (23/07)
 
-**Đã dựng mock để duyệt, CHƯA áp vào file thật:**
-`mock-liquid-glass.html` → https://dashboardstock.io.vn/mock-liquid-glass.html
+Đã áp full vào dashboard thật (không còn chờ duyệt): `style.css` (tokens glass +
+aurora + light default + `[data-theme]`), `index.html` (font Inter, aurora div,
+toggle Sáng/Tối + slider Trong/Đục), `app.js` (`setTheme`/`setGlass`/
+`wireThemeControls`), `chartModule.js` (`applyTheme()`). Giữ 100% chức năng.
+Backup CSS cũ `style.css.pre-glass.bak` (local, đã `.gitignore`).
+Mock gốc vẫn còn: https://dashboardstock.io.vn/mock-liquid-glass.html
 
-- Phong cách Liquid Glass của Apple (HIG): panel kính trong mờ
-  `backdrop-filter: blur+saturate`, lớp aurora trôi phía sau, highlight mép,
-  bo góc lớn, control pill/segmented kiểu iOS.
-- Font: **Inter** (thay SF Pro — SF không cấp phép web; Inter giống nhất + đủ
-  tiếng Việt có dấu), số `tabular-nums`.
-- Giữ accent amber; màu tăng/giảm theo hệ iOS (`#30d158`/`#ff453a`).
-- Có nút Sáng/Tối, dữ liệu mẫu, không nối backend.
-
-**4 câu hỏi đã gửi user, chờ phản hồi:**
-1. Tổng thể OK không, muốn kính đục/trong hơn, aurora rõ/mờ hơn?
-2. Mặc định Tối hay Sáng?
-3. Quầng teal/xanh lá ở giữa — giữ hay đổi (xanh lá trùng màu "tăng giá")?
-4. Có chỗ nào chữ khó đọc trên thiết bị của user?
-
-**CẬP NHẬT 23/07/2026 — user đã duyệt & mình đã tinh chỉnh `mock-liquid-glass.html`
-(ĐÃ PUSH, live tại https://dashboardstock.io.vn/mock-liquid-glass.html):**
-- Kính trong hơn + thêm **thanh trượt độ trong/đục** dưới nút Sáng/Tối.
-- Mặc định **Sáng**.
-- **Bỏ hẳn quầng teal/xanh lá** (đổi palette aurora sang amber + indigo/tím, dịu hơn).
-- **BẢNG ĐIỆN** thêm dấu cách.
-- Biểu đồ đổi sang **nến** (mặc định) + khối chart thành kính trong.
-- Thêm **trục giá** (phải) + **nhãn giá hiện tại** + **trục ngày** (đáy).
-- Thêm bộ chọn **khung 1M / 3M / 6M** (mặc định 3M).
-**ĐÃ ÁP liquid glass vào dashboard thật (23/07/2026, đã push):** full parity với
-mock — `style.css` rewrite (tokens glass + aurora + light default + `[data-theme]`),
-`index.html` (font Inter, `data-theme="light"`, aurora div, toggle Sáng/Tối +
-slider Trong/Đục, `BẢNG ĐIỆN`), `app.js` (`setTheme`/`setGlass`/`wireThemeControls`),
-`chartModule.js` (`applyTheme()` re-theme chart khi đổi Sáng/Tối, font Inter).
-Giữ 100% chức năng (Lightweight Charts, trendline, widget). Backup CSS cũ:
-`style.css.pre-glass.bak` (local, không commit). `?v=20260723d`.
-
-**Khi user duyệt xong** → áp phong cách vào `style.css` + `index.html` thật,
-giữ nguyên 100% chức năng, chỉ thay lớp giao diện, rồi bump `?v=`.
-
-> Lưu ý kỹ thuật: trình chụp headless không dựng đúng `backdrop-filter` ở
-> viewport thứ 2 (hiện đen). Không phải lỗi thật — kiểm tra trên trình duyệt
-> thật. Nền panel dùng `rgba` nên kể cả backdrop-filter fail vẫn thấy thẻ tối.
+> Lưu ý: trình chụp headless không dựng đúng `backdrop-filter` ở viewport thứ 2
+> (hiện đen). Không phải lỗi thật — kiểm tra trên trình duyệt thật.
 
 ---
 
-## 5. VIỆC NHỎ CÒN TREO (không chặn)
+## 5. VIỆC CÒN TREO
 
+**Tính năng tiếp theo (user đã chọn, CHƯA làm):**
+- **#3 Theo dõi dòng tiền** — phát hiện đột biến khối lượng/giá trị (spike vs
+  TB 20 phiên). Đụng `server/index.js` (endpoint mới + `cp` sang root). Gộp luôn
+  **sizing heatmap theo vốn hóa** (thêm 1 endpoint marketcap VN30 warmed thay 30 call).
+
+**Việc nhỏ (không chặn):**
 1. **Enforce HTTPS chưa bật được**: tên miền gốc mới có 1 bản ghi A
-   (`185.199.108.153`); GitHub đòi đủ 4 (`.108/.109/.110/.111.153`). Giao diện
-   DNS Mắt Bão có vẻ chỉ cho 1 bản ghi A → nếu đúng phải chuyển nameserver sang
-   Cloudflare mới thêm đủ. `http://` hiện vẫn trả 200 (chưa ép sang https).
+   (`185.199.108.153`); GitHub đòi đủ 4 (`.108/.109/.110/.111.153`). DNS Mắt Bão
+   có vẻ chỉ cho 1 bản ghi A → phải chuyển nameserver sang Cloudflare. `http://`
+   hiện vẫn trả 200.
 2. **Bật tự động gia hạn tên miền** ở Mắt Bão (quên = dashboard chết, không ai báo).
-3. GitHub tự tắt scheduled workflow sau 60 ngày repo không commit → vào tab
-   Actions bấm *Enable workflow* khi cần.
+3. GitHub tự tắt scheduled workflow sau 60 ngày repo không commit → tab Actions
+   bấm *Enable workflow* khi cần.
+4. (Cải tiến) Portfolio thủ công: mã ngoài watchlist+VN30 dùng giá vốn làm giá
+   hiện tại (P&L=0) vì `state.quotes` thiếu — fetch thêm quote nếu muốn P&L live.
 
 ---
 
