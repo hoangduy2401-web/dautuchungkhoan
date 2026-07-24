@@ -144,7 +144,7 @@ async function refreshAll() {
   if (refreshInFlight) return; // never run two refresh cycles at once
   refreshInFlight = true;
   try {
-    await Promise.all([loadIndices(), loadWatchlistQuotes()]);
+    await Promise.all([loadIndices(), loadTapeQuotes()]);
     renderTickerTape();
     renderWatchlist();
     await loadSelectedSymbol();
@@ -181,7 +181,8 @@ async function loadIndices() {
    TICKER TAPE
    ============================================================ */
 function renderTickerTape() {
-  const items = state.watchlist
+  // The tape runs the full VN30 basket, independent of the personal watchlist.
+  const items = APP_CONFIG.VN30
     .map((s) => {
       const q = state.quotes[s];
       if (!q) return "";
@@ -198,8 +199,19 @@ function renderTickerTape() {
    WATCHLIST
    ============================================================ */
 async function loadWatchlistQuotes() {
+  await loadQuotesFor(state.watchlist);
+}
+
+// Quotes needed on screen = VN30 tape + personal watchlist, deduped. Backend
+// warms the VN30 basket so these are served from cache, not fresh SSI hits.
+async function loadTapeQuotes() {
+  const symbols = [...new Set([...APP_CONFIG.VN30, ...state.watchlist])];
+  await loadQuotesFor(symbols);
+}
+
+async function loadQuotesFor(symbols) {
   const results = await Promise.all(
-    state.watchlist.map((s) =>
+    symbols.map((s) =>
       DataService.getQuote(s)
         .then((q) => [s, q])
         .catch(() => [s, null])

@@ -16,6 +16,15 @@ const APP_CONFIG = {
 
   DEFAULT_WATCHLIST: ["VNM", "FPT", "SSI", "VCB", "HPG", "MWG"],
 
+  // Ticker tape shows the full VN30 basket. Update if the basket changes
+  // (VN30 is re-balanced ~twice a year). Backend warms these so the ticker
+  // is served from cache instead of hammering SSI on every load.
+  VN30: [
+    "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
+    "LPB", "MBB", "MSN", "MWG", "PLX", "SAB", "SHB", "SSB", "SSI", "STB",
+    "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
+  ],
+
   // Deployed backend proxy on Render. For local dev against `npm start`,
   // swap BACKEND for "http://localhost:3001".
   // BACKEND = "https://dashboard-chung-khoan.onrender.com"

@@ -917,7 +917,10 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 // expires, so real user requests hit fresh cache instead of waiting on SSI.
 // Mirrors DEFAULT_WATCHLIST in config.js. WARM_SYMBOLS can override via env.
 // ------------------------------------------------------------
-const WARM_SYMBOLS = (process.env.WARM_SYMBOLS || "VNM,FPT,SSI,VCB,HPG,MWG")
+// Full VN30 basket: the frontend ticker tape runs all 30, so warming them keeps
+// the tape served from cache instead of hammering SSI on every page load.
+const WARM_SYMBOLS = (process.env.WARM_SYMBOLS ||
+  "ACB,BCM,BID,BVH,CTG,FPT,GAS,GVR,HDB,HPG,LPB,MBB,MSN,MWG,PLX,SAB,SHB,SSB,SSI,STB,TCB,TPB,VCB,VHM,VIB,VIC,VJC,VNM,VPB,VRE")
   .split(",")
   .map((s) => s.trim().toUpperCase())
   .filter(Boolean);
