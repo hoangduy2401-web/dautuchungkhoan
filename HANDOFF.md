@@ -1,4 +1,4 @@
-# HANDOFF — Dashboard "Bảng Điện" (cập nhật 23/07/2026)
+# HANDOFF — Dashboard "Bảng Điện" (cập nhật 24/07/2026)
 
 > Dán file này làm prompt đầu tiên của phiên mới để tiếp tục không mất bối cảnh.
 > **`CLAUDE.md` ở cùng repo là tài liệu kỹ thuật đầy đủ** (format API, cạm bẫy,
@@ -28,7 +28,7 @@ frontend GitHub Pages. Không build tool — HTML/CSS/JS thuần.
   cấu trúc lớn (đổi kiến trúc module, thư viện chart, format dữ liệu giữa
   `dataService.js` ↔ `app.js` ↔ `server`).
 - **Sửa file JS/CSS xong PHẢI bump `?v=YYYYMMDD`** trong `index.html` (hiện
-  `20260723`), nếu không người dùng chạy code cũ tới 10 phút do cache Pages.
+  `20260724b`), nếu không người dùng chạy code cũ tới 10 phút do cache Pages.
 - **Nguồn sự thật server là `server/index.js`**; sau mỗi lần sửa chạy
   `cp server/index.js index.js` (Render deploy từ root).
 - KHÔNG commit `server/.env`. Đã có `.gitignore` chặn.
@@ -44,6 +44,7 @@ Toàn bộ dashboard chạy dữ liệu thật end-to-end (`USE_MOCK: false`,
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
 | Giá / nến / chỉ số | SSI FastConnect **Data** | chunking 30 ngày, index dùng `DailyIndex` từng mã |
+| **Ticker tape (chạy đầu trang)** | rổ **VN30** | tách khỏi watchlist cá nhân; xem note 24/07 |
 | Chỉ số cơ bản (10/10 ô) | VNDirect finfo | ratios + tự tính YoY & nợ/VCSH từ financial_statements |
 | Tin tức theo mã | CafeF RSS | đã sửa regex tiếng Việt (`\b` không dùng được) |
 | Watchlist | localStorage `vn_dashboard_watchlist_v1` | seed đầu = `DEFAULT_WATCHLIST` |
@@ -61,6 +62,19 @@ timeout, và `setInterval` refresh 15s chồng lấn tạo vòng xoáy tự bóp
 sửa: backend limiter concurrency=1 + cache stale-while-revalidate + warm-up nền
 5 phút + timeout; frontend chặn refresh chồng lấn + chu kỳ 45s + timeout 12s.
 Chi tiết trong `CLAUDE.md` mục 6 (Hiệu năng). Cold load ~15s, load lại ~tức thì.
+
+**Ticker tape → rổ VN30 (24/07/2026):** thanh chạy đầu trang giờ hiển thị đủ 30
+mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel bên dưới).
+- `app.js`: `renderTickerTape` lặp `APP_CONFIG.VN30`; `loadTapeQuotes` fetch quote
+  cho VN30 ∪ watchlist (deduped) qua hàm chung `loadQuotesFor`.
+- `config.js`: thêm mảng `APP_CONFIG.VN30` (30 mã, cập nhật khi VN30 rebalance ~2 lần/năm).
+- `server/index.js`: `WARM_SYMBOLS` default mở rộng 6 → cả 30 mã VN30 → tape phục
+  vụ từ cache, không nện SSI mỗi load. **Nhớ `cp server/index.js index.js`.**
+- Cold load lần đầu tape có thể chậm ~30–60s (30 quote tuần tự qua limiter
+  concurrency=1) trước khi warm sweep đầu chạy; sau đó tức thì.
+- **Tốc độ cuộn:** track dài gấp ~5 nên `style.css` `scroll-left` chỉnh 32s → **90s**
+  (chỉnh ở đây nếu muốn nhanh/chậm hơn). Hover vào tape vẫn pause.
+- `style.css.pre-glass.bak` đã thêm vào `.gitignore`. Version hiện `?v=20260724b`.
 
 ---
 

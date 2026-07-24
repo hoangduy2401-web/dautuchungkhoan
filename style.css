@@ -147,7 +147,9 @@ a { color: inherit; }
 
 .ticker-track {
   display: inline-flex; gap: 28px; padding-left: 20px;
-  animation: scroll-left 32s linear infinite;
+  /* 90s, not 32s: the tape now runs the full VN30 (~30 items, ~5x the old
+     watchlist), so the same duration scrolled far too fast to read. */
+  animation: scroll-left 90s linear infinite;
   font-size: 13px; font-variant-numeric: tabular-nums;
 }
 .ticker-track:hover { animation-play-state: paused; }
