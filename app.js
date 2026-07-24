@@ -43,6 +43,12 @@ const fmtPct = (n) => (hasVal(n) ? `${n >= 0 ? "+" : ""}${Number(n).toFixed(2)}%
 const trendClass = (n) => (n > 0.001 ? "up" : n < -0.001 ? "down" : "flat");
 const arrow = (n) => (n > 0.001 ? "▲" : n < -0.001 ? "▼" : "•");
 
+// News comes from an external RSS source, so escape any text before injecting it
+// as innerHTML and allow only http(s) links (blocks e.g. javascript: URLs).
+const escapeHtml = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeUrl = (u) => (/^https?:\/\//i.test(String(u || "")) ? String(u) : "#");
+
 /* ============================================================
    INIT
    ============================================================ */
@@ -490,8 +496,8 @@ function renderNews(items) {
       const hoursAgo = Math.max(1, Math.round((Date.now() - t) / 3600000));
       return `
       <div class="news-item">
-        <div class="meta"><span class="tag">${n.symbol}</span><span>${n.source}</span><span>${hoursAgo}h trước</span></div>
-        <div class="title"><a href="${n.url}" target="_blank" rel="noopener">${n.title}</a></div>
+        <div class="meta"><span class="tag">${escapeHtml(n.symbol)}</span><span>${escapeHtml(n.source)}</span><span>${hoursAgo}h trước</span></div>
+        <div class="title"><a href="${escapeHtml(safeUrl(n.url))}" target="_blank" rel="noopener">${escapeHtml(n.title)}</a></div>
       </div>`;
     })
     .join("");

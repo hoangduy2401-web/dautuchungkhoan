@@ -328,7 +328,12 @@ app.get("/api/price/history", async (req, res) => {
   if (!symbol) return res.status(400).json({ error: "missing symbol" });
 
   try {
-    const items = await withCache(`history:${symbol}:${days}`, 60_000, () => computeHistory(symbol, days));
+    // Daily candles only change once per trading day; only the last (forming)
+    // candle moves intraday. Short ranges keep a 60s TTL so today's bar stays
+    // fresh, but long ranges (1Y/5Y = ~13/42 SSI calls to rebuild) get a much
+    // longer TTL so stale-while-revalidate doesn't re-hammer SSI every minute.
+    const ttlMs = days > 270 ? 30 * 60_000 : 60_000;
+    const items = await withCache(`history:${symbol}:${days}`, ttlMs, () => computeHistory(symbol, days));
     res.json(items);
   } catch (err) {
     console.error("[/api/price/history]", err.message);
@@ -587,8 +592,13 @@ const CAFEF_FEEDS = [
 
 // `\b` does NOT work with Vietnamese text (diacritics are non-ASCII word chars
 // in JS's legacy \b semantics). Use Unicode-aware lookarounds instead.
+// Escape the symbol first: it comes from the user's watchlist, so a stray regex
+// metachar (".", "+", "(" ...) would otherwise throw and 502 the whole feed.
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function makeSymbolRegex(sym) {
-  return new RegExp(`(?<![\\p{L}\\p{N}])${sym}(?![\\p{L}\\p{N}])`, "u");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegex(sym)}(?![\\p{L}\\p{N}])`, "u");
 }
 
 async function computeNews(symbols) {
@@ -730,11 +740,15 @@ function assertTradeOk(path, json) {
 }
 
 async function tradePost(path, body) {
-  const res = await fetch(`${SSI_TRADE_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const res = await fetchWithTimeout(
+    `${SSI_TRADE_BASE}${path}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    15000
+  );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`FCTrading ${path}: ${res.status} ${json.message || ""}`);
   return assertTradeOk(path, json);
@@ -780,9 +794,11 @@ async function tradeGet(path, params) {
   const url = new URL(`${SSI_TRADE_BASE}${path}`);
   Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
 
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-  });
+  const res = await fetchWithTimeout(
+    url,
+    { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
+    15000
+  );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`FCTrading ${path}: ${res.status} ${json.message || ""}`);
   return assertTradeOk(path, json);
