@@ -577,14 +577,16 @@ function renderAccount({ positions, cash, fetchedAt }) {
         <thead><tr><th>Mã</th><th class="num">KL</th><th class="num">Bán được</th><th class="num">Giá vốn</th><th class="num">Giá TT</th><th class="num">Giá trị</th><th class="num">Lãi/lỗ</th></tr></thead>
         <tbody>${positions
           .map(
-            (p) => `<tr>
-              <td>${p.symbol}</td>
-              <td class="num">${fmt(p.qty, 0)}</td>
-              <td class="num">${fmt(p.sellableQty, 0)}</td>
-              <td class="num">${fmt(p.avgCost)}</td>
-              <td class="num">${fmt(p.marketPrice)}</td>
-              <td class="num">${fmt(p.marketValue, 1)}</td>
-              <td class="num ${trendClass(p.unrealizedPL)}">${fmt(p.unrealizedPL, 1)} (${fmtPct(p.unrealizedPLPct)})</td>
+            // data-label drives the mobile card layout (see .css @640): each cell
+          // shows its column name so no info is lost when the table is stacked.
+          (p) => `<tr>
+              <td data-label="Mã">${p.symbol}</td>
+              <td class="num" data-label="KL">${fmt(p.qty, 0)}</td>
+              <td class="num" data-label="Bán được">${fmt(p.sellableQty, 0)}</td>
+              <td class="num" data-label="Giá vốn">${fmt(p.avgCost)}</td>
+              <td class="num" data-label="Giá TT">${fmt(p.marketPrice)}</td>
+              <td class="num" data-label="Giá trị">${fmt(p.marketValue, 1)}</td>
+              <td class="num ${trendClass(p.unrealizedPL)}" data-label="Lãi/lỗ">${fmt(p.unrealizedPL, 1)} (${fmtPct(p.unrealizedPLPct)})</td>
             </tr>`
           )
           .join("")}</tbody>

@@ -460,6 +460,35 @@ tr:hover td { background: var(--panel-2); }
   .tx-form { grid-template-columns: 1fr; gap: 12px; }
   .tx-form input, .tx-form select { padding: 12px; font-size: 14px; }
   .holdings-summary { gap: 14px 24px; }
+
+  /* SSI account holdings: the 7-column table is wider than a phone and the panel
+     clips overflow, so stack each position into a label:value card instead. */
+  #accountTable table, #accountTable thead, #accountTable tbody,
+  #accountTable tr, #accountTable td { display: block; width: 100%; }
+  #accountTable thead { display: none; }
+  #accountTable tr {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--panel-2); margin-bottom: 10px; padding: 4px 2px;
+  }
+  #accountTable tr:hover td { background: transparent; }
+  #accountTable td {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    border: none; padding: 8px 14px; text-align: right;
+  }
+  #accountTable td::before {
+    content: attr(data-label); color: var(--text-dim); font-weight: 600;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .04em; text-align: left;
+  }
+  #accountTable td:first-child {
+    font-weight: 700; font-size: 15px; justify-content: flex-start;
+    border-bottom: 1px solid var(--border); padding: 10px 14px;
+  }
+  #accountTable td:first-child::before { content: ""; }
+
+  /* Manual holdings / transaction tables: keep tabular but scroll horizontally
+     instead of being clipped. */
+  #holdingsTable, #txTable { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #holdingsTable table, #txTable table { min-width: 460px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
