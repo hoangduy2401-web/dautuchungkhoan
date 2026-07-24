@@ -283,7 +283,14 @@ a { color: inherit; }
 .sector-row .s-fill { height: 100%; border-radius: 999px; }
 .sector-row .s-val { width: 78px; flex-shrink: 0; text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* Rankings tab: two ranked columns of rows */
+/* Rankings tab: exchange switcher + two ranked columns of rows */
+.rank-ex { display: flex; gap: 6px; flex-wrap: wrap; padding: 14px 18px 0; }
+.rank-ex button {
+  border: 1px solid var(--border); background: transparent; color: var(--text-muted);
+  font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; cursor: pointer; transition: all 0.2s;
+}
+.rank-ex button:hover { color: var(--text); }
+.rank-ex button.active { background: var(--amber); color: #1a1205; border-color: var(--amber); }
 .rank-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; padding: 16px 18px; }
 .rank-title { font-size: 11px; font-weight: 700; letter-spacing: 0.02em; margin-bottom: 6px; }
 .rank-title.up { color: var(--up); }

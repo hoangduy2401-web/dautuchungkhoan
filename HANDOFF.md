@@ -126,10 +126,15 @@ mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel 
   vào payload quote → **0 call SSI thêm**. Verify live backend: HPG +87.2 tỷ, VHM/VPB
   −77.7 tỷ. **Đụng `server/index.js` → đã `cp` sang `index.js` gốc, Render deploy khi push.**
   Mock `generateQuote` cũng thêm `netForeignVal` cho fallback.
-- Còn treo Phase 4: **HNX/UPCoM rankings** (top tăng/giảm cho 2 sàn kia) — cần warm
-  2 rổ mã mới, CHƯA làm.
+- **HNX/UPCoM rankings (24/07) — ĐÃ làm:** tab Top tăng/giảm thêm switcher 3 sàn
+  (`#rankExchanges`, `state.rankExchange`, `wireRankExchanges`, `loadRankPool`,
+  `rankBasket`). Rổ `APP_CONFIG.HNX30` (15 mã) + `APP_CONFIG.UPCOM` (15 mã) trong
+  `config.js` — xếp hạng **trong rổ** (không phải cả sàn). HNX/UPCoM **lazy-fetch
+  quote lần đầu mở tab** (không warm, giữ load mặc định nhẹ), cache sau. Dùng lại
+  endpoint quote sẵn có — **frontend-only, 0 đổi backend**. Verify live: HNX TNG
+  +3.55%/BVS −7.12%, UPCoM BSR +2.78%/BVB −4.21%. Cập nhật rổ khi sàn rebalance.
 
-Version hiện `?v=20260724n`.
+Version hiện `?v=20260724o`.
 
 ---
 

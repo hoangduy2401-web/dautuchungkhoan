@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260724n" />
+<link rel="stylesheet" href="style.css?v=20260724o" />
 </head>
 <body>
 
@@ -82,8 +82,13 @@
         <div class="foreign-note">Đơn vị: tỷ đồng · dương = mua ròng, âm = bán ròng · rổ VN30</div>
       </div>
 
-      <!-- Rankings: top 5 gainers / losers within the VN30 basket -->
+      <!-- Rankings: top 5 gainers / losers within the selected exchange basket -->
       <div class="mtab-pane" data-pane="rank" hidden>
+        <div class="rank-ex" id="rankExchanges">
+          <button type="button" data-ex="VNINDEX" class="active">VN-Index</button>
+          <button type="button" data-ex="HNXINDEX">HNX-Index</button>
+          <button type="button" data-ex="UPCOM">UPCoM</button>
+        </div>
         <div class="rank-cols">
           <div class="rank-col">
             <div class="rank-title up">TĂNG MẠNH NHẤT</div>
@@ -213,11 +218,11 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="config.js?v=20260724n"></script>
-  <script src="mockData.js?v=20260724n"></script>
-  <script src="dataService.js?v=20260724n"></script>
-  <script src="portfolio.js?v=20260724n"></script>
-  <script src="chartModule.js?v=20260724n"></script>
-  <script src="app.js?v=20260724n"></script>
+  <script src="config.js?v=20260724o"></script>
+  <script src="mockData.js?v=20260724o"></script>
+  <script src="dataService.js?v=20260724o"></script>
+  <script src="portfolio.js?v=20260724o"></script>
+  <script src="chartModule.js?v=20260724o"></script>
+  <script src="app.js?v=20260724o"></script>
 </body>
 </html>

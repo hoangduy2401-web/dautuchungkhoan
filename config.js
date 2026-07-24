@@ -25,6 +25,18 @@ const APP_CONFIG = {
     "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
   ],
 
+  // Liquid HNX / UPCoM baskets for the "Top tăng/giảm" exchange switcher.
+  // Ranked within the basket (not the whole exchange). Fetched lazily the first
+  // time the user opens that exchange tab — NOT warmed, to keep default load light.
+  HNX30: [
+    "SHS", "PVS", "CEO", "IDC", "TNG", "MBS", "VCS", "HUT", "PVC", "DTD",
+    "LAS", "TIG", "NTP", "VGS", "BVS",
+  ],
+  UPCOM: [
+    "BSR", "ACV", "VEA", "QNS", "VGI", "MSR", "VGT", "DVN", "MML", "OIL",
+    "BVB", "ABB", "C4G", "FOX", "MCH",
+  ],
+
   // Deployed backend proxy on Render. For local dev against `npm start`,
   // swap BACKEND for "http://localhost:3001".
   // BACKEND = "https://dashboard-chung-khoan.onrender.com"

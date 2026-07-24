@@ -31,6 +31,7 @@ const state = {
   sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
   marketTab: "heatmap", // heatmap | sector | rank — active market-overview pane
+  rankExchange: "VNINDEX", // VNINDEX | HNXINDEX | UPCOM — rankings tab exchange
   chart: null,
 };
 
@@ -85,6 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   renderRangeTabs();
   wireMarketTabs();
+  wireRankExchanges();
   wireForms();
   wireAccountSync();
   ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
@@ -330,11 +332,27 @@ function renderSectors() {
     .join("");
 }
 
+// The stock basket ranked for each exchange tab.
+function rankBasket(ex) {
+  if (ex === "HNXINDEX") return APP_CONFIG.HNX30 || [];
+  if (ex === "UPCOM") return APP_CONFIG.UPCOM || [];
+  return APP_CONFIG.VN30;
+}
+
 function renderRankings() {
   const gEl = document.getElementById("topGainers");
   const lEl = document.getElementById("topLosers");
   if (!gEl || !lEl) return;
-  const sorted = vn30Quoted().sort((a, b) => b.chg - a.chg);
+  const quoted = rankBasket(state.rankExchange)
+    .map((s) => ({ s, q: state.quotes[s] }))
+    .filter((r) => r.q)
+    .map((r) => ({ s: r.s, chg: r.q.changePct, price: r.q.price }));
+
+  if (quoted.length === 0) {
+    gEl.innerHTML = lEl.innerHTML = `<div class="empty-state">Đang tải…</div>`;
+    return;
+  }
+  const sorted = quoted.sort((a, b) => b.chg - a.chg);
   const row = (r) => `<div class="rank-row ${r.s === state.selected ? "active" : ""}" data-symbol="${r.s}">
       <div class="r-sym">${r.s}</div>
       <div class="r-price">${fmt(r.price)}</div>
@@ -353,6 +371,28 @@ function renderRankings() {
       });
     })
   );
+}
+
+// HNX/UPCoM baskets aren't warmed — fetch their quotes the first time the user
+// opens that exchange, then cache. VN-Index reuses the already-warmed VN30.
+async function loadRankPool(ex) {
+  const missing = rankBasket(ex).filter((s) => !state.quotes[s]);
+  if (missing.length === 0) return;
+  await loadQuotesFor(missing);
+  if (state.rankExchange === ex) renderRankings();
+}
+
+function wireRankExchanges() {
+  const box = document.getElementById("rankExchanges");
+  if (!box) return;
+  box.querySelectorAll("button[data-ex]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.rankExchange = btn.dataset.ex;
+      box.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderRankings(); // shows cached rows or a loading state immediately
+      loadRankPool(state.rankExchange); // fills in HNX/UPCoM on first open
+    });
+  });
 }
 
 // Foreign flow: net foreign buy/sell value per VN30 symbol (tỷ đồng), sorted by
