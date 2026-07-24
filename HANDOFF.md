@@ -112,10 +112,17 @@ mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel 
   1080 → **1180px**; **sparkline watchlist** (SVG 56×22, 24 close gần nhất, màu
   theo xu hướng) — `loadSparklines` fetch `getHistory(sym,40)`, cache `state.sparks`,
   chỉ fetch mã thiếu.
-- Phase 3 (card 4 tab Theo ngành / Top tăng/giảm) + Phase 4 (Khối ngoại, HNX/UPCoM):
-  CHƯA làm.
+- **Phase 3 (24/07):** heatmap-section → **card tabbed** (`renderSectors`,
+  `renderRankings`, `wireMarketTabs`, `state.marketTab`). 3 tab thuần client-side,
+  dùng lại quote VN30 đã warm — 0 call backend thêm:
+  - **Bản đồ nhiệt** (giữ nguyên).
+  - **Theo ngành** — `SECTOR_MAP` (VN30→ngành), %TB mỗi ngành, bar `|avg|/max`, sort desc.
+  - **Top tăng/giảm** — top5 tăng/giảm trong VN30, click row = chọn mã.
+  - Tab thứ 4 **Khối ngoại** CHƯA làm (Phase 4).
+- Phase 4 (Khối ngoại mua/bán ròng, HNX/UPCoM rankings): CHƯA làm — cần endpoint
+  backend mới.
 
-Version hiện `?v=20260724l`.
+Version hiện `?v=20260724m`.
 
 ---
 

@@ -30,7 +30,21 @@ const state = {
   quotes: {}, // symbol -> {price, changePct, volume}
   sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
+  marketTab: "heatmap", // heatmap | sector | rank — active market-overview pane
   chart: null,
+};
+
+// VN30 → sector, for the "Theo ngành" tab (average % change per sector).
+const SECTOR_MAP = {
+  ACB: "Ngân hàng", BID: "Ngân hàng", CTG: "Ngân hàng", HDB: "Ngân hàng", LPB: "Ngân hàng",
+  MBB: "Ngân hàng", SHB: "Ngân hàng", SSB: "Ngân hàng", STB: "Ngân hàng", TCB: "Ngân hàng",
+  TPB: "Ngân hàng", VCB: "Ngân hàng", VIB: "Ngân hàng", VPB: "Ngân hàng",
+  BCM: "Bất động sản", VHM: "Bất động sản", VIC: "Bất động sản", VRE: "Bất động sản",
+  SSI: "Chứng khoán",
+  MSN: "Bán lẻ & tiêu dùng", MWG: "Bán lẻ & tiêu dùng", SAB: "Bán lẻ & tiêu dùng", VNM: "Bán lẻ & tiêu dùng",
+  GVR: "Thép & vật liệu", HPG: "Thép & vật liệu",
+  GAS: "Dầu khí", PLX: "Dầu khí",
+  FPT: "Công nghệ", VJC: "Hàng không", BVH: "Bảo hiểm",
 };
 state.selected = state.watchlist[0] || null;
 
@@ -70,6 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(tickClock, 1000);
 
   renderRangeTabs();
+  wireMarketTabs();
   wireForms();
   wireAccountSync();
   ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
@@ -166,6 +181,8 @@ async function refreshAll() {
     await Promise.all([loadIndices(), loadTapeQuotes()]);
     renderTickerTape();
     renderHeatmap();
+    renderSectors();
+    renderRankings();
     renderWatchlist();
     await loadSelectedSymbol();
     await refreshPortfolio();
@@ -269,6 +286,86 @@ function renderHeatmap() {
       state.selected = cell.dataset.symbol;
       loadSelectedSymbol();
       renderWatchlist();
+    });
+  });
+}
+
+/* ============================================================
+   MARKET OVERVIEW — SECTOR + RANKINGS TABS
+   Both derive from the already-warmed VN30 quotes; no extra API calls.
+   ============================================================ */
+// Return the VN30 symbols that have a quote, as {s, chg, price} rows.
+function vn30Quoted() {
+  return APP_CONFIG.VN30.map((s) => ({ s, q: state.quotes[s] }))
+    .filter((r) => r.q)
+    .map((r) => ({ s: r.s, chg: r.q.changePct, price: r.q.price }));
+}
+
+function renderSectors() {
+  const el = document.getElementById("sectorList");
+  if (!el) return;
+  const rows = vn30Quoted();
+  const agg = {};
+  rows.forEach(({ s, chg }) => {
+    const sec = SECTOR_MAP[s] || "Khác";
+    (agg[sec] = agg[sec] || { sum: 0, n: 0 }).sum += chg;
+    agg[sec].n += 1;
+  });
+  const list = Object.keys(agg)
+    .map((name) => ({ name, avg: agg[name].sum / agg[name].n }))
+    .sort((a, b) => b.avg - a.avg);
+  const maxAbs = Math.max(...list.map((x) => Math.abs(x.avg)), 0.1);
+  el.innerHTML = list
+    .map((x) => {
+      const up = x.avg >= 0;
+      const color = up ? "var(--up)" : "var(--down)";
+      const w = (Math.abs(x.avg) / maxAbs) * 100;
+      return `<div class="sector-row">
+        <div class="s-name">${x.name}</div>
+        <div class="s-track"><div class="s-fill" style="width:${w.toFixed(1)}%;background:${color}"></div></div>
+        <div class="s-val" style="color:${color}">${up ? "+" : ""}${x.avg.toFixed(2)}%</div>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderRankings() {
+  const gEl = document.getElementById("topGainers");
+  const lEl = document.getElementById("topLosers");
+  if (!gEl || !lEl) return;
+  const sorted = vn30Quoted().sort((a, b) => b.chg - a.chg);
+  const row = (r) => `<div class="rank-row ${r.s === state.selected ? "active" : ""}" data-symbol="${r.s}">
+      <div class="r-sym">${r.s}</div>
+      <div class="r-price">${fmt(r.price)}</div>
+      <div class="r-chg ${trendClass(r.chg)}">${arrow(r.chg)} ${fmtPct(r.chg)}</div>
+    </div>`;
+  gEl.innerHTML = sorted.slice(0, 5).map(row).join("");
+  lEl.innerHTML = sorted.slice(-5).reverse().map(row).join("");
+
+  [gEl, lEl].forEach((box) =>
+    box.querySelectorAll(".rank-row[data-symbol]").forEach((r) => {
+      r.addEventListener("click", () => {
+        state.selected = r.dataset.symbol;
+        loadSelectedSymbol();
+        renderWatchlist();
+        renderRankings();
+      });
+    })
+  );
+}
+
+// Tab switcher: toggle active button + which pane is visible. Data for all panes
+// is pre-rendered on refresh, so switching is just show/hide.
+function wireMarketTabs() {
+  const tabs = document.getElementById("marketTabs");
+  if (!tabs) return;
+  tabs.querySelectorAll("button[data-mtab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.marketTab = btn.dataset.mtab;
+      tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".mtab-pane").forEach((p) => {
+        p.hidden = p.dataset.pane !== state.marketTab;
+      });
     });
   });
 }
