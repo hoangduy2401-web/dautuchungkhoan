@@ -182,6 +182,21 @@ Mock gốc vẫn còn: https://dashboardstock.io.vn/mock-liquid-glass.html
 ## 5. VIỆC CÒN TREO
 
 **Tính năng tiếp theo (user đã chọn, CHƯA làm):**
+- **[SESSION SAU — user chốt 24/07] Công cụ ruler đo trên biểu đồ giá** — kéo 2
+  điểm trên chart để đo **số nến** và **% tăng/giảm** giữa 2 điểm. Frontend-only,
+  làm trong `chartModule.js` theo khuôn mẫu trendline sẵn có (đã có lớp
+  `<canvas id="trendOverlay">` phủ chart + `coordinateToTime`/`coordinateToPrice`
+  + `timeToCoordinate`/`priceToCoordinate` để neo và vẽ khi pan/zoom). Ý: thêm 1
+  chế độ vẽ (nút "Đo") song song với "Vẽ trendline"; đếm số nến = hiệu index 2 mốc
+  thời gian trong data hiện tại, % = (price2−price1)/price1×100; hiện nhãn ngay
+  trên đường đo.
+- **[SESSION SAU — user chốt 24/07] Thu gọn khối tài khoản SSI + danh mục + lịch
+  sử giao dịch thành 1 tab, mặc định gọn, có "Xem thêm" xổ xuống** — hiện 3 khối
+  này (`.portfolio-section` × 2 + phần tài khoản SSI trong `index.html`) chiếm nhiều
+  chiều dọc cuối trang. Gộp thành 1 card có nút/accordion "Xem thêm" (mặc định thu
+  gọn, click xổ nội dung). Thuần frontend (`index.html` + `style.css` + wiring
+  `app.js`). Tham khảo mock redesign có khối "TÀI KHOẢN SSI · GIAO DỊCH · LỊCH SỬ"
+  dạng accordion `toggleMore`/`moreOpen` (xem `Stock Dashboard Redesign.dc.html`).
 - **#3 Theo dõi dòng tiền** — phát hiện đột biến khối lượng/giá trị (spike vs
   TB 20 phiên). Đụng `server/index.js` (endpoint mới + `cp` sang root). Gộp luôn
   **sizing heatmap theo vốn hóa** (thêm 1 endpoint marketcap VN30 warmed thay 30 call).
