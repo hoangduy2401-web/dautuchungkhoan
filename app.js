@@ -28,6 +28,7 @@ const state = {
   selected: null, // set right below, once the watchlist is known
   range: 90,
   quotes: {}, // symbol -> {price, changePct, volume}
+  indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
   chart: null,
 };
 state.selected = state.watchlist[0] || null;
@@ -160,10 +161,17 @@ async function refreshAll() {
    ============================================================ */
 async function loadIndices() {
   try {
-    state.indices = await DataService.getIndices();
+    const fresh = await DataService.getIndices();
+    // Defensive: if a refresh returns a 0/blank value for an index (SSI can emit
+    // a transient 0 during the ATO auction), keep the last good value we had
+    // instead of flashing 0 on the board.
+    const prev = new Map(state.indices.map((ix) => [ix.code, ix]));
+    state.indices = fresh.map((ix) =>
+      ix.value > 0 ? ix : prev.get(ix.code) || ix
+    );
   } catch (e) {
     console.error(e);
-    state.indices = [];
+    if (!state.indices) state.indices = [];
   }
   const el = document.getElementById("indexStrip");
   el.innerHTML = state.indices
@@ -283,6 +291,7 @@ function renderWatchlist() {
       const info = DataService.getCompanyInfo(s);
       return `
       <div class="watch-item ${s === state.selected ? "active" : ""}" data-symbol="${s}">
+        <span class="drag" title="Kéo để sắp xếp" aria-label="Kéo để sắp xếp">☰</span>
         <div>
           <div class="sym">${s}</div>
           <div class="name">${info.name}</div>
@@ -299,11 +308,13 @@ function renderWatchlist() {
   el.querySelectorAll(".watch-item").forEach((row) => {
     row.addEventListener("click", (e) => {
       if (e.target.dataset.remove) return;
+      if (e.target.closest(".drag")) return; // handle is for dragging, not select
       state.selected = row.dataset.symbol;
       loadSelectedSymbol();
       renderWatchlist();
     });
   });
+  enableWatchlistDrag(el);
   el.querySelectorAll("[data-remove]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -315,6 +326,51 @@ function renderWatchlist() {
       renderTickerTape();
       if (state.selected) loadSelectedSymbol();
     });
+  });
+}
+
+// Pointer-based drag reorder (works with mouse AND touch, no HTML5 DnD which is
+// unreliable on mobile). Grab the ☰ handle, drag a row past its neighbours; the
+// new order is read back from the DOM and persisted on release.
+function enableWatchlistDrag(el) {
+  let dragging = null;
+  let moved = false;
+
+  const rowAfter = (y) => {
+    const rows = [...el.querySelectorAll(".watch-item:not(.dragging)")];
+    return rows.find((r) => {
+      const b = r.getBoundingClientRect();
+      return y < b.top + b.height / 2;
+    }) || null;
+  };
+
+  el.querySelectorAll(".drag").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragging = handle.closest(".watch-item");
+      moved = false;
+      dragging.classList.add("dragging");
+      handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      moved = true;
+      const after = rowAfter(e.clientY);
+      if (after == null) el.appendChild(dragging);
+      else if (after !== dragging) el.insertBefore(dragging, after);
+    });
+    const finish = () => {
+      if (!dragging) return;
+      dragging.classList.remove("dragging");
+      dragging = null;
+      if (!moved) return; // a plain tap on the handle: nothing to reorder
+      state.watchlist = [...el.querySelectorAll(".watch-item")].map((r) => r.dataset.symbol);
+      saveWatchlist();
+      renderWatchlist(); // re-render to re-wire handlers on the new DOM
+    };
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
   });
 }
 

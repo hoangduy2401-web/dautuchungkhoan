@@ -326,6 +326,15 @@ a { color: inherit; }
 .watch-item .chg { font-size: 11.5px; }
 .watch-item .rm { color: var(--text-dim); font-size: 14px; padding-left: 8px; }
 .watch-item .rm:hover { color: var(--down); }
+.watch-item .drag {
+  color: var(--text-dim); font-size: 13px; margin-right: 10px; cursor: grab;
+  touch-action: none; user-select: none; flex: 0 0 auto; line-height: 1;
+}
+.watch-item .drag:active { cursor: grabbing; }
+.watch-item.dragging {
+  background: var(--panel-2); opacity: 0.9;
+  box-shadow: 0 10px 24px -12px var(--glass-shadow);
+}
 
 .up { color: var(--up); }
 .down { color: var(--down); }

@@ -366,15 +366,24 @@ async function computeIndices() {
     });
 
     const rows = extractRows(raw)
-      .map((r) => ({ row: r, date: normalizeDate(pickField(r, ["TradingDate", "Date"])) }))
+      .map((r) => ({
+        row: r,
+        date: normalizeDate(pickField(r, ["TradingDate", "Date"])),
+        value: num(pickField(r, ["IndexValue", "Value", "IndexVal"])),
+      }))
       .sort((a, b) => b.date.localeCompare(a.date));
-    const d = rows[0]?.row;
-    if (!d) continue;
+    // Pick the newest row with a real (non-zero) value. During the ATO auction /
+    // early session SSI sometimes returns a today-row with IndexValue=0 while
+    // RatioChange is already filled, which showed the index flickering to 0.
+    // Falling back to the last row that actually has points fixes that.
+    const picked = rows.find((r) => r.value > 0) || rows[0];
+    if (!picked) continue;
+    const d = picked.row;
 
     items.push({
       code: uiCode,
       // Index values are already in points, do NOT divide by 1000.
-      value: num(pickField(d, ["IndexValue", "Value", "IndexVal"])),
+      value: picked.value,
       // RatioChange is the % change. NOTE: the sibling `Change` field is
       // scaled oddly (-0.6203 for a -62.03 point move) — do not use it.
       changePct: num(pickField(d, ["RatioChange", "PercentIndexChange", "PercentPriceChange", "ChangePct"])),
