@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260724c" />
+<link rel="stylesheet" href="style.css?v=20260724d" />
 </head>
 <body>
 
@@ -46,6 +46,21 @@
   </header>
 
   <section class="index-strip" id="indexStrip"></section>
+
+  <!-- VN30 heatmap: whole-basket colour map, green up / red down by % -->
+  <section class="heatmap-section">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Bản đồ nhiệt VN30</h2>
+        <span class="heatmap-legend">
+          <span class="hl-down">Giảm</span>
+          <span class="hl-bar"></span>
+          <span class="hl-up">Tăng</span>
+        </span>
+      </div>
+      <div class="heatmap-grid" id="vn30Heatmap"></div>
+    </div>
+  </section>
 
   <main class="main-grid">
     <!-- Watchlist -->
@@ -162,11 +177,11 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="config.js?v=20260724c"></script>
-  <script src="mockData.js?v=20260724c"></script>
-  <script src="dataService.js?v=20260724c"></script>
-  <script src="portfolio.js?v=20260724c"></script>
-  <script src="chartModule.js?v=20260724c"></script>
-  <script src="app.js?v=20260724c"></script>
+  <script src="config.js?v=20260724d"></script>
+  <script src="mockData.js?v=20260724d"></script>
+  <script src="dataService.js?v=20260724d"></script>
+  <script src="portfolio.js?v=20260724d"></script>
+  <script src="chartModule.js?v=20260724d"></script>
+  <script src="app.js?v=20260724d"></script>
 </body>
 </html>

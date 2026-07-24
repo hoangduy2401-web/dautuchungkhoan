@@ -146,6 +146,7 @@ async function refreshAll() {
   try {
     await Promise.all([loadIndices(), loadTapeQuotes()]);
     renderTickerTape();
+    renderHeatmap();
     renderWatchlist();
     await loadSelectedSymbol();
     renderPortfolio();
@@ -193,6 +194,54 @@ function renderTickerTape() {
     .join("");
   // duplicate content for seamless scroll loop
   document.getElementById("tickerTrack").innerHTML = items + items;
+}
+
+/* ============================================================
+   VN30 HEATMAP
+   ============================================================ */
+// Map a daily % change to a cell colour. Green up / red down, opacity scaled by
+// magnitude and clamped at ±3% so a big mover saturates but never goes opaque.
+function heatColor(pct) {
+  const p = Math.max(-3, Math.min(3, pct || 0)) / 3; // -1..1
+  const alpha = 0.12 + 0.78 * Math.abs(p);
+  const rgb = p >= 0 ? "23,217,128" : "255,77,94"; // --up / --down
+  return `rgba(${rgb},${alpha.toFixed(3)})`;
+}
+
+function renderHeatmap() {
+  const el = document.getElementById("vn30Heatmap");
+  if (!el) return;
+  // Biggest gainers first, losers last; symbols without a quote yet sink down.
+  const rows = APP_CONFIG.VN30
+    .map((s) => ({ s, q: state.quotes[s] }))
+    .sort((a, b) => {
+      const av = a.q ? a.q.changePct : -Infinity;
+      const bv = b.q ? b.q.changePct : -Infinity;
+      return bv - av;
+    });
+  el.innerHTML = rows
+    .map(({ s, q }) => {
+      if (!q) {
+        return `<div class="heat-cell heat-empty"><span class="hc-sym">${s}</span><span class="hc-pct">—</span></div>`;
+      }
+      const cls = q.changePct > 0 ? "up" : q.changePct < 0 ? "down" : "flat";
+      return `<div class="heat-cell ${cls}" data-symbol="${s}" style="background:${heatColor(
+        q.changePct
+      )}" title="${s} · ${fmt(q.price)} · ${fmtPct(q.changePct)}">
+        <span class="hc-sym">${s}</span>
+        <span class="hc-pct">${fmtPct(q.changePct)}</span>
+      </div>`;
+    })
+    .join("");
+
+  // Click a cell to load that symbol in the chart, like the watchlist rows.
+  el.querySelectorAll(".heat-cell[data-symbol]").forEach((cell) => {
+    cell.addEventListener("click", () => {
+      state.selected = cell.dataset.symbol;
+      loadSelectedSymbol();
+      renderWatchlist();
+    });
+  });
 }
 
 /* ============================================================
