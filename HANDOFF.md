@@ -96,7 +96,26 @@ mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel 
 - **Rà soát code**: escape regex mã trong news (né 502 khi mã có ký tự regex),
   escape XSS tin tức + chặn `javascript:` URL, timeout FCTrading trade call.
 
-Version hiện `?v=20260724h`.
+**Redesign phiên 3 (24/07) — bám mock `Stock Dashboard Redesign` (Phase 1+2):**
+- **Phase 1 (reskin, thuần CSS + 1 hàm màu):** accent đổi amber → cam
+  `#f5811f`/`#ff9d47`; hover index-card nhấc `-5px` nền tối `#14171f` chữ trắng;
+  `heatColor` đổi sang HSL độ sáng theo |%| (hue 150 xanh / 355 đỏ, sáng 92→45)
+  — mã biến động lớn nổi đậm; chip chỉ báo (MA/BB/KL/RSI) thành pill dùng
+  `:has(input:checked)`.
+- **RSI (`chartModule.js`):** đường đậm 2px màu accent (đọc `--amber`, đổi theo
+  theme); ghim `rightPriceScale.minimumWidth:58` cho cả 2 chart → vùng vẽ khớp,
+  trục thời gian song song; ẩn trục thời gian pane RSI (`timeScale.visible:false`)
+  bỏ lặp ngày; **RSI dùng whitespace point `{time}` cho 14 nến null đầu** (thay vì
+  `.filter(Boolean)`) để 2 chart cùng số nến — trước đó logical-range lệch 14 nến,
+  RSI hụt mép phải, không tới ngày mới nhất.
+- **Phase 2:** `main-grid` → `260px minmax(420px,1fr) 260px`, breakpoint stack
+  1080 → **1180px**; **sparkline watchlist** (SVG 56×22, 24 close gần nhất, màu
+  theo xu hướng) — `loadSparklines` fetch `getHistory(sym,40)`, cache `state.sparks`,
+  chỉ fetch mã thiếu.
+- Phase 3 (card 4 tab Theo ngành / Top tăng/giảm) + Phase 4 (Khối ngoại, HNX/UPCoM):
+  CHƯA làm.
+
+Version hiện `?v=20260724l`.
 
 ---
 

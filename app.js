@@ -28,6 +28,7 @@ const state = {
   selected: null, // set right below, once the watchlist is known
   range: 90,
   quotes: {}, // symbol -> {price, changePct, volume}
+  sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
   chart: null,
 };
@@ -42,6 +43,17 @@ const fmt = (n, d = 2) =>
 const fmtPct = (n) => (hasVal(n) ? `${n >= 0 ? "+" : ""}${Number(n).toFixed(2)}%` : "—");
 const trendClass = (n) => (n > 0.001 ? "up" : n < -0.001 ? "down" : "flat");
 const arrow = (n) => (n > 0.001 ? "▲" : n < -0.001 ? "▼" : "•");
+
+// Build a 56×22 sparkline polyline from a list of closes (last ~24 used).
+// Returns "" when there is not enough data yet so the row renders without it.
+function sparkPoints(closes, w = 56, h = 22, pad = 2) {
+  if (!Array.isArray(closes) || closes.length < 2) return "";
+  const tail = closes.slice(-24);
+  const mn = Math.min(...tail), mx = Math.max(...tail), rg = mx - mn || 1;
+  return tail
+    .map((v, i) => `${((i / (tail.length - 1)) * w).toFixed(1)},${(h - pad - ((v - mn) / rg) * (h - 2 * pad)).toFixed(1)}`)
+    .join(" ");
+}
 
 // News comes from an external RSS source, so escape any text before injecting it
 // as innerHTML and allow only http(s) links (blocks e.g. javascript: URLs).
@@ -156,7 +168,8 @@ async function refreshAll() {
     renderHeatmap();
     renderWatchlist();
     await loadSelectedSymbol();
-    renderPortfolio();
+    await refreshPortfolio();
+    loadSparklines(); // non-blocking: sparklines fill in once histories arrive
   } finally {
     refreshInFlight = false;
   }
@@ -213,13 +226,15 @@ function renderTickerTape() {
 /* ============================================================
    VN30 HEATMAP
    ============================================================ */
-// Map a daily % change to a cell colour. Green up / red down, opacity scaled by
-// magnitude and clamped at ±3% so a big mover saturates but never goes opaque.
+// Map a daily % change to a cell colour. Fixed hue (150 green up / 355 red down),
+// lightness scales with |%|: near-flat ≈ 92% (pale), a ≥4.5% mover ≈ 45% (deep),
+// so big movers visually pop instead of every up/down looking equally saturated.
 function heatColor(pct) {
-  const p = Math.max(-3, Math.min(3, pct || 0)) / 3; // -1..1
-  const alpha = 0.12 + 0.78 * Math.abs(p);
-  const rgb = p >= 0 ? "23,217,128" : "255,77,94"; // --up / --down
-  return `rgba(${rgb},${alpha.toFixed(3)})`;
+  const mag = Math.min(Math.abs(pct || 0) / 4.5, 1);
+  const light = 92 - mag * 47;
+  return (pct || 0) >= 0
+    ? `hsl(150,55%,${light.toFixed(1)}%)`
+    : `hsl(355,70%,${light.toFixed(1)}%)`;
 }
 
 function renderHeatmap() {
@@ -285,6 +300,24 @@ async function loadQuotesFor(symbols) {
   });
 }
 
+// Fetch a short close-price history per watched symbol for its row sparkline.
+// Cached in state.sparks so the refresh loop only fetches symbols not seen yet
+// (sparkline shape barely moves intraday — no need to refetch every cycle).
+async function loadSparklines() {
+  const missing = state.watchlist.filter((s) => !state.sparks[s]);
+  if (missing.length === 0) return;
+  await Promise.all(
+    missing.map((s) =>
+      DataService.getHistory(s, 40)
+        .then((rows) => {
+          if (Array.isArray(rows) && rows.length) state.sparks[s] = rows.map((r) => r.close);
+        })
+        .catch(() => {})
+    )
+  );
+  renderWatchlist();
+}
+
 function renderWatchlist() {
   const el = document.getElementById("watchlist");
   if (state.watchlist.length === 0) {
@@ -295,6 +328,11 @@ function renderWatchlist() {
     .map((s) => {
       const q = state.quotes[s] || { price: 0, changePct: 0 };
       const info = DataService.getCompanyInfo(s);
+      const pts = sparkPoints(state.sparks[s]);
+      const sparkColor = q.changePct >= 0 ? "var(--up)" : "var(--down)";
+      const spark = pts
+        ? `<svg class="spark" width="56" height="22" viewBox="0 0 56 22" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${sparkColor}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>`
+        : "";
       return `
       <div class="watch-item ${s === state.selected ? "active" : ""}" data-symbol="${s}">
         <span class="drag" title="Kéo để sắp xếp" aria-label="Kéo để sắp xếp">☰</span>
@@ -302,6 +340,7 @@ function renderWatchlist() {
           <div class="sym">${s}</div>
           <div class="name">${info.name}</div>
         </div>
+        ${spark}
         <div class="right">
           <div class="price">${fmt(q.price)}</div>
           <div class="chg ${trendClass(q.changePct)}">${fmtPct(q.changePct)}</div>
@@ -396,6 +435,7 @@ function wireForms() {
         renderWatchlist();
         renderTickerTape();
         loadSelectedSymbol();
+        loadSparklines(); // fetch the new symbol's sparkline history
       });
   });
 
@@ -411,7 +451,7 @@ function wireForms() {
       note: f.note.value,
     });
     f.reset();
-    renderPortfolio();
+    refreshPortfolio(); // pull the new symbol's quote if we don't have it yet
   });
 }
 
@@ -506,6 +546,24 @@ function renderNews(items) {
 /* ============================================================
    PORTFOLIO / TRANSACTION HISTORY
    ============================================================ */
+// Held symbols may sit outside the VN30 tape + watchlist (the only quotes loaded
+// by the refresh loop), so fetch quotes for any holding we don't have yet —
+// otherwise its live price falls back to cost basis and P&L shows 0.
+async function loadHoldingQuotes() {
+  const held = Portfolio.computeHoldings({})
+    .filter((h) => h.qty > 0)
+    .map((h) => h.symbol);
+  const missing = [...new Set(held)].filter((s) => !state.quotes[s]);
+  if (missing.length) await loadQuotesFor(missing);
+}
+
+// Load any missing holding quotes, then render. Used after the refresh loop and
+// after a transaction is added/removed.
+async function refreshPortfolio() {
+  await loadHoldingQuotes();
+  renderPortfolio();
+}
+
 function renderPortfolio() {
   const currentPrices = {};
   Object.entries(state.quotes).forEach(([s, q]) => (currentPrices[s] = q.price));

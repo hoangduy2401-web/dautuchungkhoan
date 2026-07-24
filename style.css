@@ -31,8 +31,8 @@
   --glass-highlight: rgba(255, 255, 255, 0.9);
   --glass-shadow: rgba(31, 45, 80, 0.18);
 
-  --amber: #f2a93b;
-  --amber-dim: rgba(242, 169, 59, 0.18);
+  --amber: #f5811f;
+  --amber-dim: rgba(245, 129, 31, 0.14);
   --up: #1faa4c;   --up-dim: rgba(40, 175, 75, 0.16);
   --down: #e5342a; --down-dim: rgba(230, 55, 45, 0.14);
   --blue: #4a6cf7;
@@ -53,7 +53,8 @@
   --border: rgba(24, 34, 64, 0.10);
   --glass-highlight: rgba(255, 255, 255, 0.9);
   --glass-shadow: rgba(31, 45, 80, 0.18);
-  --amber-dim: rgba(242, 169, 59, 0.18);
+  --amber: #f5811f;
+  --amber-dim: rgba(245, 129, 31, 0.14);
   --up: #1faa4c; --up-dim: rgba(40, 175, 75, 0.16);
   --down: #e5342a; --down-dim: rgba(230, 55, 45, 0.14);
 }
@@ -65,7 +66,8 @@
   --border: rgba(255, 255, 255, 0.12);
   --glass-highlight: rgba(255, 255, 255, 0.4);
   --glass-shadow: rgba(2, 6, 18, 0.55);
-  --amber-dim: rgba(242, 169, 59, 0.16);
+  --amber: #ff9d47;
+  --amber-dim: rgba(255, 157, 71, 0.16);
   --up: #30d158; --up-dim: rgba(48, 209, 88, 0.15);
   --down: #ff453a; --down-dim: rgba(255, 69, 58, 0.15);
   --blue: #5b8cff;
@@ -229,9 +231,16 @@ a { color: inherit; }
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 16px 18px;
   box-shadow: 0 10px 30px -14px var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight);
-  transition: transform 0.35s cubic-bezier(.2,.8,.2,1);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.index-card:hover { transform: translateY(-3px); }
+/* Lift to a near-black solid card on hover; child text inherits white. */
+.index-card:hover {
+  transform: translateY(-5px);
+  background: #14171f; border-color: transparent; color: #fff;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+}
+.index-card:hover .code { color: #9aa0ab; }
 .index-card .code { font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em; font-weight: 600; }
 .index-card .val { font-size: 26px; font-weight: 700; margin-top: 6px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .index-card .chg {
@@ -257,9 +266,11 @@ a { color: inherit; }
   transition: transform 0.2s cubic-bezier(.2,.8,.2,1), box-shadow 0.2s;
 }
 .heat-cell:hover { transform: translateY(-2px); box-shadow: 0 8px 20px -10px var(--glass-shadow); }
-.heat-cell .hc-sym { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; color: var(--text); }
-.heat-cell .hc-pct { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+/* Tiles are pale HSL fills in both themes, so lock cell text to a dark ink. */
+.heat-cell .hc-sym { font-size: 13px; font-weight: 800; letter-spacing: 0.02em; color: #0f172a; }
+.heat-cell .hc-pct { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: #0f172a; }
 .heat-cell.heat-empty { background: var(--panel-2); opacity: 0.5; cursor: default; }
+.heat-cell.heat-empty .hc-sym, .heat-cell.heat-empty .hc-pct { color: var(--text-muted); }
 .heat-cell.heat-empty:hover { transform: none; box-shadow: none; }
 
 .heatmap-legend { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-dim); }
@@ -275,10 +286,10 @@ a { color: inherit; }
    MAIN GRID
    ============================================================ */
 .main-grid {
-  display: grid; grid-template-columns: 240px minmax(0,1fr) 300px;
+  display: grid; grid-template-columns: 260px minmax(420px,1fr) 260px;
   gap: 16px; padding: 16px 20px; align-items: start;
 }
-@media (max-width: 1080px) { .main-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1180px) { .main-grid { grid-template-columns: 1fr; } }
 
 .panel {
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
@@ -323,6 +334,7 @@ a { color: inherit; }
 .watch-item > div:first-of-type { flex: 1; min-width: 0; }
 .watch-item .sym { font-weight: 700; font-size: 14px; }
 .watch-item .name { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+.watch-item .spark { flex: 0 0 auto; margin: 0 10px; display: block; }
 .watch-item .right { text-align: right; font-variant-numeric: tabular-nums; }
 .watch-item .price { font-size: 14px; font-weight: 600; }
 .watch-item .chg { font-size: 11.5px; }
@@ -354,8 +366,17 @@ a { color: inherit; }
 }
 .range-tabs button.active { background: var(--amber); color: #1a1205; border-color: var(--amber); box-shadow: 0 2px 8px -2px var(--amber); }
 .chart-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0; font-size: 12px; }
-.chk { display: flex; align-items: center; gap: 4px; color: var(--text-muted); cursor: pointer; user-select: none; }
-.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+/* Indicator toggles rendered as pill chips: muted+outlined off, accent-tinted on.
+   The native checkbox is hidden; :has() drives the active state from its :checked. */
+.chk {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+  padding: 6px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text-muted);
+  transition: all 0.2s;
+}
+.chk input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.chk:has(input:checked) { border-color: var(--amber); background: var(--amber-dim); color: var(--amber); }
+.sw { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
 .btn-outline {
   background: var(--panel-2); border: 1px solid var(--border); color: var(--text-muted);
   padding: 5px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.2s;

@@ -20,6 +20,11 @@ const ChartModule = (function () {
   const UP = "#17d980";
   const DOWN = "#ff4d5e";
 
+  // RSI line follows the brand accent so it reads clearly against the glass.
+  function accentColor() {
+    return getComputedStyle(document.documentElement).getPropertyValue("--amber").trim() || "#f5811f";
+  }
+
   function sma(values, period) {
     return values.map((_, i) => {
       if (i < period - 1) return null;
@@ -77,7 +82,9 @@ const ChartModule = (function () {
         vertLines: { color: "transparent" },
         horzLines: { color: css.getPropertyValue("--border").trim() || "#223154" },
       },
-      rightPriceScale: { borderColor: css.getPropertyValue("--border").trim() || "#223154" },
+      // Fixed price-scale width so the price pane and the RSI pane share the
+      // exact same left/right plot origin — their time axes stay parallel.
+      rightPriceScale: { borderColor: css.getPropertyValue("--border").trim() || "#223154", minimumWidth: 58 },
       timeScale: { borderColor: css.getPropertyValue("--border").trim() || "#223154" },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     };
@@ -113,10 +120,18 @@ const ChartModule = (function () {
       width: rsiContainer.clientWidth,
       height: 90,
     });
-    rsiSeries = rsiChart.addLineSeries({ color: "#eda100", lineWidth: 1.5, lastValueVisible: false });
-    rsiChart.priceScale("right").applyOptions({ autoScale: false });
-    rsiSeries.applyOptions({});
-    rsiChart.priceScale("right").applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+    // Hide the RSI pane's own time axis — it duplicates the price pane's dates.
+    // The two panes stay aligned via the shared price-scale width + logical sync.
+    rsiChart.applyOptions({ timeScale: { visible: false } });
+    rsiSeries = rsiChart.addLineSeries({
+      color: accentColor(), lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+      // Pin the scale to the RSI 0–100 band; without this the line renders off-view.
+      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
+    });
+    rsiChart.priceScale("right").applyOptions({ scaleMargins: { top: 0.12, bottom: 0.12 } });
+    // Overbought / oversold reference lines at 70 / 30.
+    rsiSeries.createPriceLine({ price: 70, color: "rgba(120,130,150,0.5)", lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: "70" });
+    rsiSeries.createPriceLine({ price: 30, color: "rgba(120,130,150,0.5)", lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: "30" });
 
     let syncing = false;
     priceChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
@@ -169,7 +184,11 @@ const ChartModule = (function () {
     volumeSeries.setData(ohlcv.map((d) => ({ time: toTime(d.date), value: d.volume, color: d.close >= d.open ? UP + "aa" : DOWN + "aa" })));
 
     const rsiArr = rsiCalc(closes, 14);
-    rsiSeries.setData(ohlcv.map((d, i) => (rsiArr[i] != null ? { time: toTime(d.date), value: rsiArr[i] } : null)).filter(Boolean));
+    // Keep one point per bar — whitespace {time} for the leading nulls instead of
+    // dropping them — so the RSI pane has the SAME bar count as the price pane.
+    // Otherwise the cross-chart logical-range sync is offset by 14 bars and the
+    // RSI line stops short of the latest trading day on the right edge.
+    rsiSeries.setData(ohlcv.map((d, i) => (rsiArr[i] != null ? { time: toTime(d.date), value: rsiArr[i] } : { time: toTime(d.date) })));
 
     trendline = null; pendingPoint = null;
     priceChart.timeScale().fitContent();
@@ -265,6 +284,8 @@ const ChartModule = (function () {
     const t = chartTheme();
     priceChart.applyOptions(t);
     rsiChart.applyOptions(t);
+    rsiChart.applyOptions({ timeScale: { visible: false } });
+    if (rsiSeries) rsiSeries.applyOptions({ color: accentColor() });
   }
 
   return { init, setData, setDrawMode, clearTrendline, toggleSeries, redrawTrendline, applyTheme };

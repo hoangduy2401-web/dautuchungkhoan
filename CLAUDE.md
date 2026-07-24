@@ -228,7 +228,7 @@ Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
 **Dự án hoàn thành, chạy dữ liệu thật end-to-end tại
 https://dashboardstock.io.vn** — `USE_MOCK: false`,
 `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
-Cache busting hiện `?v=20260724h` (bump mỗi lần sửa JS/CSS).
+Cache busting hiện `?v=20260724l` (bump mỗi lần sửa JS/CSS).
 
 **Tính năng thêm phiên 24/07/2026:**
 - **Ticker tape chạy rổ VN30** (30 mã, tách khỏi watchlist). Config `APP_CONFIG.VN30`;
