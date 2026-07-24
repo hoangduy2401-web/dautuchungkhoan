@@ -312,6 +312,10 @@ function renderRangeTabs() {
     { label: "1M", days: 30 },
     { label: "3M", days: 90 },
     { label: "6M", days: 180 },
+    { label: "1Y", days: 365 },
+    // 5Y ~ 1250 trading days; the backend chunks history in 30-day calls, so the
+    // first uncached load of this range is slow (~40 SSI calls). Cached after.
+    { label: "5Y", days: 1825 },
   ];
   const el = document.getElementById("rangeTabs");
   el.innerHTML = ranges

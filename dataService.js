@@ -68,12 +68,17 @@ const DataService = (function () {
 
   // ---- OHLCV history: [{date, open, high, low, close, volume}] ----
   function getHistory(symbol, days) {
+    // History is chunked 30 days per SSI call, so long ranges need a bigger
+    // budget or they abort mid-fetch and fall back to mock. 1Y ~13 chunks, 5Y
+    // ~42 chunks — scale the timeout so a cold load actually completes (backend
+    // caches the result, so only the first hit is slow).
+    const timeoutMs = days > 730 ? 75000 : days > 270 ? 30000 : T_HISTORY;
     return withFallback(
       `history ${symbol}`,
       () =>
         fetchJson(
           `${cfg.priceProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`,
-          T_HISTORY
+          timeoutMs
         ),
       () => generateHistory(symbol, days)
     );
