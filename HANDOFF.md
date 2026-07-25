@@ -134,7 +134,42 @@ mã VN30, **tách khỏi watchlist cá nhân** (watchlist chỉ dùng cho panel 
   endpoint quote sẵn có — **frontend-only, 0 đổi backend**. Verify live: HNX TNG
   +3.55%/BVS −7.12%, UPCoM BSR +2.78%/BVB −4.21%. Cập nhật rổ khi sàn rebalance.
 
-Version hiện `?v=20260724p`.
+**Phiên 25/07/2026 — 2 việc user chốt đã LÀM XONG (frontend-only, 0 đổi backend):**
+- **Công cụ đo trên biểu đồ (ruler)** — nút **"Đo"** cạnh "Vẽ trendline". Click 2
+  điểm: hiện hộp mờ + đường nối + nhãn `±x.xx% (±delta)` / `N nến · dd/mm → dd/mm`.
+  Xanh khi tăng, đỏ khi giảm; có preview nét đứt khi rê chuột chọn điểm 2.
+  Neo theo **chỉ số nến** (`coordinateToLogical` làm tròn + clamp) nên đếm nến
+  chính xác và bám đúng khi pan/zoom. "Vẽ trendline" và "Đo" loại trừ nhau; nút
+  **"Xóa"** giờ xóa cả hai (`clearAll`).
+- **Gộp 3 khối cuối trang thành 1 card accordion** — "TÀI KHOẢN SSI · GIAO DỊCH ·
+  LỊCH SỬ". Mặc định **thu gọn** (chỉ head + 4 ô tổng tài sản), nút **"Xem thêm ▾"**
+  xổ ra 3 tab: *Danh mục SSI* / *Thêm giao dịch* / *Danh mục & lịch sử tay*.
+  Giữ nguyên toàn bộ id (`accountTable`, `holdingsTable`, `txTable`, `txForm`...)
+  nên `app.js` render không đổi. Trạng thái mở + tab đang chọn lưu localStorage
+  (`vn_dashboard_account_more_v1`, `vn_dashboard_account_tab_v1`). Bấm "Đồng bộ"
+  tự mở card + nhảy về tab Danh mục SSI.
+
+**3 lỗi biểu đồ có sẵn phát hiện khi làm ruler (đã sửa, xem CLAUDE mục 6):**
+1. `fitContent()` gọi TRƯỚC `resize()` → nến dồn sát mép phải, chừa khoảng trắng
+   bên trái. Đảo thứ tự + fit lại sau mỗi resize.
+2. **Sync 2 chiều trục thời gian giá ↔ RSI khóa cứng trục**: callback của
+   lightweight-charts chạy **bất đồng bộ** nên cờ `syncing` vô dụng, 2 pane ghi
+   đè lẫn nhau — `fitContent`/`setVisibleLogicalRange`/zoom/pan đều vô hiệu. Sửa:
+   chỉ ghi khi range thực sự khác nhau.
+3. `.trend-overlay` để `pointer-events: auto` cố định → canvas nuốt hết chuột,
+   **chart không zoom/pan được**. Sửa: mặc định `none`, chỉ bật `auto` khi đang
+   bật công cụ vẽ/đo.
+   Ngoài ra chart tạo lúc container rộng 0 (tab nền) hỏng vĩnh viễn → thêm
+   fallback `clientWidth || 600`.
+
+**Giữ nét vẽ khi refresh:** `ChartModule.setData(history, "SYM|range")` — vòng
+refresh 45s cùng mã + cùng khung sẽ **không** xóa trendline/ruler nữa; đổi mã
+hoặc đổi khung mới xóa.
+
+**Làm đậm chỉ báo (25/07):** Bollinger 3 đường và 2 biên RSI 70/30 dày 1px →
+**2px**; biên RSI đổi màu `rgba(120,130,150,0.5)` → `rgba(90,102,125,0.85)`.
+
+Version hiện `?v=20260725b`.
 
 ---
 
@@ -182,21 +217,6 @@ Mock gốc vẫn còn: https://dashboardstock.io.vn/mock-liquid-glass.html
 ## 5. VIỆC CÒN TREO
 
 **Tính năng tiếp theo (user đã chọn, CHƯA làm):**
-- **[SESSION SAU — user chốt 24/07] Công cụ ruler đo trên biểu đồ giá** — kéo 2
-  điểm trên chart để đo **số nến** và **% tăng/giảm** giữa 2 điểm. Frontend-only,
-  làm trong `chartModule.js` theo khuôn mẫu trendline sẵn có (đã có lớp
-  `<canvas id="trendOverlay">` phủ chart + `coordinateToTime`/`coordinateToPrice`
-  + `timeToCoordinate`/`priceToCoordinate` để neo và vẽ khi pan/zoom). Ý: thêm 1
-  chế độ vẽ (nút "Đo") song song với "Vẽ trendline"; đếm số nến = hiệu index 2 mốc
-  thời gian trong data hiện tại, % = (price2−price1)/price1×100; hiện nhãn ngay
-  trên đường đo.
-- **[SESSION SAU — user chốt 24/07] Thu gọn khối tài khoản SSI + danh mục + lịch
-  sử giao dịch thành 1 tab, mặc định gọn, có "Xem thêm" xổ xuống** — hiện 3 khối
-  này (`.portfolio-section` × 2 + phần tài khoản SSI trong `index.html`) chiếm nhiều
-  chiều dọc cuối trang. Gộp thành 1 card có nút/accordion "Xem thêm" (mặc định thu
-  gọn, click xổ nội dung). Thuần frontend (`index.html` + `style.css` + wiring
-  `app.js`). Tham khảo mock redesign có khối "TÀI KHOẢN SSI · GIAO DỊCH · LỊCH SỬ"
-  dạng accordion `toggleMore`/`moreOpen` (xem `Stock Dashboard Redesign.dc.html`).
 - **#3 Theo dõi dòng tiền** — phát hiện đột biến khối lượng/giá trị (spike vs
   TB 20 phiên). Đụng `server/index.js` (endpoint mới + `cp` sang root). Gộp luôn
   **sizing heatmap theo vốn hóa** (thêm 1 endpoint marketcap VN30 warmed thay 30 call).

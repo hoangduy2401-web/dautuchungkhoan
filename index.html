@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260724p" />
+<link rel="stylesheet" href="style.css?v=20260725b" />
 </head>
 <body>
 
@@ -127,6 +127,7 @@
           <label class="chk"><input type="checkbox" id="chkVol" checked/>KL</label>
           <label class="chk"><input type="checkbox" id="chkRSI" checked/>RSI</label>
           <button type="button" id="drawTrendBtn" class="btn-outline">Vẽ trendline</button>
+          <button type="button" id="measureBtn" class="btn-outline" title="Click 2 điểm trên biểu đồ để đo số nến và % biến động">Đo</button>
           <button type="button" id="clearTrendBtn" class="btn-outline">Xóa</button>
         </div>
         <div class="chart-stack">
@@ -145,68 +146,78 @@
     </div>
   </main>
 
-  <!-- Real SSI account, read-only -->
+  <!-- SSI account (read-only) + manual transactions + history, collapsed into a
+       single accordion card. Collapsed by default: only the head and the SSI
+       summary stats show; "Xem thêm" reveals the three tabbed panes below. -->
   <section class="portfolio-section">
     <div class="panel">
       <div class="panel-head">
-        <h2>Tài khoản SSI (chỉ đọc)</h2>
+        <h2>Tài khoản SSI · Giao dịch · Lịch sử</h2>
         <div class="account-actions">
           <span class="account-status" id="accountStatus">Chưa đồng bộ</span>
           <button type="button" id="syncAccountBtn" class="btn-outline">Đồng bộ</button>
+          <button type="button" id="moreToggle" class="btn-outline" aria-expanded="false" aria-controls="accountMore">Xem thêm ▾</button>
         </div>
       </div>
       <div class="holdings-summary" id="accountSummary"></div>
-      <div class="panel-body" id="accountTable">
-        <div class="empty-state">Bấm "Đồng bộ" để nạp danh mục thật từ SSI (chỉ đọc).</div>
-      </div>
-    </div>
-  </section>
 
-  <!-- Portfolio / Transaction history -->
-  <section class="portfolio-section">
-    <div class="portfolio-grid">
-      <div class="panel">
-        <div class="panel-head"><h2>Thêm giao dịch</h2></div>
-        <div class="panel-body">
-          <form id="txForm" class="tx-form">
-            <div>
-              <label>Mã CK</label>
-              <input name="symbol" placeholder="VNM" required maxlength="10" />
-            </div>
-            <div>
-              <label>Loại lệnh</label>
-              <select name="type">
-                <option value="buy">Mua</option>
-                <option value="sell">Bán</option>
-              </select>
-            </div>
-            <div>
-              <label>Khối lượng</label>
-              <input name="qty" type="number" min="1" step="1" required />
-            </div>
-            <div>
-              <label>Giá (nghìn đồng)</label>
-              <input name="price" type="number" min="0" step="0.01" required />
-            </div>
-            <div>
-              <label>Ngày</label>
-              <input name="date" type="date" />
-            </div>
-            <div>
-              <label>Ghi chú</label>
-              <input name="note" placeholder="Tùy chọn" />
-            </div>
-            <button type="submit" class="btn btn-submit">Lưu giao dịch</button>
-          </form>
+      <div id="accountMore" hidden>
+        <div class="market-tabs" id="acctTabs">
+          <button type="button" data-atab="ssi" class="active">Danh mục SSI</button>
+          <button type="button" data-atab="add">Thêm giao dịch</button>
+          <button type="button" data-atab="manual">Danh mục &amp; lịch sử tay</button>
         </div>
-      </div>
 
-      <div class="panel">
-        <div class="panel-head"><h2>Danh mục &amp; lịch sử giao dịch</h2></div>
-        <div class="holdings-summary" id="holdingsSummary"></div>
-        <div class="panel-body" id="holdingsTable"></div>
-        <div class="panel-head"><h2>Lịch sử giao dịch</h2></div>
-        <div class="panel-body" id="txTable"></div>
+        <!-- Pane 1: real SSI positions (read-only) -->
+        <div class="mtab-pane" data-apane="ssi">
+          <div class="panel-body" id="accountTable">
+            <div class="empty-state">Bấm "Đồng bộ" để nạp danh mục thật từ SSI (chỉ đọc).</div>
+          </div>
+        </div>
+
+        <!-- Pane 2: manual transaction entry -->
+        <div class="mtab-pane" data-apane="add" hidden>
+          <div class="panel-body">
+            <form id="txForm" class="tx-form">
+              <div>
+                <label>Mã CK</label>
+                <input name="symbol" placeholder="VNM" required maxlength="10" />
+              </div>
+              <div>
+                <label>Loại lệnh</label>
+                <select name="type">
+                  <option value="buy">Mua</option>
+                  <option value="sell">Bán</option>
+                </select>
+              </div>
+              <div>
+                <label>Khối lượng</label>
+                <input name="qty" type="number" min="1" step="1" required />
+              </div>
+              <div>
+                <label>Giá (nghìn đồng)</label>
+                <input name="price" type="number" min="0" step="0.01" required />
+              </div>
+              <div>
+                <label>Ngày</label>
+                <input name="date" type="date" />
+              </div>
+              <div>
+                <label>Ghi chú</label>
+                <input name="note" placeholder="Tùy chọn" />
+              </div>
+              <button type="submit" class="btn btn-submit">Lưu giao dịch</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Pane 3: manual holdings + transaction history -->
+        <div class="mtab-pane" data-apane="manual" hidden>
+          <div class="holdings-summary" id="holdingsSummary"></div>
+          <div class="panel-body" id="holdingsTable"></div>
+          <div class="panel-head"><h2>Lịch sử giao dịch</h2></div>
+          <div class="panel-body" id="txTable"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -218,11 +229,11 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="config.js?v=20260724p"></script>
-  <script src="mockData.js?v=20260724p"></script>
-  <script src="dataService.js?v=20260724p"></script>
-  <script src="portfolio.js?v=20260724p"></script>
-  <script src="chartModule.js?v=20260724p"></script>
-  <script src="app.js?v=20260724p"></script>
+  <script src="config.js?v=20260725b"></script>
+  <script src="mockData.js?v=20260725b"></script>
+  <script src="dataService.js?v=20260725b"></script>
+  <script src="portfolio.js?v=20260725b"></script>
+  <script src="chartModule.js?v=20260725b"></script>
+  <script src="app.js?v=20260725b"></script>
 </body>
 </html>

@@ -59,7 +59,7 @@ dautuchungkhoan/
 ├── mockData.js        ← COMPANY_INFO, generateHistory/Fundamentals/News/Indices
 ├── dataService.js     ← adapter mock ↔ real API
 ├── portfolio.js       ← Portfolio.list/add/remove/computeHoldings
-├── chartModule.js     ← ChartModule IIFE: init/setData/toggleSeries/trendline
+├── chartModule.js     ← ChartModule IIFE: init/setData/toggleSeries/trendline/ruler
 ├── app.js             ← state + render cho mọi widget
 └── server/
     ├── index.js       ← Express proxy (SSI OHLC, indices, quote, news, debug)
@@ -201,6 +201,25 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   **`13000/14000/23000` giống nhau ở mọi companyForm**, chỉ dòng doanh thu khác.
 - Render Free tier ngủ sau 15 phút → giữ thức bằng GitHub Actions (xem mục 7).
 
+### Lightweight Charts — 4 cạm bẫy (phát hiện 25/07/2026)
+
+- **Đừng `fitContent()` rồi mới đổi width.** Bar spacing tính theo width tại lúc
+  fit; đổi width sau đó để nến dồn sát mép phải, chừa khoảng trắng bên trái.
+  → `resize()` trước, `fitContent()` sau; và fit lại trong mỗi `resize()`.
+- **Callback `subscribeVisibleLogicalRangeChange` chạy BẤT ĐỒNG BỘ.** Cờ
+  `syncing = true/false` bao quanh lời gọi `setVisibleLogicalRange` là vô dụng
+  (cờ đã reset trước khi pane kia trả lời) → 2 pane ghi đè lẫn nhau, **trục thời
+  gian khóa cứng**: `fitContent`, `setVisibleLogicalRange`, zoom, pan đều không
+  ăn. Sửa: chỉ ghi khi range 2 bên thực sự khác (`sameRange` sai số 0.005).
+- **Canvas overlay `pointer-events: auto` cố định nuốt hết chuột** → chart không
+  zoom/pan được. Chỉ bật `auto` khi đang bật công cụ vẽ/đo, còn lại `none`.
+- **Chart tạo lúc container width = 0** (tab nền, panel chưa layout) hỏng vĩnh
+  viễn — `applyOptions({width})` sau đó không cứu được. Luôn cho width fallback
+  (`clientWidth || 600`).
+- Đo số nến chính xác: dùng `timeScale().coordinateToLogical(x)` (làm tròn +
+  clamp vào `[0, bars.length-1]`) thay vì `coordinateToTime`, rồi neo lại bằng
+  `logicalToCoordinate(index)` để bám nến khi pan/zoom.
+
 ### Hiệu năng — SSI throttle & kiến trúc cache (fix 23/07/2026)
 
 Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
@@ -234,7 +253,19 @@ Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
 **Dự án hoàn thành, chạy dữ liệu thật end-to-end tại
 https://dashboardstock.io.vn** — `USE_MOCK: false`,
 `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
-Cache busting hiện `?v=20260724p` (bump mỗi lần sửa JS/CSS).
+Cache busting hiện `?v=20260725b` (bump mỗi lần sửa JS/CSS).
+
+**Thêm phiên 25/07/2026 (frontend-only):**
+- **Thước đo trên chart** (nút "Đo"): 2 click → số nến + % biến động + khoảng
+  ngày, neo theo index nến. Loại trừ nhau với "Vẽ trendline"; "Xóa" xóa cả hai.
+- **Card accordion "Tài khoản SSI · Giao dịch · Lịch sử"**: gộp 3 khối cuối
+  trang, mặc định thu gọn, "Xem thêm" xổ 3 tab; trạng thái lưu localStorage
+  (`vn_dashboard_account_more_v1`, `vn_dashboard_account_tab_v1`).
+- `ChartModule.setData(history, "SYM|range")` — refresh 45s cùng dataset không
+  xóa nét vẽ nữa.
+- 4 lỗi chart có sẵn đã sửa — xem "Lightweight Charts — 4 cạm bẫy" ở mục 6.
+- Bollinger 3 đường và 2 biên RSI 70/30 dày 1px → **2px** (biên RSI đổi màu
+  `rgba(90,102,125,0.85)` cho rõ hơn).
 
 **Tính năng thêm phiên 24/07/2026:**
 - **Ticker tape chạy rổ VN30** (30 mã, tách khỏi watchlist). Config `APP_CONFIG.VN30`;

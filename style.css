@@ -436,7 +436,10 @@ a { color: inherit; }
   border: 1px solid var(--border);
   box-shadow: inset 0 1px 0 0 var(--glass-highlight);
 }
-.trend-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: auto; cursor: default; }
+/* Transparent to the mouse unless a drawing tool is armed — otherwise the
+   overlay swallows every wheel/drag and the chart cannot be zoomed or panned.
+   chartModule flips pointer-events to `auto` while trendline/ruler is active. */
+.trend-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; cursor: default; }
 .chart-wrap-rsi {
   height: 90px; margin-top: 6px; border-radius: var(--radius-sm); overflow: hidden;
   background: rgba(255, 255, 255, calc(var(--glass-a) * 0.5));
@@ -470,10 +473,10 @@ a { color: inherit; }
    PORTFOLIO / TRANSACTION HISTORY
    ============================================================ */
 .portfolio-section { padding: 4px 20px 28px; }
-.portfolio-grid { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 16px; }
-@media (max-width: 1080px) { .portfolio-grid { grid-template-columns: 1fr; } }
+/* Accordion sub-panes reuse .mtab-pane (hidden => display:none) and .market-tabs. */
 
-.tx-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+/* Full-width now that the form sits in its own accordion pane, not a 2-col grid */
+.tx-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 640px; }
 .tx-form label { font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 5px; }
 .tx-form input, .tx-form select {
   width: 100%; background: var(--field-bg); border: 1px solid var(--border); color: var(--text);

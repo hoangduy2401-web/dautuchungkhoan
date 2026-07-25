@@ -89,6 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireRankExchanges();
   wireForms();
   wireAccountSync();
+  wireAccountAccordion();
   ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
   wireChartToolbar();
   wireThemeControls();
@@ -157,18 +158,30 @@ function wireChartToolbar() {
   document.getElementById("chkVol").addEventListener("change", (e) => ChartModule.toggleSeries("volume", e.target.checked));
   document.getElementById("chkRSI").addEventListener("change", (e) => ChartModule.toggleSeries("rsi", e.target.checked));
 
+  // Trendline and ruler share the overlay canvas, so only one can be armed at a
+  // time — arming one disarms the other. Both auto-disarm once 2 points are set.
   const drawBtn = document.getElementById("drawTrendBtn");
-  let drawing = false;
-  drawBtn.addEventListener("click", () => {
-    drawing = !drawing;
-    drawBtn.classList.toggle("active", drawing);
-    ChartModule.setDrawMode(drawing);
+  const measureBtn = document.getElementById("measureBtn");
+  let tool = null; // null | "trend" | "measure"
+
+  function setTool(next) {
+    tool = next;
+    drawBtn.classList.toggle("active", tool === "trend");
+    measureBtn.classList.toggle("active", tool === "measure");
+    ChartModule.setDrawMode(tool === "trend");
+    ChartModule.setMeasureMode(tool === "measure");
+  }
+
+  drawBtn.addEventListener("click", () => setTool(tool === "trend" ? null : "trend"));
+  measureBtn.addEventListener("click", () => setTool(tool === "measure" ? null : "measure"));
+  document.addEventListener("trendline-drawn", () => setTool(null));
+  document.addEventListener("measure-drawn", () => setTool(null));
+
+  // "Xóa" wipes both drawings and disarms whichever tool is active.
+  document.getElementById("clearTrendBtn").addEventListener("click", () => {
+    setTool(null);
+    ChartModule.clearAll();
   });
-  document.addEventListener("trendline-drawn", () => {
-    drawing = false;
-    drawBtn.classList.remove("active");
-  });
-  document.getElementById("clearTrendBtn").addEventListener("click", () => ChartModule.clearTrendline());
 }
 
 function tickClock() {
@@ -667,7 +680,9 @@ async function loadSelectedSymbol() {
     DataService.getNews(state.watchlist),
   ]);
 
-  ChartModule.setData(history);
+  // Pass the dataset identity so the 45s refresh keeps any trendline/ruler the
+  // user drew (same symbol + range = same anchors); switching either clears it.
+  ChartModule.setData(history, `${sym}|${state.range}`);
   renderFundamentals(fundamentals);
   renderNews(news);
 }
@@ -783,7 +798,7 @@ function renderPortfolio() {
           )
           .join("")}</tbody>
       </table>`
-    : `<div class="empty-state">Chưa có giao dịch nào. Thêm giao dịch đầu tiên ở bên trái.</div>`;
+    : `<div class="empty-state">Chưa có giao dịch nào. Thêm ở tab "Thêm giao dịch".</div>`;
 
   txEl.querySelectorAll("[data-id]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -821,6 +836,49 @@ function wireAccountSync() {
   document.getElementById("syncAccountBtn").addEventListener("click", () => syncAccount());
 }
 
+/* ============================================================
+   ACCOUNT CARD ACCORDION — "Xem thêm" + 3 sub-tabs
+   The SSI account, the transaction form and the manual holdings/history used to
+   be three stacked cards eating the whole page bottom. They now live in one
+   card: collapsed by default (head + SSI summary only), expanded on demand.
+   Open/close state and the active tab persist in localStorage.
+   ============================================================ */
+const MORE_OPEN_KEY = "vn_dashboard_account_more_v1";
+const ACCT_TAB_KEY = "vn_dashboard_account_tab_v1";
+
+function setAccountMore(open) {
+  const box = document.getElementById("accountMore");
+  const btn = document.getElementById("moreToggle");
+  box.hidden = !open;
+  btn.textContent = open ? "Thu gọn ▴" : "Xem thêm ▾";
+  btn.setAttribute("aria-expanded", String(open));
+  btn.classList.toggle("active", open);
+  localStorage.setItem(MORE_OPEN_KEY, open ? "1" : "0");
+}
+
+function setAcctTab(name) {
+  document.querySelectorAll("#acctTabs button").forEach((b) => b.classList.toggle("active", b.dataset.atab === name));
+  document.querySelectorAll("[data-apane]").forEach((p) => (p.hidden = p.dataset.apane !== name));
+  localStorage.setItem(ACCT_TAB_KEY, name);
+}
+
+function wireAccountAccordion() {
+  const btn = document.getElementById("moreToggle");
+  btn.addEventListener("click", () => setAccountMore(document.getElementById("accountMore").hidden));
+  document.querySelectorAll("#acctTabs button").forEach((b) => {
+    b.addEventListener("click", () => setAcctTab(b.dataset.atab));
+  });
+  setAcctTab(localStorage.getItem(ACCT_TAB_KEY) || "ssi");
+  setAccountMore(localStorage.getItem(MORE_OPEN_KEY) === "1");
+}
+
+// Syncing while collapsed would hide the result — open the card so the fresh
+// positions table is actually visible.
+function openAccountPane() {
+  setAccountMore(true);
+  setAcctTab("ssi");
+}
+
 async function syncAccount(retryCode) {
   const key = getApiKey();
   if (!key) return;
@@ -830,6 +888,7 @@ async function syncAccount(retryCode) {
     if (retryCode) await DataService.loginAccount(key, retryCode);
     const data = await DataService.getAccountPortfolio(key);
     renderAccount(data);
+    openAccountPane();
   } catch (err) {
     if (err.status === 401) {
       setAccountStatus("Sai khóa truy cập", "down");
