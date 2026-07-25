@@ -35,6 +35,10 @@
   --amber-dim: rgba(245, 129, 31, 0.14);
   --up: #1faa4c;   --up-dim: rgba(40, 175, 75, 0.16);
   --down: #e5342a; --down-dim: rgba(230, 55, 45, 0.14);
+  /* Solid fills for the two extreme signal levels (Tăng/Giảm mạnh). Plain
+     --up/--down are too light to read as "strong" next to their own dim tint. */
+  --up-strong: #0f7a4a;   --down-strong: #b3172a;
+  --on-strong: #ffffff;
   --blue: #4a6cf7;
 
   /* aliases the existing markup already references */
@@ -70,6 +74,8 @@
   --amber-dim: rgba(255, 157, 71, 0.16);
   --up: #30d158; --up-dim: rgba(48, 209, 88, 0.15);
   --down: #ff453a; --down-dim: rgba(255, 69, 58, 0.15);
+  --up-strong: #2fbf6b; --down-strong: #ff6257;
+  --on-strong: #06101f;
   --blue: #5b8cff;
 }
 
@@ -303,6 +309,70 @@ a { color: inherit; }
 .rank-row .r-chg { width: 72px; flex-shrink: 0; text-align: right; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .foreign-note { font-size: 11px; color: var(--text-dim); padding: 0 18px 14px; }
+
+/* ============================================================
+   SIGNALS TAB (FiinTrade Tier 1)
+   Lives inside the market card, so it inherits the glass panel —
+   no new section, no extra vertical space on desktop.
+   ============================================================ */
+.signal-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+}
+.signal-bar select {
+  background: var(--field-bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 999px; padding: 6px 12px; font-size: 11.5px; font-weight: 600;
+  font-family: inherit;
+}
+.sig-sub { display: flex; gap: 6px; flex-wrap: wrap; }
+.sig-sub button {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text-muted);
+  padding: 5px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; transition: all .2s; font-family: inherit;
+}
+.sig-sub button:hover { color: var(--text); }
+.sig-sub button.active { background: var(--amber); color: #1a1205; border-color: var(--amber); }
+.sig-status { font-size: 11px; color: var(--text-dim); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* 5 signal levels. The two extremes get a solid fill so they separate clearly
+   from the plain Tăng/Giảm tints in BOTH themes. */
+.sig {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; white-space: nowrap; letter-spacing: .01em;
+}
+.sig-sb { background: var(--up-strong); color: var(--on-strong); }
+.sig-b  { background: var(--up-dim); color: var(--up); }
+.sig-n  { background: var(--field-bg); color: var(--text-muted); border: 1px solid var(--border); }
+.sig-br { background: var(--down-dim); color: var(--down); }
+.sig-sbr{ background: var(--down-strong); color: var(--on-strong); }
+
+/* Badge next to the symbol name in the chart panel */
+.symbol-title .sig { align-self: center; }
+
+.sig-table-wrap { overflow-x: auto; }
+.sig-note { font-size: 11px; color: var(--text-dim); padding: 10px 18px 14px; line-height: 1.6; }
+.sig-note input[type=number] {
+  background: var(--field-bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 3px 6px; width: 58px; font-size: 11px; font-family: inherit;
+}
+.sig-group-title {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); padding: 14px 18px 6px;
+}
+.sig-group-title.up { color: var(--up); }
+.sig-group-title.down { color: var(--down); }
+.sig-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 10px; }
+.sig-chip {
+  padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  border: 1px solid var(--border); background: var(--panel-2); cursor: pointer;
+}
+.sig-chip.up { background: var(--up-dim); color: var(--up); border-color: transparent; }
+.sig-chip.down { background: var(--down-dim); color: var(--down); border-color: transparent; }
+.sig-empty { padding: 20px 18px; color: var(--text-dim); font-size: 12.5px; }
+.sig-progress {
+  height: 3px; background: var(--amber); border-radius: 2px;
+  transition: width .3s ease; margin: 0 18px 10px;
+}
 .heat-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; padding: 12px 6px; min-height: 62px;
@@ -540,6 +610,13 @@ tr:hover td { background: var(--panel-2); }
   .tx-form { grid-template-columns: 1fr; gap: 12px; }
   .tx-form input, .tx-form select { padding: 12px; font-size: 14px; }
   .holdings-summary { gap: 14px 24px; }
+
+  /* Signals tab: the 9-column table never fits a phone. Scroll it sideways
+     inside its own wrapper instead of stacking — the columns are numeric and
+     read as a row, unlike the account table's label:value pairs. */
+  .signal-bar { gap: 8px; }
+  .sig-status { margin-left: 0; width: 100%; }
+  .sig-table-wrap table { min-width: 620px; }
 
   /* SSI account holdings: the 7-column table is wider than a phone and the panel
      clips overflow, so stack each position into a label:value card instead. */

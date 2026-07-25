@@ -30,10 +30,24 @@ const state = {
   quotes: {}, // symbol -> {price, changePct, volume}
   sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
-  marketTab: "heatmap", // heatmap | sector | rank — active market-overview pane
+  marketTab: "heatmap", // heatmap | sector | rank | foreign | signal
   rankExchange: "VNINDEX", // VNINDEX | HNXINDEX | UPCOM — rankings tab exchange
   chart: null,
+
+  // --- Signals tab (FiinTrade Tier 1) ---
+  sigBars: {},          // symbol -> OHLCV, fixed 180d window (NOT the chart range)
+  sigBasket: "VN30",    // key into APP_CONFIG
+  sigTab: "summary",    // summary | pv | ta
+  sigTf: "D",           // D | W — daily or weekly bars
+  sigRsiWindow: 3,      // phiên tín hiệu RSI còn hiệu lực (sai lệch #2)
+  sigLoading: false,
+  sigLoaded: {},        // basket key -> true once its symbols are in sigBars
 };
+
+// Fixed history window for every signal computation. Deliberately NOT
+// state.range: RSI(14)/CMF(20) would give different numbers at 1M vs 6M, so the
+// same symbol on the same day would show two different badges.
+const SIG_DAYS = 180;
 
 // VN30 → sector, for the "Theo ngành" tab (average % change per sector).
 const SECTOR_MAP = {
@@ -87,6 +101,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderRangeTabs();
   wireMarketTabs();
   wireRankExchanges();
+  wireSignalTab();
   wireForms();
   wireAccountSync();
   wireAccountAccordion();
@@ -437,6 +452,290 @@ function renderForeign() {
     .join("");
 }
 
+/* ============================================================
+   SIGNALS TAB — FiinTrade Tier 1
+   Composite signal (MA5 / RSI14 / CMF20 / ROC9 -> 3x3 matrix), price-volume
+   streaks, and TA strategy screens. All maths lives in `signals.js`.
+
+   Cost model: needs OHLCV for the WHOLE basket, which the dashboard otherwise
+   never loads. So the fetch is lazy AND explicit (button), sequential to respect
+   the backend's concurrency=1 limiter, and cached per basket for the session.
+   It is deliberately absent from refreshAll() — a 45s loop re-fetching 50
+   symbols would recreate the throttling spiral fixed on 23/07 (CLAUDE.md §6).
+   ============================================================ */
+const SIG_CLASS = {
+  "Tăng mạnh": "sig-sb", "Tăng": "sig-b", "Trung tính": "sig-n",
+  "Giảm": "sig-br", "Giảm mạnh": "sig-sbr",
+};
+const SIG_GROUP_CLASS = { "Tăng": "sig-b", "Trung tính": "sig-n", "Giảm": "sig-br" };
+
+// Pick a symbol and scroll the chart into view — the signals tab sits well above
+// the chart panel, so a click that only swapped the data would look like nothing
+// happened.
+function selectSymbol(sym) {
+  if (!sym || sym === state.selected) return;
+  state.selected = sym;
+  renderWatchlist();
+  loadSelectedSymbol();
+  const chart = document.getElementById("symbolTitle");
+  if (chart) chart.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function sigBasketSymbols() {
+  return APP_CONFIG[state.sigBasket] || APP_CONFIG.VN30;
+}
+
+// Bars used for every signal: weekly is resampled from the same daily series,
+// so switching timeframe costs nothing extra.
+function sigBarsFor(sym) {
+  const raw = state.sigBars[sym];
+  if (!raw) return null;
+  return state.sigTf === "W" ? Signals.toWeekly(raw) : raw;
+}
+
+async function loadSignalBasket() {
+  if (state.sigLoading) return;
+  const symbols = sigBasketSymbols();
+  const missing = symbols.filter((s) => !state.sigBars[s]);
+  const statusEl = document.getElementById("sigStatus");
+  const btn = document.getElementById("sigLoadBtn");
+  if (missing.length === 0) {
+    state.sigLoaded[state.sigBasket] = true;
+    renderSignalPane();
+    return;
+  }
+
+  state.sigLoading = true;
+  if (btn) btn.disabled = true;
+  const t0 = Date.now();
+  let ok = 0, fail = 0;
+
+  // Sequential on purpose — the backend limiter is concurrency=1 and SSI
+  // throttles parallel bursts hard.
+  for (let i = 0; i < missing.length; i++) {
+    if (statusEl) {
+      statusEl.textContent = `Đang tải ${i + 1}/${missing.length} — ${missing[i]}… (${Math.round((Date.now() - t0) / 1000)}s)`;
+    }
+    try {
+      const rows = await DataService.getHistory(missing[i], SIG_DAYS);
+      if (Array.isArray(rows) && rows.length) { state.sigBars[missing[i]] = rows; ok++; } else fail++;
+    } catch (err) {
+      fail++;
+      console.warn("[signals]", missing[i], err.message);
+    }
+    if (i % 5 === 4) renderSignalPane(); // progressive fill so the wait is visible
+  }
+
+  state.sigLoading = false;
+  state.sigLoaded[state.sigBasket] = true;
+  if (btn) btn.disabled = false;
+  renderSignalPane(); // owns #sigStatus — writes the coverage line
+  if (statusEl) {
+    statusEl.textContent += ` · ${Math.round((Date.now() - t0) / 1000)}s${fail ? ` · ${fail} lỗi` : ""}`;
+  }
+}
+
+function renderSignalPane() {
+  const el = document.getElementById("sigPane");
+  if (!el) return;
+  const all = sigBasketSymbols();
+  const loaded = all.filter((s) => state.sigBars[s]);
+
+  // Baskets overlap (22 of HOSE_LIQUID's 49 are also VN30), so switching can show
+  // a half-full table that looks complete. Say the coverage out loud.
+  const statusEl = document.getElementById("sigStatus");
+  if (statusEl && !state.sigLoading) {
+    statusEl.textContent = loaded.length === all.length
+      ? `đủ ${all.length} mã`
+      : `${loaded.length}/${all.length} mã — bấm Tải dữ liệu để nạp ${all.length - loaded.length} mã còn lại`;
+  }
+
+  if (loaded.length === 0) {
+    el.innerHTML = `<div class="sig-empty">Bấm <b>Tải dữ liệu</b> để nạp lịch sử ${SIG_DAYS} phiên cho rổ đang chọn (${sigBasketSymbols().length} mã, tải tuần tự nên mất ~30–90 giây lần đầu; sau đó dùng lại trong phiên).</div>`;
+    return;
+  }
+  if (state.sigTab === "summary") renderSigSummary(el, loaded);
+  else if (state.sigTab === "pv") renderSigPriceVolume(el, loaded);
+  else renderSigStrategies(el, loaded);
+}
+
+function renderSigSummary(el, symbols) {
+  const rows = symbols
+    .map((s) => ({ s, sig: Signals.compute(sigBarsFor(s), state.sigRsiWindow) }))
+    .filter((r) => r.sig)
+    .sort((a, b) => Signals.RANK[a.sig.summary] - Signals.RANK[b.sig.summary]);
+
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="sig-empty">Chưa đủ nến để tính (cần tối thiểu ${Signals.MIN_BARS}).</div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="sig-table-wrap"><table>
+      <thead><tr>
+        <th>Mã</th><th class="num">Giá</th><th class="num">MA(5)</th><th>TB Động</th>
+        <th class="num">RSI(14)</th><th class="num">CMF(20)</th><th class="num">ROC(9)</th>
+        <th>Chỉ tiêu</th><th>Tổng hợp</th>
+      </tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr data-sym="${r.s}" style="cursor:pointer">
+          <td><b>${r.s}</b></td>
+          <td class="num">${fmt(r.sig.price)}</td>
+          <td class="num">${fmt(r.sig.ma5)}</td>
+          <td><span class="sig ${SIG_GROUP_CLASS[r.sig.maSig]}">${r.sig.maSig}</span></td>
+          <td class="num ${trendClass(r.sig.rsiSig === "Tăng" ? 1 : r.sig.rsiSig === "Giảm" ? -1 : 0)}">${fmt(r.sig.rsi, 1)}</td>
+          <td class="num ${trendClass(r.sig.cmf)}">${fmt(r.sig.cmf, 3)}</td>
+          <td class="num ${trendClass(r.sig.roc)}">${fmt(r.sig.roc, 2)}</td>
+          <td><span class="sig ${SIG_GROUP_CLASS[r.sig.indSig]}">${r.sig.indSig}</span></td>
+          <td><span class="sig ${SIG_CLASS[r.sig.summary]}">${r.sig.summary}</span></td>
+        </tr>`).join("")}
+      </tbody>
+    </table></div>
+    <div class="sig-note">
+      Khung <b>${state.sigTf === "W" ? "tuần" : "ngày"}</b> ·
+      <button type="button" class="btn-outline" id="sigTfBtn">Đổi sang khung ${state.sigTf === "W" ? "ngày" : "tuần"}</button>
+      · Cửa sổ tín hiệu RSI: <input type="number" id="sigRsiWin" min="1" max="10" value="${state.sigRsiWindow}" />
+      phiên — RSI cắt lên 30 / cắt xuống 70 trong N phiên gần nhất vẫn tính là tín hiệu.
+      ROC dùng ngưỡng 0 (tài liệu FiinTrade ghi 30/70 là chép nhầm từ dòng RSI).
+    </div>`;
+
+  el.querySelectorAll("tr[data-sym]").forEach((tr) => {
+    tr.addEventListener("click", () => selectSymbol(tr.dataset.sym));
+  });
+  const tfBtn = el.querySelector("#sigTfBtn");
+  if (tfBtn) tfBtn.addEventListener("click", () => { state.sigTf = state.sigTf === "W" ? "D" : "W"; renderSignalPane(); });
+  const win = el.querySelector("#sigRsiWin");
+  if (win) win.addEventListener("change", (e) => {
+    state.sigRsiWindow = Math.max(1, Math.min(10, Number(e.target.value) || 3));
+    renderSignalPane();
+  });
+}
+
+function renderSigPriceVolume(el, symbols) {
+  const groups = {
+    "Giá tăng liên tục": [], "Giá giảm liên tục": [], "KL tăng liên tục": [],
+    "KL tăng + giá tăng": [], "KL tăng + giá giảm": [],
+  };
+  for (const s of symbols) {
+    const b = sigBarsFor(s);
+    if (!b || b.length < 5) continue;
+    const st = Signals.streaks(b);
+    if (st.upDays > 3) groups["Giá tăng liên tục"].push({ s, n: st.upDays });
+    if (st.downDays > 3) groups["Giá giảm liên tục"].push({ s, n: st.downDays });
+    if (st.volUp > 3) {
+      groups["KL tăng liên tục"].push({ s, n: st.volUp });
+      if (st.priceVsStart > 0) groups["KL tăng + giá tăng"].push({ s, n: st.volUp });
+      else if (st.priceVsStart < 0) groups["KL tăng + giá giảm"].push({ s, n: st.volUp });
+    }
+  }
+  const cls = {
+    "Giá tăng liên tục": "up", "Giá giảm liên tục": "down", "KL tăng liên tục": "",
+    "KL tăng + giá tăng": "up", "KL tăng + giá giảm": "down",
+  };
+  el.innerHTML = Object.entries(groups).map(([name, list]) => `
+    <div class="sig-group-title ${cls[name]}">${name} (${list.length})</div>
+    ${list.length
+      ? `<div class="sig-chips">${list.sort((a, b) => b.n - a.n)
+          .map((x) => `<span class="sig-chip ${cls[name]}" data-sym="${x.s}">${x.s} · ${x.n} phiên</span>`).join("")}</div>`
+      : `<div class="sig-chips"><span class="sig-chip" style="opacity:.55">Không mã nào</span></div>`}`).join("")
+    + `<div class="sig-note">Chuỗi phải &gt; 3 phiên (ngưỡng của FiinTrade). Dùng phiên gần nhất đã đóng cửa — backend không có khối lượng ước lượng trong phiên.</div>`;
+
+  el.querySelectorAll(".sig-chip[data-sym]").forEach((c) => {
+    c.addEventListener("click", () => selectSymbol(c.dataset.sym));
+  });
+}
+
+function renderSigStrategies(el, symbols) {
+  const MONTHS = 3, VOL_RATIO = 1, MA_PCT = 1, ACCUM_RATIO = 2, ACCUM_PCT = 1;
+  const rows = [];
+  for (const s of symbols) {
+    const b = sigBarsFor(s);
+    if (!b || b.length < Signals.MIN_BARS) continue;
+    const closes = b.map((x) => x.close);
+    rows.push({
+      s, last: b[b.length - 1],
+      vr: Signals.volRatio(b), pc: Signals.pctChange(b),
+      ma20: Signals.sma(closes, 20)[b.length - 1],
+      ext: Signals.extremes(b, MONTHS),
+    });
+  }
+
+  const breakUp = rows.filter((r) => r.ext && r.vr > VOL_RATIO && r.last.close > r.ext.high);
+  const breakDn = rows.filter((r) => r.ext && r.vr > VOL_RATIO && r.last.close < r.ext.low);
+  const maUp = rows.filter((r) => r.ma20 != null && r.vr > VOL_RATIO && r.last.close > r.ma20 && r.pc > MA_PCT);
+  const maDn = rows.filter((r) => r.ma20 != null && r.vr > VOL_RATIO && r.last.close < r.ma20 && r.pc < -MA_PCT);
+  const accum = rows.filter((r) => r.vr > ACCUM_RATIO && r.pc > ACCUM_PCT);
+
+  const chips = (list, cls, label) => `
+    <div class="sig-group-title ${cls}">${label} (${list.length})</div>
+    <div class="sig-chips">${list.length
+      ? list.sort((a, b) => b.vr - a.vr).map((r) =>
+          `<span class="sig-chip ${cls}" data-sym="${r.s}" title="KL ${fmt(r.vr, 2)}× TB 10 phiên">${r.s} · ${fmt(r.pc, 2)}%</span>`).join("")
+      : `<span class="sig-chip" style="opacity:.55">Không mã nào</span>`}</div>`;
+
+  el.innerHTML =
+    chips(breakUp, "up", `Vượt đỉnh ${MONTHS} tháng`) +
+    chips(breakDn, "down", `Thủng đáy ${MONTHS} tháng`) +
+    chips(maUp, "up", "Vượt lên MA20") +
+    chips(maDn, "down", "Cắt xuống MA20") +
+    chips(accum, "up", "Tích lũy (KL đột biến + giá tăng)") +
+    `<div class="sig-note">
+       Lọc chung: khối lượng phiên cuối &gt; ${VOL_RATIO}× trung bình 10 phiên trước đó — phá đỉnh/đáy mà không có khối lượng thì FiinTrade không tính là tín hiệu.
+       Đỉnh/đáy so theo <b>giá đóng cửa</b>. Tích lũy cần KL &gt; ${ACCUM_RATIO}× và giá tăng &gt; ${ACCUM_PCT}%.
+     </div>`;
+
+  el.querySelectorAll(".sig-chip[data-sym]").forEach((c) => {
+    c.addEventListener("click", () => selectSymbol(c.dataset.sym));
+  });
+}
+
+/**
+ * Signal badge beside the symbol name in the chart panel.
+ * Uses the fixed SIG_DAYS window, never state.range — otherwise the badge would
+ * change when the user switches 1M/3M/6M, which reads as a bug.
+ * One extra call per symbol, cached in state.sigBars and shared with the tab.
+ */
+async function renderSymbolSignal(sym) {
+  const paint = () => {
+    const host = document.getElementById("symbolSignal");
+    // Guard against a slow fetch landing after the user picked another symbol.
+    if (!host || state.selected !== sym) return;
+    const sig = Signals.compute(state.sigBars[sym], state.sigRsiWindow);
+    if (!sig) { host.innerHTML = ""; return; }
+    host.innerHTML = `<span class="sig ${SIG_CLASS[sig.summary]}"
+      title="TB Động ${sig.maSig} · Chỉ tiêu ${sig.indSig} — RSI ${fmt(sig.rsi, 1)} · CMF ${fmt(sig.cmf, 3)} · ROC ${fmt(sig.roc, 2)}">${sig.summary}</span>`;
+  };
+
+  if (state.sigBars[sym]) { paint(); return; }
+  try {
+    const rows = await DataService.getHistory(sym, SIG_DAYS);
+    if (Array.isArray(rows) && rows.length) state.sigBars[sym] = rows;
+  } catch (err) {
+    console.warn("[signal badge]", sym, err.message);
+    return; // no badge is better than a wrong badge
+  }
+  paint();
+}
+
+function wireSignalTab() {
+  const basket = document.getElementById("sigBasket");
+  if (basket) basket.addEventListener("change", (e) => {
+    state.sigBasket = e.target.value;
+    const status = document.getElementById("sigStatus");
+    if (status) status.textContent = "";
+    renderSignalPane();
+  });
+  document.querySelectorAll("#sigSubTabs button").forEach((b) => {
+    b.addEventListener("click", () => {
+      state.sigTab = b.dataset.sig;
+      document.querySelectorAll("#sigSubTabs button").forEach((x) => x.classList.toggle("active", x === b));
+      renderSignalPane();
+    });
+  });
+  const btn = document.getElementById("sigLoadBtn");
+  if (btn) btn.addEventListener("click", () => loadSignalBasket());
+}
+
 // Tab switcher: toggle active button + which pane is visible. Data for all panes
 // is pre-rendered on refresh, so switching is just show/hide.
 function wireMarketTabs() {
@@ -449,6 +748,10 @@ function wireMarketTabs() {
       document.querySelectorAll(".mtab-pane").forEach((p) => {
         p.hidden = p.dataset.pane !== state.marketTab;
       });
+      // Signals need whole-basket history (30–50 sequential calls). Render what
+      // is already cached; the fetch itself stays behind the explicit button so
+      // opening the tab never blocks the UI.
+      if (state.marketTab === "signal") renderSignalPane();
     });
   });
 }
@@ -671,9 +974,9 @@ async function loadSelectedSymbol() {
   document.getElementById("symbolTitle").innerHTML = `
     <span class="sym">${sym}</span>
     <span class="name">${info.name} · ${info.exchange}</span>
+    <span id="symbolSignal"></span>
     <span class="price ${trendClass(q.changePct)}">${fmt(q.price)} <small>${fmtPct(q.changePct)}</small></span>
   `;
-
   const [history, fundamentals, news] = await Promise.all([
     DataService.getHistory(sym, state.range),
     DataService.getFundamentals(sym),
@@ -685,6 +988,11 @@ async function loadSelectedSymbol() {
   ChartModule.setData(history, `${sym}|${state.range}`);
   renderFundamentals(fundamentals);
   renderNews(news);
+
+  // Badge LAST and un-awaited. The backend limiter runs concurrency=1, so
+  // starting this before the chart would put a 180-day fetch ahead of the data
+  // the user is actually looking at and delay the chart on a cold cache.
+  renderSymbolSignal(sym);
 }
 
 function renderFundamentals(f) {

@@ -37,6 +37,24 @@ const APP_CONFIG = {
     "BVB", "ABB", "C4G", "FOX", "MCH",
   ],
 
+  // HOSE lọc theo thanh khoản — dùng cho tab "Tín hiệu". Tiêu chí: khối lượng
+  // khớp trung bình 5 phiên >= 3 triệu cp/phiên (chốt 25/07/2026). Sàn HOSE có
+  // 433 mã cổ phiếu; lọc còn 49, trong đó 27 mã nằm ngoài VN30.
+  //
+  // Danh sách này TĨNH, thanh khoản thì không — nên soát lại vài tháng một lần.
+  // Cách dựng lại (SSI trả cả sàn trong 1 lần gọi, 2487 dòng/phiên = 3 trang):
+  //   /api/debug/raw?path=/api/v2/Market/DailyStockPrice&Market=HOSE
+  //     &FromDate=dd/mm/yyyy&ToDate=dd/mm/yyyy&PageIndex=1..3&PageSize=1000
+  // rồi lọc Symbol khớp /^[A-Z]{3}$/ (loại trái phiếu, chứng quyền) và lấy
+  // trung bình TotalMatchVol qua 5 phiên. Sắp giảm dần theo thanh khoản.
+  HOSE_LIQUID: [
+    "SHB", "VIX", "HPG", "SSI", "ACB", "VPB", "NVL", "MBB", "GEX", "VND",
+    "DXG", "TCB", "HDB", "PNJ", "TPB", "DIG", "EIB", "CTG", "CII", "VCI",
+    "VIB", "BSR", "MSB", "PDR", "POW", "VSC", "FPT", "MWG", "KDH", "VCB",
+    "STB", "HCM", "VRE", "MSN", "TCH", "VNM", "BID", "PVT", "ORS", "PVD",
+    "VHM", "VCG", "KHG", "VIC", "LPB", "HAG", "DPM", "CTS", "HHV",
+  ],
+
   // Deployed backend proxy on Render. For local dev against `npm start`,
   // swap BACKEND for "http://localhost:3001".
   // BACKEND = "https://dashboard-chung-khoan.onrender.com"

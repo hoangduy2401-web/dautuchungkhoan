@@ -1,4 +1,4 @@
-# HANDOFF — Dashboard "Bảng Điện" (cập nhật 25/07/2026)
+# HANDOFF — Dashboard "Bảng Điện" (cập nhật 26/07/2026)
 
 > Dán file này làm prompt đầu tiên của phiên mới để tiếp tục không mất bối cảnh.
 > **`CLAUDE.md` ở cùng repo là tài liệu kỹ thuật đầy đủ** (format API, cạm bẫy,
@@ -28,7 +28,7 @@ frontend GitHub Pages. Không build tool — HTML/CSS/JS thuần.
   cấu trúc lớn (đổi kiến trúc module, thư viện chart, format dữ liệu giữa
   `dataService.js` ↔ `app.js` ↔ `server`).
 - **Sửa file JS/CSS xong PHẢI bump `?v=YYYYMMDD<chữ>`** trong `index.html` (hiện
-  `20260724h`), nếu không người dùng chạy code cũ tới 10 phút do cache Pages.
+  `20260726a`), nếu không người dùng chạy code cũ tới 10 phút do cache Pages.
 - **Nguồn sự thật server là `server/index.js`**; sau mỗi lần sửa chạy
   `cp server/index.js index.js` (Render deploy từ root).
 - KHÔNG commit `server/.env`. Đã có `.gitignore` chặn.
@@ -169,7 +169,29 @@ hoặc đổi khung mới xóa.
 **Làm đậm chỉ báo (25/07):** Bollinger 3 đường và 2 biên RSI 70/30 dày 1px →
 **2px**; biên RSI đổi màu `rgba(120,130,150,0.5)` → `rgba(90,102,125,0.85)`.
 
-Version hiện `?v=20260725b`.
+**Tín hiệu FiinTrade Tier 1 (26/07) — ĐÃ LÀM, frontend-only, backend không đụng:**
+- **`signals.js`** (file mới): `sma/rsi/cmf/roc`, `compute` (ma trận 3×3),
+  `streaks`, `volRatio/extremes/periodReturn/avgVolume`, `toWeekly`. Dùng chung
+  cho badge lẫn tab quét rổ nên không nhân đôi phép tính.
+  **5 chỗ cố ý khác tài liệu FiinTrade — chi tiết + lý do trong `CLAUDE.md` mục 6.**
+- **Badge tín hiệu** cạnh tên mã trong panel chart. 5 mức: Tăng mạnh / Tăng /
+  Trung tính / Giảm / Giảm mạnh.
+- **Tab "Tín hiệu"** (thứ 5) trong card thị trường — không thêm section mới, 0
+  pixel dọc trên desktop. 3 tab con: Tổng hợp (bảng 9 cột, đổi khung ngày/tuần,
+  chỉnh cửa sổ RSI) / Giá–KL / Chiến lược. Click mã bất kỳ → nhảy sang chart.
+- **Rổ `HOSE_LIQUID`** trong `config.js`: 49 mã HOSE có KL trung bình 5 phiên
+  ≥3 triệu, **27 mã ngoài VN30** (VIX, GEX, VND, DXG, DIG, PNJ, CII, VCI, MSB,
+  PDR, POW, VSC, HCM, PVT, PVD, VCG, HAG…). Dựng từ dữ liệu thật: SSI trả cả
+  sàn trong 1 lần gọi (2.487 dòng/phiên, 3 trang), lọc `^[A-Z]{3}$` bỏ trái
+  phiếu/chứng quyền còn 433 mã. **Danh sách TĨNH** — cách dựng lại ghi trong
+  comment `config.js`, nên soát vài tháng/lần.
+- **Nạp dữ liệu lazy + do user bấm nút.** Tuần tự (limiter concurrency=1), có
+  thanh tiến trình, cache `state.sigBars` theo phiên. Cold VN30 ~32s / 30 mã.
+  Đã đo: vòng refresh 45s vẫn **chỉ 1 call history** như trước khi thêm.
+- Dòng trạng thái báo độ phủ (`22/49 mã — bấm Tải dữ liệu…`) vì các rổ chồng
+  lấn nhau, đổi rổ dễ tưởng đã tải đủ.
+
+Version hiện `?v=20260726a`.
 
 ---
 
@@ -217,6 +239,8 @@ Mock gốc vẫn còn: https://dashboardstock.io.vn/mock-liquid-glass.html
 ## 5. VIỆC CÒN TREO
 
 **Tính năng tiếp theo (user đã chọn, CHƯA làm):**
+- **Tier 1 đã xong 26/07** (mục 2). Còn Tier 2 Momentum Score A–F — đủ dữ liệu,
+  dùng lại `netForeignVal` + `state.sigBars` đã có sẵn.
 - **#3 Theo dõi dòng tiền** — phát hiện đột biến khối lượng/giá trị (spike vs
   TB 20 phiên). Đụng `server/index.js` (endpoint mới + `cp` sang root). Gộp luôn
   **sizing heatmap theo vốn hóa** (thêm 1 endpoint marketcap VN30 warmed thay 30 call).
@@ -228,7 +252,7 @@ Mock gốc vẫn còn: https://dashboardstock.io.vn/mock-liquid-glass.html
 (scoring VGM / technical-analysis / ranking). Đối chiếu với dữ liệu đang có
 (SSI FCData, VNDirect finfo). Phân 4 tầng khả thi:
 
-**Tầng 1 — làm được ngay, frontend-only, 0 call thêm:**
+**Tầng 1 — ĐÃ LÀM XONG 26/07 (xem mục 2):**
 - **Tín hiệu kỹ thuật tổng hợp**: MA5 + RSI14 + CMF20 + ROC9 → gộp 2 nhóm
   (TB Động / Chỉ tiêu) → ma trận 3×3 ra Strong Bullish…Strong Bearish.
   `CMF = Σ(CLV×volume)/Σvolume`, `CLV = ((close−low)−(high−close))/(high−low)`;

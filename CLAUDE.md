@@ -53,7 +53,7 @@ nghiệp, tin tức theo mã, lịch sử giao dịch cá nhân tính lãi/lỗ 
 
 Thứ tự nạp script trong `index.html` (đừng đổi):
 lightweight-charts → `config.js` → `mockData.js` → `dataService.js` →
-`portfolio.js` → `chartModule.js` → `app.js`
+`portfolio.js` → `signals.js` → `chartModule.js` → `app.js`
 
 > Lưu ý: repo còn `index.js` + `package.json` ở thư mục gốc — bản sao server
 > để Render deploy từ root. Nguồn sự thật: `server/index.js`; sửa xong phải
@@ -184,6 +184,37 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + 3 baseUrl trỏ
   **`13000/14000/23000` giống nhau ở mọi companyForm**, chỉ dòng doanh thu khác.
 - Render Free tier ngủ sau 15 phút → giữ thức bằng GitHub Actions (xem mục 7).
 
+### Tín hiệu FiinTrade — 5 chỗ CỐ Ý làm khác tài liệu (user chốt 25/07/2026)
+
+Nằm trong `signals.js`. **Đừng "sửa lại cho đúng tài liệu"** — cả 5 đều đã cân
+nhắc và user duyệt từng cái:
+
+1. **ROC(9) dùng ngưỡng 0**, không phải 30/70. Tài liệu chép nhầm từ dòng RSI
+   ngay trên: ROC không bị chặn 0–100, nó dao động quanh 0. Để 30 thì gần như
+   không mã nào ra tín hiệu.
+2. **RSI cắt 30/70 có cửa sổ 3 phiên** (chỉnh được ở UI). Đúng nghĩa đen thì tín
+   hiệu chỉ sống 1 phiên, cả bảng luôn Trung tính. Hệ quả nhìn thấy được: một mã
+   RSI 26,9 vẫn có thể gắn nhãn "Tăng" vì nó vừa cắt lên 30 rồi tụt lại.
+3. **Không có khối lượng ước lượng trong phiên.** FiinTrade quy đổi KL hiện tại
+   ra cả phiên (`KL × tổng giờ / giờ đã trôi`). `DailyStockPrice` chỉ có snapshot
+   cuối ngày → mọi so sánh KL dùng phiên gần nhất ĐÃ đóng cửa. Muốn bản trong
+   phiên phải chuyển sang FastConnect Streaming (xem mục 8, Tier 4).
+4. **"Thủng đáy" dùng `giá < đáy`.** Tài liệu viết `giá > đáy` — mâu thuẫn với
+   chính định nghĩa của nó ở đoạn trên ("xuống dưới đáy").
+5. **Đỉnh/đáy so theo GIÁ ĐÓNG CỬA**, không phải giá cao/thấp nhất trong phiên.
+   Đo thật trên VN30 khung 1 tháng (bỏ lọc KL): theo đóng cửa ra 10 mã thủng
+   đáy, theo giá thấp nhất phiên chỉ ra 1 mã.
+
+Hai ràng buộc kiến trúc đi kèm, đừng phá:
+- **Cửa sổ tính tín hiệu cố định `SIG_DAYS = 180`, KHÔNG dùng `state.range`.**
+  RSI(14)/CMF(20) cho số khác nhau ở 1M vs 6M — cùng một mã cùng một ngày mà ra
+  2 badge khác nhau thì user mất niềm tin vào cả tính năng.
+- **Quét cả rổ KHÔNG nằm trong `refreshAll()`.** Vòng 45s nạp lại 30–50 mã sẽ
+  dựng lại đúng vòng xoáy throttle đã sửa hôm 23/07. Fetch phải lazy + do user
+  bấm nút, tuần tự (limiter concurrency=1), cache theo phiên trong `state.sigBars`.
+- Badge của mã đang chọn gọi **sau** khi chart có dữ liệu và không `await` —
+  đặt trước sẽ chen hàng ở limiter và làm chậm đúng thứ user đang nhìn.
+
 ### Lightweight Charts — 4 cạm bẫy (phát hiện 25/07/2026)
 
 - **Đừng `fitContent()` rồi mới đổi width.** Bar spacing tính theo width tại lúc
@@ -236,7 +267,7 @@ Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
 **Dự án hoàn thành, chạy dữ liệu thật end-to-end tại
 https://dashboardstock.io.vn** — `USE_MOCK: false`,
 `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
-Cache busting hiện `?v=20260725b` (bump mỗi lần sửa JS/CSS).
+Cache busting hiện `?v=20260726a` (bump mỗi lần sửa JS/CSS).
 
 **Thêm phiên 25/07/2026 (frontend-only):**
 - **Thước đo trên chart** (nút "Đo"): 2 click → số nến + % biến động + khoảng
@@ -247,6 +278,24 @@ Cache busting hiện `?v=20260725b` (bump mỗi lần sửa JS/CSS).
 - `ChartModule.setData(history, "SYM|range")` — refresh 45s cùng dataset không
   xóa nét vẽ nữa.
 - 4 lỗi chart có sẵn đã sửa — xem "Lightweight Charts — 4 cạm bẫy" ở mục 6.
+- Bollinger 3 đường và 2 biên RSI 70/30 dày 1px → **2px** (biên RSI đổi màu
+  `rgba(90,102,125,0.85)` cho rõ hơn).
+
+**Thêm phiên 26/07/2026 — Tín hiệu FiinTrade Tier 1 (frontend-only):**
+- `signals.js` (mới): `sma/rsi/cmf/roc`, `compute` (ma trận 3×3), `streaks`,
+  `volRatio/extremes/periodReturn/avgVolume`, `toWeekly`. Dùng chung cho badge
+  và tab quét rổ. **5 sai lệch cố ý so với tài liệu — xem mục 6.**
+- **Badge tín hiệu** cạnh tên mã trong panel chart (`#symbolSignal`).
+- **Tab "Tín hiệu"** (thứ 5) trong card thị trường, 3 tab con: Tổng hợp (bảng 9
+  cột, đổi khung ngày/tuần, chỉnh cửa sổ RSI) / Giá–KL / Chiến lược. Click mã
+  bất kỳ → `selectSymbol()` nhảy sang chart mã đó.
+- `config.js` thêm rổ **`HOSE_LIQUID`** — 49 mã HOSE có KL trung bình 5 phiên
+  ≥3 triệu (27 mã ngoài VN30). Danh sách TĨNH, cách dựng lại ghi trong comment.
+- `style.css`: token `--up-strong`/`--down-strong`/`--on-strong` cho **cả 2
+  theme** (5 mức tín hiệu phải phân biệt được ở Sáng lẫn Tối); bảng 9 cột cuộn
+  ngang trong `.sig-table-wrap` ở ≤640px (KHÔNG stack như bảng tài khoản — các
+  cột đều là số, đọc theo hàng).
+- Backend không đụng. Đã đo: vòng refresh 45s vẫn chỉ 1 call history như trước.
 - Bollinger 3 đường và 2 biên RSI 70/30 dày 1px → **2px** (biên RSI đổi màu
   `rgba(90,102,125,0.85)` cho rõ hơn).
 
@@ -294,9 +343,8 @@ commit** → vào tab Actions bấm *Enable workflow*.
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
 
 - **Chỉ báo theo phương pháp luận FiinTrade** — khảo sát 25/07/2026, phân 4 tầng
-  khả thi trong `HANDOFF.md` mục 5. Tóm tắt ràng buộc dữ liệu để khỏi khảo sát lại:
-  - Làm được ngay từ OHLCV sẵn có: CMF(20), ROC(9), tín hiệu tổng hợp 3×3,
-    vượt đỉnh/thủng đáy, vượt/cắt SMA20, tích lũy, giá–khối lượng đột biến.
+  khả thi trong `HANDOFF.md` mục 5. **Tier 1 ĐÃ LÀM XONG 26/07** (xem mục 7).
+  Còn lại:
   - Momentum Score (A–F) đủ dữ liệu — dùng lại `netForeignVal` trong quote.
   - Value/Growth Score cần mở rộng `financial_statements`; Growth thiếu hẳn
     "kế hoạch lợi nhuận ĐHCĐ" (không có nguồn).
