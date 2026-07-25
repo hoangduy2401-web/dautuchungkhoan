@@ -51,23 +51,6 @@ nghiệp, tin tức theo mã, lịch sử giao dịch cá nhân tính lãi/lỗ 
 
 ## 4. Cấu trúc file
 
-```
-dautuchungkhoan/
-├── index.html         ← layout chính, thứ tự nạp script quan trọng
-├── style.css          ← design tokens tại :root
-├── config.js          ← USE_MOCK, FALLBACK_TO_MOCK_ON_ERROR, baseUrl providers
-├── mockData.js        ← COMPANY_INFO, generateHistory/Fundamentals/News/Indices
-├── dataService.js     ← adapter mock ↔ real API
-├── portfolio.js       ← Portfolio.list/add/remove/computeHoldings
-├── chartModule.js     ← ChartModule IIFE: init/setData/toggleSeries/trendline/ruler
-├── app.js             ← state + render cho mọi widget
-└── server/
-    ├── index.js       ← Express proxy (SSI OHLC, indices, quote, news, debug)
-    ├── package.json
-    ├── .env.example   ← mẫu; bản thật là .env (KHÔNG commit)
-    └── .env           ← SSI_CONSUMER_ID, SSI_CONSUMER_SECRET, PORT
-```
-
 Thứ tự nạp script trong `index.html` (đừng đổi):
 lightweight-charts → `config.js` → `mockData.js` → `dataService.js` →
 `portfolio.js` → `chartModule.js` → `app.js`
@@ -291,27 +274,9 @@ Cache busting hiện `?v=20260725b` (bump mỗi lần sửa JS/CSS).
 - **Rà soát code**: escape regex mã trong news (né 502), escape XSS tin tức +
   chặn `javascript:` URL, timeout cho trade call FCTrading.
 
-Đã kiểm chứng trên production (Render, 22/07/2026):
-
-| Endpoint | Kết quả |
-|---|---|
-| `/api/debug/token` | auth SSI OK |
-| `/api/price/history` | FPT 30 ngày → 23 nến; 180 ngày → 121 nến, chunking không trùng lặp |
-| `/api/price/indices` | VNINDEX 1668.53 (-3.58%), VN30, HNXINDEX, UPCOM |
-| `/api/price/quote` | FPT 64.6 (-0.31%), VNM 59.1 (+1.20%) |
-| `/api/fundamentals/:symbol` | đủ 10/10 chỉ số — FPT, VCB, HPG, MWG, VNM, SSI |
-| `/api/news` | CafeF, lọc mã tiếng Việt đúng |
-
 **Keep-alive**: `.github/workflows/keep-alive.yml` ping `/health` mỗi 10 phút
 24/7. Lưu ý: GitHub **tự tắt scheduled workflow sau 60 ngày repo không có
 commit** → vào tab Actions bấm *Enable workflow*.
-
-**Watchlist đã lưu localStorage** (22/07/2026): trước đó `state.watchlist`
-chỉ ở RAM, F5 là về lại `DEFAULT_WATCHLIST`. Đã xác nhận chạy đúng trên Edge
-sau hard refresh (`typeof saveWatchlist === "function"`).
-
-`REBOOT_SCRIPT.md` đã xóa — mô tả trạng thái tiền-viết-lại (TCBS làm
-fundamentals, backend chưa test), dễ khiến phiên sau đi sai hướng.
 
 ### Việc cần làm tiếp theo
 
