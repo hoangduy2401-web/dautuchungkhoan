@@ -1,4 +1,4 @@
-# HANDOFF — Dashboard "Bảng Điện" (cập nhật 24/07/2026, phiên 2)
+# HANDOFF — Dashboard "Bảng Điện" (cập nhật 25/07/2026)
 
 > Dán file này làm prompt đầu tiên của phiên mới để tiếp tục không mất bối cảnh.
 > **`CLAUDE.md` ở cùng repo là tài liệu kỹ thuật đầy đủ** (format API, cạm bẫy,
@@ -220,6 +220,45 @@ Mock gốc vẫn còn: https://dashboardstock.io.vn/mock-liquid-glass.html
 - **#3 Theo dõi dòng tiền** — phát hiện đột biến khối lượng/giá trị (spike vs
   TB 20 phiên). Đụng `server/index.js` (endpoint mới + `cp` sang root). Gộp luôn
   **sizing heatmap theo vốn hóa** (thêm 1 endpoint marketcap VN30 warmed thay 30 call).
+  Gộp luôn nhóm "giá – khối lượng" của FiinTrade (xem dưới) — cùng bản chất.
+
+### Đánh giá phương pháp luận FiinTrade (25/07/2026 — chưa làm gì, chỉ khảo sát)
+
+Đọc 3 tài liệu ở `github.com/mrd-bdsmetro/FiinTrade-Methodology`
+(scoring VGM / technical-analysis / ranking). Đối chiếu với dữ liệu đang có
+(SSI FCData, VNDirect finfo). Phân 4 tầng khả thi:
+
+**Tầng 1 — làm được ngay, frontend-only, 0 call thêm:**
+- **Tín hiệu kỹ thuật tổng hợp**: MA5 + RSI14 + CMF20 + ROC9 → gộp 2 nhóm
+  (TB Động / Chỉ tiêu) → ma trận 3×3 ra Strong Bullish…Strong Bearish.
+  `CMF = Σ(CLV×volume)/Σvolume`, `CLV = ((close−low)−(high−close))/(high−low)`;
+  `ROC = (giá nay/giá 9 kỳ trước − 1)×100`. Tính thẳng từ mảng OHLCV đã fetch.
+- **Giá – khối lượng**: giá/KL tăng-giảm liên tục >3 phiên, KL tăng + giá tăng,
+  KL tăng + giá giảm. Trùng ý tưởng #3 ở trên.
+- **Chiến lược TA trên rổ có sẵn** (VN30/HNX30/UPCOM đã warm): vượt đỉnh/thủng
+  đáy (max-min 3/6/9/12 tháng), vượt/cắt SMA20 kèm KL đột biến, biến động mạnh
+  nhất theo ngày/tuần/tháng, tích lũy (KL ước lượng / KL TB 10 phiên > 2).
+
+**Tầng 2 — cần thêm tính toán, không cần nguồn mới:**
+- **Momentum Score (A–F)** — 5 tiêu chí FiinTrade, tối đa 13 điểm: RSI tăng 3
+  phiên liên tiếp & <80; SMA5/20/100 so với giá; giá tăng 2 phiên/4 tuần/4 tháng;
+  KL TB tháng theo 3 ngưỡng 500k/300k/200k; **khối ngoại mua ròng** (đã có sẵn
+  `netForeignVal` trong payload quote). Xếp hạng theo phân vị trong rổ.
+- Value/Growth Score cần mở rộng `financial_statements` (EBITDA, tài sản
+  ngắn/dài hạn, tiền mặt, CFO 3 năm) — tốn thêm call VNDirect, để sau.
+  Growth còn thiếu hẳn "kế hoạch lợi nhuận ĐHCĐ" — không có nguồn.
+
+**Tầng 3 — chỉ làm được bản rút gọn:** FiinTrade Ranking. 3/6 nguyên tắc không
+có dữ liệu (khuyến nghị analyst, giao dịch nội bộ/tổ chức/tự doanh, EPS dự phóng).
+Phần làm được: quy mô (vốn hóa + tổng tài sản), dòng tiền HĐKD 3 năm, thanh khoản
+— và chỉ xếp hạng **trong rổ 60 mã**, không phải toàn ngành ICB level 3.
+
+**Tầng 4 — KHÔNG khả thi:** toàn bộ nhóm "tín hiệu nhiễu" (mua trần–bán sàn,
+hủy lệnh, đè giá–đẩy giá, mua/bán chủ động BU/SD, chốt phiên). Cần **order book
+cấp 2 real-time** (giá/KL đặt mua-bán 1/2/3, tick khớp trong phiên) qua
+FastConnect **Streaming** (WebSocket, gói đăng ký khác) — kiến trúc giữ kết nối
+liên tục, không hợp cơ chế cache/warm hiện tại. Đây là nhóm giá trị nhất của
+FiinTrade nhưng vượt scope dashboard cá nhân.
 
 **Việc nhỏ (không chặn):**
 1. **Enforce HTTPS chưa bật được**: tên miền gốc mới có 1 bản ghi A

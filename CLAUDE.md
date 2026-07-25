@@ -283,7 +283,8 @@ commit** → vào tab Actions bấm *Enable workflow*.
 1. **Tính năng #3 — Theo dõi dòng tiền** (user đã chọn, chưa làm): phát hiện
    đột biến khối lượng/giá trị giao dịch (spike vs trung bình 20 phiên). Sẽ đụng
    `server/index.js` (endpoint mới, `cp` sang root). Gộp luôn: sizing heatmap
-   theo vốn hóa (cần marketcap VN30 — thêm endpoint warmed 1 call thay 30).
+   theo vốn hóa (cần marketcap VN30 — thêm endpoint warmed 1 call thay 30) và
+   nhóm "giá – khối lượng" của FiinTrade (xem `HANDOFF.md` mục 5) — cùng bản chất.
 2. (Cải tiến) Portfolio thủ công: mã ngoài watchlist+VN30 dùng giá vốn làm giá
    hiện tại (P&L=0) vì `state.quotes` không có — fetch thêm quote nếu muốn P&L live.
 3. Thêm 3 bản ghi A còn thiếu (hoặc chuyển DNS sang Cloudflare) → bật
@@ -292,6 +293,17 @@ commit** → vào tab Actions bấm *Enable workflow*.
 
 ## 8. Ý tưởng dài hạn (chưa yêu cầu cụ thể)
 
+- **Chỉ báo theo phương pháp luận FiinTrade** — khảo sát 25/07/2026, phân 4 tầng
+  khả thi trong `HANDOFF.md` mục 5. Tóm tắt ràng buộc dữ liệu để khỏi khảo sát lại:
+  - Làm được ngay từ OHLCV sẵn có: CMF(20), ROC(9), tín hiệu tổng hợp 3×3,
+    vượt đỉnh/thủng đáy, vượt/cắt SMA20, tích lũy, giá–khối lượng đột biến.
+  - Momentum Score (A–F) đủ dữ liệu — dùng lại `netForeignVal` trong quote.
+  - Value/Growth Score cần mở rộng `financial_statements`; Growth thiếu hẳn
+    "kế hoạch lợi nhuận ĐHCĐ" (không có nguồn).
+  - **Nhóm "tín hiệu nhiễu" (mua trần–bán sàn, hủy lệnh, đè/đẩy giá, BU/SD,
+    chốt phiên) KHÔNG làm được** — cần order book cấp 2 real-time qua
+    FastConnect Streaming (WebSocket, gói đăng ký khác). Đừng thử lại bằng
+    `DailyStockPrice`: endpoint đó chỉ có snapshot cuối ngày.
 - MACD (12,26,9) theo khuôn mẫu RSI.
 - Đồng bộ lịch sử giao dịch đa thiết bị: thay `portfolio.js` bằng bản gọi API
   tới backend có DB (Postgres/Supabase), giữ nguyên chữ ký
