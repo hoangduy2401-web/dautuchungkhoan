@@ -191,7 +191,22 @@ hoặc đổi khung mới xóa.
 - Dòng trạng thái báo độ phủ (`22/49 mã — bấm Tải dữ liệu…`) vì các rổ chồng
   lấn nhau, đổi rổ dễ tưởng đã tải đủ.
 
-Version hiện `?v=20260726a`.
+**Phiên 30/07/2026 — fix "lần tải đầu chậm, số sai, phải F5 lần 2":**
+Nguyên nhân đo được: (1) keep-alive GitHub Actions chạy cách nhau **56–191 phút**
+chứ không phải 10 phút → Render Free ngủ gần như suốt → lần tải đầu = cold start
+30–60s; (2) mọi call abort ở timeout 6s rồi **im lặng rơi về mock** → cả bảng
+hiện số bịa trông y như số thật.
+- `dataService.js`: thêm `wakeBackend()` probe `/health` trước khi nạp dữ liệu;
+  `livePrice()` thay `withFallback()` cho indices/quote/history — **giá không bao
+  giờ fallback mock nữa**; `T_FAST` 6s → 10s.
+- `app.js`: `bootData()` + `refreshCycle()`, badge `#backendStatus` đếm giây khi
+  đang đánh thức, ô thiếu dữ liệu hiện `—` thay vì `0,00`.
+- Đã test thật trên trình duyệt: server thức = số đúng, badge ẩn; server chết =
+  badge vàng "Đang đánh thức máy chủ… Ns" rồi badge đỏ, **không một số bịa nào**.
+- **Backend không đụng.** Đã loại trừ limiter/30 request song song bằng đo thật.
+- **Việc user phải tự làm: mục 5, "Việc nhỏ" #0 — dựng pinger ngoài.**
+
+Version hiện `?v=20260730a`.
 
 ---
 
@@ -285,6 +300,12 @@ liên tục, không hợp cơ chế cache/warm hiện tại. Đây là nhóm gi�
 FiinTrade nhưng vượt scope dashboard cá nhân.
 
 **Việc nhỏ (không chặn):**
+0. **CHẶN THẬT SỰ — dựng pinger ngoài mỗi 5 phút** (user tự làm, 30/07/2026).
+   Cron GitHub Actions đo được chạy cách nhau 56–191 phút, không giữ nổi Render
+   Free thức (ngủ sau 15 phút). Dùng cron-job.org hoặc UptimeRobot, URL
+   `https://dashboard-chung-khoan.onrender.com/health`, chu kỳ 5 phút. Giữ
+   workflow GitHub làm lớp dự phòng. Render Free có 750 giờ instance/tháng,
+   thức 24/7 ≈ 730 giờ — vẫn đủ **nếu chỉ 1 service**.
 1. **Enforce HTTPS chưa bật được**: tên miền gốc mới có 1 bản ghi A
    (`185.199.108.153`); GitHub đòi đủ 4 (`.108/.109/.110/.111.153`). DNS Mắt Bão
    có vẻ chỉ cho 1 bản ghi A → phải chuyển nameserver sang Cloudflare. `http://`

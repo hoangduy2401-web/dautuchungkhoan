@@ -24,6 +24,10 @@ const DataService = (function () {
 
   // Run the real fetch; on failure fall back to mock so the UI stays alive
   // while the backend is being wired up (APP_CONFIG.FALLBACK_TO_MOCK_ON_ERROR).
+  //
+  // NOT used for prices/indices/history any more — see the block below. Mock
+  // fundamentals/news are obviously placeholder text; a mock *price* is an
+  // invented number that looks exactly like a real one.
   async function withFallback(label, realFn, mockFn) {
     if (cfg.USE_MOCK) return mockFn();
     try {
@@ -35,23 +39,70 @@ const DataService = (function () {
     }
   }
 
+  // Price data never falls back to mock. A fabricated quote is indistinguishable
+  // from a real one on screen, so a failed fetch must surface as "no data", not
+  // as a plausible wrong number. Callers handle the rejection.
+  function livePrice(realFn, mockFn) {
+    if (cfg.USE_MOCK) return Promise.resolve(mockFn());
+    return realFn();
+  }
+
+  // ---- Backend wake-up probe ------------------------------------------------
+  // Render Free spins the instance down after 15 minutes idle; the next request
+  // pays a 30-60s cold start. Firing the normal 10s-timeout data calls into that
+  // window makes every one of them abort — which is exactly how the board used
+  // to fill with mock numbers on first load. So: probe /health with a long
+  // budget FIRST, and only start loading data once the instance answers.
+  const healthUrl = () => cfg.priceProvider.baseUrl.replace(/\/api\/.*$/, "") + "/health";
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  let awakeUntil = 0; // skip the probe entirely while we know it is up
+  const AWAKE_TRUST_MS = 60_000;
+
+  // Resolves true once /health answers, false if the whole budget runs out.
+  async function wakeBackend(budgetMs = 90_000) {
+    if (cfg.USE_MOCK) return true;
+    if (Date.now() < awakeUntil) return true;
+    const started = Date.now();
+    while (Date.now() - started < budgetMs) {
+      try {
+        await fetchJson(healthUrl(), 25_000);
+        awakeUntil = Date.now() + AWAKE_TRUST_MS;
+        return true;
+      } catch (err) {
+        await sleep(2000);
+      }
+    }
+    return false;
+  }
+
+  // Called by the UI when a data call fails: forces the next cycle to re-probe
+  // instead of trusting the cached "awake" flag.
+  function markAsleep() {
+    awakeUntil = 0;
+  }
+
   // ---- Company info: static in both modes (no dedicated endpoint) ----
   function getCompanyInfo(symbol) {
     return COMPANY_INFO[symbol] || { name: symbol, exchange: "HOSE" };
   }
 
-  // Per-endpoint timeouts. Fast endpoints abort quickly so a throttled symbol
-  // falls back to mock/last value fast instead of stalling the widget. History
-  // is chunked (up to ~3 sequential SSI calls) so it gets a longer budget.
-  // The backend keeps a longer (18s) SSI timeout, so a slow-but-valid call
-  // still finishes server-side and caches for the next 45s refresh.
-  const T_FAST = 6000; // quote / indices / fundamentals / news
+  // Per-endpoint timeouts. Fast endpoints abort quickly so one throttled symbol
+  // cannot stall the widget. History is chunked (up to ~3 sequential SSI calls)
+  // so it gets a longer budget. The backend keeps a longer (18s) SSI timeout, so
+  // a slow-but-valid call still finishes server-side and caches for the next
+  // 45s refresh.
+  //
+  // 10s, not 6s: measured against the live backend, 30 parallel quotes on a cold
+  // cache finish in ~2s — but the old 6s left almost no headroom, so a single
+  // slow SSI call aborted the request. wakeBackend() already absorbs the cold
+  // start, so this budget only has to cover a cold *cache*.
+  const T_FAST = 10000; // quote / indices / fundamentals / news
   const T_HISTORY = 12000;
 
   // ---- Market indices: [{code, value, changePct}] ----
   function getIndices() {
-    return withFallback(
-      "indices",
+    return livePrice(
       () => fetchJson(`${cfg.priceProvider.baseUrl}/indices`, T_FAST),
       () => generateIndices()
     );
@@ -59,8 +110,7 @@ const DataService = (function () {
 
   // ---- Latest quote: {price, changePct, volume} ----
   function getQuote(symbol) {
-    return withFallback(
-      `quote ${symbol}`,
+    return livePrice(
       () => fetchJson(`${cfg.priceProvider.baseUrl}/quote?symbol=${encodeURIComponent(symbol)}`, T_FAST),
       () => generateQuote(symbol)
     );
@@ -73,8 +123,7 @@ const DataService = (function () {
     // ~42 chunks — scale the timeout so a cold load actually completes (backend
     // caches the result, so only the first hit is slow).
     const timeoutMs = days > 730 ? 75000 : days > 270 ? 30000 : T_HISTORY;
-    return withFallback(
-      `history ${symbol}`,
+    return livePrice(
       () =>
         fetchJson(
           `${cfg.priceProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`,
@@ -131,6 +180,8 @@ const DataService = (function () {
     accountFetch("/login", apiKey, { method: "POST", body: JSON.stringify({ code }) });
 
   return {
+    wakeBackend,
+    markAsleep,
     getCompanyInfo,
     getIndices,
     getQuote,

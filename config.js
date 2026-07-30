@@ -5,8 +5,11 @@ const APP_CONFIG = {
   // Set to false to use the real backend proxy (server/index.js on Render).
   USE_MOCK: false,
 
-  // Keep the UI alive while the real backend is still being wired up:
-  // any failing API call silently falls back to mock data.
+  // Fallback to mock on error — applies to FUNDAMENTALS and NEWS only.
+  // Prices, quotes, indices and history deliberately do NOT fall back: a mock
+  // price looks exactly like a real one on screen, and that is how a cold Render
+  // start used to paint the whole board with invented numbers that only a manual
+  // refresh corrected (30/07/2026). They now surface as "—" instead.
   FALLBACK_TO_MOCK_ON_ERROR: true,
 
   // 45s, not 15s: the SSI backend rate-limits hard, and outside trading hours

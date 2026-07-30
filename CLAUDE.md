@@ -234,6 +234,44 @@ Hai ràng buộc kiến trúc đi kèm, đừng phá:
   clamp vào `[0, bars.length-1]`) thay vì `coordinateToTime`, rồi neo lại bằng
   `logicalToCoordinate(index)` để bám nến khi pan/zoom.
 
+### Lần tải đầu chậm + số sai (fix 30/07/2026)
+
+Triệu chứng: mở trang lần đầu chờ rất lâu, khi hiện ra thì mọi chỉ số đều sai,
+phải F5 thêm lần nữa mới đúng.
+
+**Nguyên nhân 1 — keep-alive GitHub Actions KHÔNG chạy đúng nhịp.** Cron khai
+báo `*/10 * * * *` nhưng lịch chạy thật (GitHub API, 12 lần liên tiếp): 13:01 ·
+11:22 · 09:16 · 06:39 · 04:10 · 00:59 · 23:37 · 22:33 · 21:30 · 20:34 · 19:38 ·
+18:02 — khoảng cách **56–191 phút, không lần nào ≤15 phút**. GitHub bóp cron trên
+runner free rất nặng. Render Free ngủ sau 15 phút → backend thực tế ngủ gần như
+suốt. Lần tải đầu = cold start 30–60s. **Đừng tin cron GitHub để giữ service
+thức** — phải dùng pinger ngoài (cron-job.org / UptimeRobot) mỗi 5 phút.
+
+**Nguyên nhân 2 — mock fallback im lặng biến cold start thành số bịa.** Mọi call
+abort ở `T_FAST=6000` → `withFallback` trả `generateQuote()`/`generateIndices()`.
+Badge `mockBadge` chỉ hiện khi `USE_MOCK: true`, fallback thì không báo gì → user
+nhìn số ngẫu nhiên tưởng là giá thật.
+
+Đã sửa (frontend-only):
+- `dataService.js` `wakeBackend(budgetMs)`: probe `/health` (timeout 25s, retry
+  mỗi 2s, tổng 90s) **trước** khi nạp dữ liệu; cache "đang thức" 60s để vòng
+  refresh 45s không probe lại. `markAsleep()` để huỷ cache đó khi call lỗi.
+- `livePrice()` thay `withFallback()` cho **indices / quote / history** — KHÔNG
+  fallback mock nữa, lỗi thì reject. `FALLBACK_TO_MOCK_ON_ERROR` giờ chỉ còn áp
+  cho fundamentals + news. **Đừng gắn lại mock cho giá**: một giá bịa trên màn
+  hình không thể phân biệt với giá thật.
+- `T_FAST` 6s → **10s**. Đo thật: 30 quote song song cache ấm 0,14–0,25s mỗi cái;
+  15 quote cache rỗng song song tối đa 1,9s. 6s không đủ biên an toàn.
+- `app.js`: `bootData()` (probe + đếm giây + `#backendStatus`) chạy thay
+  `refreshAll()` lúc `DOMContentLoaded`; `refreshCycle()` bọc vòng 45s để probe
+  lại nếu instance ngủ tiếp. Ô thiếu quote hiện `—`, **không phải `0,00`**.
+- Guard bắt buộc vì giá giờ reject được: `loadSelectedSymbol` (quote + history),
+  form thêm mã (`.catch`), `loadIndices` (empty state).
+
+**Không phải nguyên nhân — đừng sửa lại:** limiter concurrency=1 và 30 request
+song song từ browser. Đã đo trực tiếp trên backend live, cả hai đều nhanh. Gộp
+30 quote thành endpoint batch là tối ưu vô ích.
+
 ### Hiệu năng — SSI throttle & kiến trúc cache (fix 23/07/2026)
 
 Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
@@ -267,7 +305,12 @@ Triệu chứng: dashboard load >5 phút. Đo trực tiếp backend live:
 **Dự án hoàn thành, chạy dữ liệu thật end-to-end tại
 https://dashboardstock.io.vn** — `USE_MOCK: false`,
 `FALLBACK_TO_MOCK_ON_ERROR: true` vẫn bật làm lưới an toàn.
-Cache busting hiện `?v=20260726a` (bump mỗi lần sửa JS/CSS).
+Cache busting hiện `?v=20260730a` (bump mỗi lần sửa JS/CSS).
+
+**Phiên 30/07/2026 — fix lần tải đầu chậm + số sai (frontend-only):** probe
+`/health` trước khi nạp dữ liệu, bỏ mock fallback cho giá/chỉ số/history, badge
+`#backendStatus`. Chi tiết + số đo trong mục 6. **Việc còn lại của user: dựng
+pinger ngoài mỗi 5 phút** — cron GitHub không đủ tin cậy (đo được gap 191 phút).
 
 **Thêm phiên 25/07/2026 (frontend-only):**
 - **Thước đo trên chart** (nút "Đo"): 2 click → số nến + % biến động + khoảng

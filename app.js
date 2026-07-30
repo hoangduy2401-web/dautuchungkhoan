@@ -109,9 +109,56 @@ document.addEventListener("DOMContentLoaded", () => {
   wireChartToolbar();
   wireThemeControls();
 
-  refreshAll();
+  bootData();
   scheduleRefreshLoop();
 });
+
+/* ============================================================
+   BACKEND STATUS + BOOT
+   The backend runs on Render Free, which sleeps after 15 idle minutes. A cold
+   start takes 30-60s. Loading data straight into that window used to abort
+   every request; combined with the old silent mock fallback, the board painted
+   itself with invented numbers that only a manual refresh corrected.
+   Now: probe /health first, tell the user what is happening, and paint nothing
+   until the instance actually answers.
+   ============================================================ */
+function setBackendStatus(text, kind) {
+  const el = document.getElementById("backendStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "backend-status" + (kind ? ` ${kind}` : "");
+  el.style.display = text ? "inline-block" : "none";
+}
+
+async function bootData() {
+  if (APP_CONFIG.USE_MOCK) return refreshAll();
+
+  document.getElementById("indexStrip").innerHTML =
+    `<div class="empty-state">Đang kết nối máy chủ…</div>`;
+
+  // Live elapsed counter: a 40s wait with no feedback reads as a broken page.
+  const t0 = Date.now();
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    setBackendStatus(
+      s < 5 ? "Đang kết nối máy chủ…" : `Đang đánh thức máy chủ… ${s}s`,
+      "warn"
+    );
+  }, 500);
+
+  const awake = await DataService.wakeBackend();
+  clearInterval(tick);
+
+  if (!awake) {
+    setBackendStatus("Máy chủ không phản hồi — sẽ tự thử lại", "err");
+    document.getElementById("indexStrip").innerHTML =
+      `<div class="empty-state">Không kết nối được máy chủ. Bảng sẽ tự cập nhật khi máy chủ trả lời.</div>`;
+    return; // deliberately no data: an empty board beats a fabricated one
+  }
+
+  setBackendStatus("", "");
+  await refreshAll();
+}
 
 /* ============================================================
    LIQUID GLASS THEME CONTROLS — Sáng/Tối toggle + Trong/Đục slider
@@ -161,9 +208,24 @@ function wireThemeControls() {
 // multiply concurrent SSI calls and choke the backend).
 function scheduleRefreshLoop() {
   setTimeout(async () => {
-    await refreshAll();
+    await refreshCycle();
     scheduleRefreshLoop();
   }, APP_CONFIG.REFRESH_INTERVAL_MS);
+}
+
+// One refresh cycle. Re-checks that the backend is awake first — the probe
+// short-circuits for 60s after a success, so on a healthy server this costs
+// nothing; if the instance slept again it waits instead of painting blanks.
+async function refreshCycle() {
+  if (!APP_CONFIG.USE_MOCK) {
+    const awake = await DataService.wakeBackend(30_000);
+    if (!awake) {
+      setBackendStatus("Máy chủ không phản hồi — sẽ tự thử lại", "err");
+      return;
+    }
+    setBackendStatus("", "");
+  }
+  await refreshAll();
 }
 
 function wireChartToolbar() {
@@ -239,8 +301,15 @@ async function loadIndices() {
   } catch (e) {
     console.error(e);
     if (!state.indices) state.indices = [];
+    // Indices are the canary: if they fail the instance is probably asleep
+    // again, so drop the "awake" flag and let the next cycle re-probe.
+    DataService.markAsleep();
   }
   const el = document.getElementById("indexStrip");
+  if (!state.indices.length) {
+    el.innerHTML = `<div class="empty-state">Chưa có dữ liệu chỉ số — đang chờ máy chủ.</div>`;
+    return;
+  }
   el.innerHTML = state.indices
     .map(
       (ix) => `
@@ -809,10 +878,11 @@ function renderWatchlist() {
   }
   el.innerHTML = state.watchlist
     .map((s) => {
-      const q = state.quotes[s] || { price: 0, changePct: 0 };
+      // No quote yet -> "—", not 0.00. A zero price reads as real data.
+      const q = state.quotes[s] || null;
       const info = DataService.getCompanyInfo(s);
       const pts = sparkPoints(state.sparks[s]);
-      const sparkColor = q.changePct >= 0 ? "var(--up)" : "var(--down)";
+      const sparkColor = q && q.changePct < 0 ? "var(--down)" : "var(--up)";
       const spark = pts
         ? `<svg class="spark" width="56" height="22" viewBox="0 0 56 22" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${sparkColor}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>`
         : "";
@@ -825,8 +895,8 @@ function renderWatchlist() {
         </div>
         ${spark}
         <div class="right">
-          <div class="price">${fmt(q.price)}</div>
-          <div class="chg ${trendClass(q.changePct)}">${fmtPct(q.changePct)}</div>
+          <div class="price">${q ? fmt(q.price) : "—"}</div>
+          <div class="chg ${q ? trendClass(q.changePct) : ""}">${q ? fmtPct(q.changePct) : "—"}</div>
         </div>
         <span class="rm" data-remove="${s}" title="Bỏ theo dõi">✕</span>
       </div>`;
@@ -914,6 +984,7 @@ function wireForms() {
     saveWatchlist();
     DataService.getQuote(sym)
       .then((q) => (state.quotes[sym] = q))
+      .catch(() => {}) // no quote yet: the row renders blank until a refresh gets one
       .finally(() => {
         renderWatchlist();
         renderTickerTape();
@@ -968,24 +1039,35 @@ async function loadSelectedSymbol() {
   if (!state.selected) return;
   const sym = state.selected;
   const info = DataService.getCompanyInfo(sym);
-  const q = state.quotes[sym] || (await DataService.getQuote(sym));
-  state.quotes[sym] = q;
+  // Quote/history no longer fall back to mock, so every call here can reject.
+  // A failure must leave the panel showing "—" (or the previous chart), never
+  // an invented price.
+  let q = state.quotes[sym];
+  if (!q) {
+    q = await DataService.getQuote(sym).catch(() => null);
+    if (q) state.quotes[sym] = q;
+  }
 
   document.getElementById("symbolTitle").innerHTML = `
     <span class="sym">${sym}</span>
     <span class="name">${info.name} · ${info.exchange}</span>
     <span id="symbolSignal"></span>
-    <span class="price ${trendClass(q.changePct)}">${fmt(q.price)} <small>${fmtPct(q.changePct)}</small></span>
+    <span class="price ${q ? trendClass(q.changePct) : ""}">${
+      q ? `${fmt(q.price)} <small>${fmtPct(q.changePct)}</small>` : "—"
+    }</span>
   `;
   const [history, fundamentals, news] = await Promise.all([
-    DataService.getHistory(sym, state.range),
+    DataService.getHistory(sym, state.range).catch(() => null),
     DataService.getFundamentals(sym),
     DataService.getNews(state.watchlist),
   ]);
 
   // Pass the dataset identity so the 45s refresh keeps any trendline/ruler the
   // user drew (same symbol + range = same anchors); switching either clears it.
-  ChartModule.setData(history, `${sym}|${state.range}`);
+  // No history = keep whatever the chart already shows rather than blanking it.
+  if (Array.isArray(history) && history.length) {
+    ChartModule.setData(history, `${sym}|${state.range}`);
+  }
   renderFundamentals(fundamentals);
   renderNews(news);
 
