@@ -950,7 +950,14 @@ app.get("/api/debug/raw", async (req, res) => {
 });
 
 // ============================================================
-app.get("/health", (req, res) => res.json({ ok: true }));
+// `startedAt` / `uptimeSec` tell you whether this instance just cold-started.
+// Render Free spins the instance down after 15 idle minutes, and a cold start
+// is the difference between an instant page load and a 30-60s wait — so when
+// the dashboard feels slow, this is the first thing to check.
+const BOOT_AT = new Date().toISOString();
+app.get("/health", (req, res) =>
+  res.json({ ok: true, startedAt: BOOT_AT, uptimeSec: Math.round(process.uptime()) })
+);
 
 // ------------------------------------------------------------
 // Warm-cache loop. Sequentially (concurrency 1) refresh the hot data —
