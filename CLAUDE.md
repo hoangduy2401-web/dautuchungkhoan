@@ -49,8 +49,8 @@ danh mục SSI thật (chỉ đọc), lịch sử giao dịch cá nhân tính l�
   ↔ `server`).
 - **Sửa JS/CSS xong PHẢI bump `?v=YYYYMMDD<chữ>`** trong `index.html`, không thì
   user chạy code cũ tới 10 phút do cache GitHub Pages (đã mất 1 vòng debug vì vậy).
-- **Nguồn sự thật server là `server/index.js`**; sửa xong chạy
-  `cp server/index.js index.js` (Render deploy từ gốc). Xem mục 4.
+- **Server chỉ có một bản duy nhất: `server/index.js`.** Sửa xong là xong, KHÔNG
+  copy đi đâu cả. (Luật `cp server/index.js index.js` cũ đã bị xoá 31/07 — xem mục 4.)
 - **KHÔNG commit `server/.env`** hay credentials nào. `.gitignore` đã chặn.
 - Cuối phiên: chạy **`/handoff`** để cập nhật mục 9 + 10. Vá lỗi nhỏ thì khỏi.
 
@@ -100,13 +100,24 @@ Thứ tự nạp script trong `index.html` (đừng đổi):
 lightweight-charts → `config.js` → `mockData.js` → `dataService.js` →
 `portfolio.js` → `signals.js` → `chartModule.js` → `app.js`
 
-> Repo còn `index.js` + `package.json` ở thư mục gốc — bản sao server để Render
-> deploy từ gốc. Nguồn sự thật: `server/index.js`; sửa xong phải chạy
-> `cp server/index.js index.js` (và `package.json` nếu đổi dependency).
->
-> **Hack này sẽ bị bỏ ở GĐ 0** của quy hoạch mới: đổi "Root Directory" của
-> service trên Render thành `server`, rồi xoá 2 file ở gốc. Với 6 file route thì
-> chắc chắn có lúc quên `cp`.
+### Backend deploy — hack `cp` đã bị xoá (31/07/2026)
+
+Render có **Root Directory = `server`** (Dashboard → Projects → chọn service →
+Settings → nhóm Build & Deploy). Nghĩa là nó chạy thẳng `server/index.js`, và
+`index.js` + `package.json` ở gốc repo **chưa từng được dùng** — code chết. Luật
+`cp server/index.js index.js` là thừa, không rõ từ bao giờ.
+
+Cách xác định (git log vô dụng ở đây — chính hack `cp` làm hai file luôn bị sửa
+cùng một commit): sửa **chỉ** `server/index.js`, cố ý không copy sang gốc, push,
+rồi xem `/health`. Trả `startedAt` = Render chạy `server/`. Đã xác nhận
+`{"ok":true,"startedAt":"2026-07-31T02:05:51.524Z","uptimeSec":8}`.
+
+Đã xoá 2 file ở gốc. **Phụ thuộc cấu hình cần biết:** nếu ai đó xoá chữ `server`
+khỏi ô Root Directory, Render sẽ tìm `package.json` ở gốc, không thấy, và deploy
+hỏng. Ô đó phải luôn là `server`.
+
+Lợi ích kèm theo: Render chỉ deploy lại khi có thay đổi **trong** `server/` —
+sửa CSS/JS frontend không còn kích hoạt build backend vô ích.
 
 Tài liệu: `docs/QUYHOACH.md` (kế hoạch mở rộng), `docs/CLAUDE.moi.md` (bản nháp
 CLAUDE.md cho site đa kênh, chưa áp dụng).
@@ -438,6 +449,12 @@ giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 
 ### Nhật ký theo phiên
 
+**31/07/2026 — xoá hack `cp` + `/health` báo uptime.**
+Phát hiện Render vốn đã có Root Directory = `server`, nên `index.js` +
+`package.json` ở gốc là code chết và luật `cp` là thừa. Đã xác minh bằng phép thử
+`/health` (mục 4) rồi xoá 2 file. `/health` giờ trả `startedAt` + `uptimeSec` —
+kiểm tra đầu tiên khi dashboard chậm. **Không đụng frontend, không cần bump `?v=`.**
+
 **30/07/2026 — fix lần tải đầu chậm + số sai (frontend-only, backend không đụng).**
 `wakeBackend()` probe `/health` trước khi nạp dữ liệu; bỏ mock fallback cho
 giá/chỉ số/history; `T_FAST` 6s→10s; badge `#backendStatus`; ô thiếu dữ liệu hiện
@@ -504,8 +521,9 @@ Trong/Đục, `chartModule.applyTheme()`. Backup `style.css.pre-glass.bak` (loca
 
 ### Ưu tiên — quy hoạch mới
 Website quản lý gia sản đa kênh: `docs/QUYHOACH.md`. 8 giai đoạn, ~23 phiên,
-~11 tuần. **Việc kế tiếp: GĐ 0 mục 0.1** — đổi Root Directory trên Render sang
-`server`, xoá `index.js` + `package.json` ở gốc (user tự bấm trên dashboard Render).
+~11 tuần. Mục 0.1 đã xong 31/07. **Việc kế tiếp: GĐ 0 mục 0.2–0.9** — tách
+`style.css`, chuyển JS vào `assets/`, viết `nav.js` (kèm nút con mắt) và
+`store.js`. Toàn bộ làm được ngay, không cần user bấm gì.
 
 ### Tính năng chứng khoán chưa làm
 1. **Theo dõi dòng tiền** (user đã chọn từ 24/07, chưa làm): phát hiện đột biến

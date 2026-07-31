@@ -251,13 +251,15 @@ ghi rõ thời điểm, còn hơn hiện số bịa hoặc hiện trống không
     └── VANG.md  NGOAITE.md  COIN.md  TIETKIEM.md
 ```
 
-### 3.3 Bỏ hack `cp server/index.js index.js`
+### 3.3 Hack `cp server/index.js index.js` — ĐÃ XOÁ 31/07/2026
 
-Hiện Render deploy từ thư mục gốc nên phải copy tay file server mỗi lần sửa —
-đã là nguồn lỗi tiềm tàng ngay từ bây giờ, với 5 file route thì chắc chắn sẽ
-quên. **Sửa bằng cách đổi "Root Directory" của service trên Render thành
-`server`**, rồi xoá `index.js` + `package.json` ở gốc. Việc này làm ở GĐ 0,
-trước khi thêm bất kỳ route mới nào.
+Hoá ra Render đã có **Root Directory = `server`** sẵn, tức nó luôn chạy thẳng
+`server/index.js` và hai file ở gốc chưa từng được dùng. Luật `cp` là thừa,
+không rõ từ bao giờ. Đã xác minh bằng phép thử `/health` (chi tiết trong
+`CLAUDE.md` mục 4) rồi xoá `index.js` + `package.json` ở gốc.
+
+→ **Mục 0.1 của GĐ 0 coi như xong.** Backend giờ tách route thoải mái, không lo
+quên đồng bộ.
 
 ### 3.4 Lớp lưu trữ `store.js` — mấu chốt để không phải làm lại
 
@@ -361,7 +363,7 @@ Không thêm tính năng nào. Chỉ dọn chỗ.
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 0.1 | Đổi Root Directory trên Render sang `server`, xoá `index.js` + `package.json` ở gốc | **Bỏ hack `cp` vĩnh viễn.** Làm trước mọi thứ |
+| 0.1 | ~~Đổi Root Directory trên Render, xoá `index.js` + `package.json` ở gốc~~ | **XONG 31/07** — Root Directory vốn đã là `server`, hack `cp` là thừa. Xem 3.3 |
 | 0.2 | Tách `style.css` → `assets/css/base.css` + `chung-khoan.css` | Giữ nguyên giao diện 100% |
 | 0.3 | Chuyển JS vào `assets/js/core` + `assets/js/pages` | Giữ thứ tự nạp script |
 | 0.4 | Đổi `index.html` → `chung-khoan.html`, tạo `index.html` mới rỗng cho trang tổng | Thêm redirect để link cũ không chết |
