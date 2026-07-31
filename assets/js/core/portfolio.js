@@ -1,55 +1,69 @@
 // ============================================================
-// PORTFOLIO — personal transaction log in localStorage.
-// P&L uses weighted-average cost basis. Public API is stable:
-// list / add / remove / computeHoldings — do not change signatures
-// (app.js and a future DB backend depend on them).
+// PORTFOLIO — personal transaction log. Backed by Store (collection
+// `tx_stock`), so it follows Store from localStorage to Supabase in phase 5
+// without any page having to change.
+//
+// Public API is stable: list / add / remove / computeHoldings — do not change
+// the signatures.
+//
+// Why there is an in-memory cache: Store is async (it has to be — Supabase is),
+// but `list()` and `computeHoldings()` are called from render functions that run
+// synchronously. So the rows are held in memory and `load()` hydrates them once
+// at boot. Reads stay synchronous; writes go through Store and refresh the cache.
+//
+// CALLERS MUST `await Portfolio.load()` BEFORE THE FIRST RENDER, otherwise the
+// first paint shows an empty portfolio and only fills in on the next refresh.
 // ============================================================
 
 const Portfolio = (function () {
-  const KEY = "vn_dashboard_transactions_v1";
+  const COLLECTION = "tx_stock";
+  let cache = [];
+  let loaded = false;
 
-  function read() {
-    try {
-      return JSON.parse(localStorage.getItem(KEY)) || [];
-    } catch {
-      return [];
-    }
-  }
-  function write(txs) {
-    localStorage.setItem(KEY, JSON.stringify(txs));
-  }
-
-  function list() {
-    return read();
-  }
-
-  // tx: {symbol, type: "buy"|"sell", qty, price, date, note}
-  function add(tx) {
-    const txs = read();
-    txs.push({
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+  // Normalise on the way in so callers cannot store a half-typed transaction.
+  function normalise(tx) {
+    return {
       symbol: String(tx.symbol || "").trim().toUpperCase(),
       type: tx.type === "sell" ? "sell" : "buy",
       qty: Number(tx.qty) || 0,
       price: Number(tx.price) || 0,
       date: tx.date || new Date().toISOString().slice(0, 10),
       note: tx.note || "",
-    });
-    write(txs);
+    };
   }
 
-  function remove(id) {
-    write(read().filter((t) => t.id !== id));
+  async function load() {
+    cache = await Store.list(COLLECTION);
+    loaded = true;
+    return cache;
+  }
+
+  function list() {
+    if (!loaded) console.warn("[Portfolio] list() gọi trước load() — trả rỗng");
+    return cache;
+  }
+
+  // tx: {symbol, type: "buy"|"sell", qty, price, date, note}
+  async function add(tx) {
+    const row = await Store.add(COLLECTION, normalise(tx));
+    cache = await Store.list(COLLECTION);
+    return row;
+  }
+
+  async function remove(id) {
+    const ok = await Store.remove(COLLECTION, id);
+    cache = await Store.list(COLLECTION);
+    return ok;
   }
 
   // Returns [{symbol, qty, avgCost, currentPrice, marketValue,
   //           unrealizedPL, unrealizedPLPct, realizedPL}]
-  // for symbols currently held (qty > 0).
+  // for symbols currently held (qty > 0). Pure computation over the cache.
   function computeHoldings(currentPrices) {
     const bySymbol = {};
 
     // Process chronologically so weighted-average cost is correct.
-    const txs = read().slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+    const txs = cache.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
 
     txs.forEach((t) => {
       const s = (bySymbol[t.symbol] = bySymbol[t.symbol] || {
@@ -97,5 +111,7 @@ const Portfolio = (function () {
       .filter((h) => h.qty > 0 || h.realizedPL !== 0);
   }
 
-  return { list, add, remove, computeHoldings };
+  return { load, list, add, remove, computeHoldings };
 })();
+
+if (typeof module !== "undefined") module.exports = Portfolio;

@@ -357,21 +357,21 @@ Giả định nhịp 2-3 phiên/tuần.
 
 ---
 
-### GĐ 0 — Tái cấu trúc nền móng · ĐỘ KHÓ: THẤP · 2 phiên · Tuần 1
+### GĐ 0 — Tái cấu trúc nền móng · ĐỘ KHÓ: THẤP · 2 phiên · Tuần 1 — **ĐÃ XONG 31/07/2026**
 
 Không thêm tính năng nào. Chỉ dọn chỗ.
 
 | # | Việc | Ghi chú |
 |---|---|---|
 | 0.1 | ~~Đổi Root Directory trên Render, xoá `index.js` + `package.json` ở gốc~~ | **XONG 31/07** — Root Directory vốn đã là `server`, hack `cp` là thừa. Xem 3.3 |
-| 0.2 | Tách `style.css` → `assets/css/base.css` + `chung-khoan.css` | Giữ nguyên giao diện 100% |
-| 0.3 | Chuyển JS vào `assets/js/core` + `assets/js/pages` | Giữ thứ tự nạp script |
-| 0.4 | Đổi `index.html` → `chung-khoan.html`, tạo `index.html` mới rỗng cho trang tổng | Thêm redirect để link cũ không chết |
-| 0.5 | Viết `nav.js` — thanh điều hướng 6 trang dùng chung + **nút con mắt** | Trang chưa làm thì hiện "sắp có". Cơ chế che số làm luôn ở đây (xem 3.5) |
-| 0.6 | Viết `store.js` driver localStorage, **API trả Promise** | Xem 3.4 — làm sai ở đây là trả giá ở GĐ 5 |
-| 0.7 | Chuyển `portfolio.js` sang dùng `Store` | Phép thử đầu tiên cho lớp trừu tượng |
+| 0.2 | ~~Tách `style.css`~~ | **XONG 31/07** |
+| 0.3 | ~~Chuyển JS vào `assets/js/`~~ | **XONG 31/07** |
+| 0.4 | ~~Đổi `index.html` → `chung-khoan.html` + trang tổng rỗng~~ | **XONG 31/07** |
+| 0.5 | ~~`nav.js` + nút con mắt~~ | **XONG 31/07** — kèm `theme.js` tách chrome dùng chung |
+| 0.6 | ~~`store.js` driver localStorage, API trả Promise~~ | **XONG 31/07** |
+| 0.7 | ~~`portfolio.js` + watchlist sang `Store`~~ | **XONG 31/07** — `Portfolio.load()` phải await trước lần vẽ đầu |
 | 0.8 | `CLAUDE.md` mới ở gốc + chuyển bản cũ vào `docs/CHUNGKHOAN.md` | |
-| 0.9 | Kiểm chứng trang chứng khoán chạy y hệt trước | Đối chiếu số với bản live |
+| 0.9 | ~~Kiểm chứng trang chứng khoán chạy y hệt~~ | **XONG 31/07** — đã đối chiếu trên trình duyệt thật |
 
 **Rủi ro:** đây là lúc dễ làm hỏng trang đang chạy tốt nhất. Bắt buộc kiểm
 chứng trên trình duyệt thật trước khi push, không chỉ đọc code.

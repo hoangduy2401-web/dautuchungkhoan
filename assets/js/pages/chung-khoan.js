@@ -2,29 +2,30 @@
    STATE
    ============================================================ */
 // The watchlist survives reloads; DEFAULT_WATCHLIST is only the first-run seed.
-const WATCHLIST_KEY = "vn_dashboard_watchlist_v1";
+// Stored through Store (collection `watchlist`) so it moves to Supabase with
+// everything else in phase 5. Store is async, so state.watchlist starts as the
+// seed and hydrateWatchlist() replaces it before the first render.
+const WATCHLIST_COLLECTION = "watchlist";
 
-function loadWatchlist() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(WATCHLIST_KEY));
-    // An empty saved list is intentional (user removed everything) — keep it.
-    if (Array.isArray(saved)) return saved;
-  } catch {
-    /* corrupted entry -> fall back to the seed */
-  }
-  return [...APP_CONFIG.DEFAULT_WATCHLIST];
+async function hydrateWatchlist() {
+  const saved = await Store.list(WATCHLIST_COLLECTION);
+  // An empty saved list is intentional (user removed everything) — keep it.
+  // Distinguish "saved empty" from "never saved" via the raw key, since
+  // Store.list() returns [] for both.
+  const everSaved = localStorage.getItem("vn_dashboard_watchlist_v1") !== null;
+  if (everSaved) state.watchlist = saved.map((r) => (typeof r === "string" ? r : r.symbol));
+  if (!state.selected) state.selected = state.watchlist[0] || null;
 }
 
 function saveWatchlist() {
-  try {
-    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(state.watchlist));
-  } catch (err) {
-    console.warn("[watchlist] không lưu được:", err.message);
-  }
+  // Plain array of symbols, not {id,...} rows — the order IS the data here.
+  Store.replace(WATCHLIST_COLLECTION, state.watchlist).catch((err) =>
+    console.warn("[watchlist] không lưu được:", err.message)
+  );
 }
 
 const state = {
-  watchlist: loadWatchlist(),
+  watchlist: [...APP_CONFIG.DEFAULT_WATCHLIST],
   selected: null, // set right below, once the watchlist is known
   range: 90,
   quotes: {}, // symbol -> {price, changePct, volume}
@@ -93,10 +94,15 @@ const safeUrl = (u) => (/^https?:\/\//i.test(String(u || "")) ? String(u) : "#")
 /* ============================================================
    INIT
    ============================================================ */
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("mockBadge").style.display = APP_CONFIG.USE_MOCK ? "inline-block" : "none";
   tickClock();
   setInterval(tickClock, 1000);
+
+  // Store is async, so user data must be hydrated BEFORE the first render —
+  // otherwise the watchlist paints the seed and the portfolio paints empty,
+  // then both flicker to the real values a moment later.
+  await Promise.all([hydrateWatchlist(), Portfolio.load()]);
 
   renderRangeTabs();
   wireMarketTabs();
@@ -160,49 +166,6 @@ async function bootData() {
   await refreshAll();
 }
 
-/* ============================================================
-   LIQUID GLASS THEME CONTROLS — Sáng/Tối toggle + Trong/Đục slider
-   Mirrors the approved mock. The slider drives the glass fill alpha;
-   toggling the theme re-applies chart colours (chart reads CSS vars).
-   ============================================================ */
-// Per-theme glass alpha range for the slider (0 = Trong/clear, 100 = Đục).
-const GLASS = {
-  light: { min: 0.20, max: 0.85, raiseDelta: 0.18, def: 29 },
-  dark: { min: 0.02, max: 0.22, raiseDelta: 0.045, def: 15 },
-};
-let currentTheme = document.documentElement.getAttribute("data-theme") || "light";
-
-function setGlass(v) {
-  const g = GLASS[currentTheme] || GLASS.light;
-  const a = g.min + (g.max - g.min) * (v / 100);
-  const root = document.documentElement;
-  root.style.setProperty("--glass-a", a.toFixed(3));
-  root.style.setProperty("--glass-raised-a", Math.min(a + g.raiseDelta, 0.98).toFixed(3));
-}
-
-function setTheme(t) {
-  currentTheme = t;
-  document.documentElement.setAttribute("data-theme", t);
-  const dark = document.getElementById("tDark");
-  const light = document.getElementById("tLight");
-  if (dark) dark.classList.toggle("on", t === "dark");
-  if (light) light.classList.toggle("on", t === "light");
-  const range = document.getElementById("glassRange");
-  if (range) { range.value = GLASS[t].def; setGlass(range.value); }
-  // Chart colours (grid/text) come from CSS vars — re-apply after theme swap.
-  if (typeof ChartModule.applyTheme === "function") ChartModule.applyTheme();
-}
-
-function wireThemeControls() {
-  const light = document.getElementById("tLight");
-  const dark = document.getElementById("tDark");
-  const range = document.getElementById("glassRange");
-  if (light) light.addEventListener("click", () => setTheme("light"));
-  if (dark) dark.addEventListener("click", () => setTheme("dark"));
-  if (range) range.addEventListener("input", (e) => setGlass(e.target.value));
-  setTheme(currentTheme); // sync button state + slider + glass to the initial theme
-}
-
 // Self-scheduling loop: the next refresh is queued only AFTER the current one
 // finishes, so a slow cycle can never stack on top of another (which used to
 // multiply concurrent SSI calls and choke the backend).
@@ -259,10 +222,6 @@ function wireChartToolbar() {
     setTool(null);
     ChartModule.clearAll();
   });
-}
-
-function tickClock() {
-  document.getElementById("clock").textContent = new Date().toLocaleString("vi-VN");
 }
 
 let refreshInFlight = false;
@@ -993,10 +952,12 @@ function wireForms() {
       });
   });
 
-  document.getElementById("txForm").addEventListener("submit", (e) => {
+  document.getElementById("txForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = e.target;
-    Portfolio.add({
+    // await: Portfolio writes through Store, and refreshPortfolio() reads the
+    // cache Store just refreshed. Rendering first would show the old list.
+    await Portfolio.add({
       symbol: f.symbol.value,
       type: f.type.value,
       qty: f.qty.value,
@@ -1146,9 +1107,9 @@ function renderPortfolio() {
   const totalRealized = holdings.reduce((a, h) => a + h.realizedPL, 0);
 
   document.getElementById("holdingsSummary").innerHTML = `
-    <div class="stat"><div class="label">Giá trị danh mục</div><div class="val">${fmt(totalValue, 1)} tr đ</div></div>
-    <div class="stat"><div class="label">Lãi/lỗ tạm tính</div><div class="val ${trendClass(totalUnrealized)}">${fmt(totalUnrealized, 1)} tr đ</div></div>
-    <div class="stat"><div class="label">Lãi/lỗ đã chốt</div><div class="val ${trendClass(totalRealized)}">${fmt(totalRealized, 1)} tr đ</div></div>
+    <div class="stat"><div class="label">Giá trị danh mục</div><div class="val"><span class="money">${fmt(totalValue, 1)} tr đ</span></div></div>
+    <div class="stat"><div class="label">Lãi/lỗ tạm tính</div><div class="val ${trendClass(totalUnrealized)}"><span class="money">${fmt(totalUnrealized, 1)} tr đ</span></div></div>
+    <div class="stat"><div class="label">Lãi/lỗ đã chốt</div><div class="val ${trendClass(totalRealized)}"><span class="money">${fmt(totalRealized, 1)} tr đ</span></div></div>
   `;
 
   const holdEl = document.getElementById("holdingsTable");
@@ -1159,10 +1120,10 @@ function renderPortfolio() {
           .map(
             (h) => `<tr>
               <td>${h.symbol}</td>
-              <td class="num">${fmt(h.qty, 0)}</td>
+              <td class="num"><span class="money">${fmt(h.qty, 0)}</span></td>
               <td class="num">${fmt(h.avgCost)}</td>
               <td class="num">${fmt(h.currentPrice)}</td>
-              <td class="num ${trendClass(h.unrealizedPL)}">${fmt(h.unrealizedPL, 1)} (${fmtPct(h.unrealizedPLPct)})</td>
+              <td class="num ${trendClass(h.unrealizedPL)}"><span class="money">${fmt(h.unrealizedPL, 1)}</span> (${fmtPct(h.unrealizedPLPct)})</td>
             </tr>`
           )
           .join("")}</tbody>
@@ -1180,7 +1141,7 @@ function renderPortfolio() {
               <td>${t.date}</td>
               <td>${t.symbol}</td>
               <td><span class="pill ${t.type}">${t.type === "buy" ? "MUA" : "BÁN"}</span></td>
-              <td class="num">${fmt(t.qty, 0)}</td>
+              <td class="num"><span class="money">${fmt(t.qty, 0)}</span></td>
               <td class="num">${fmt(t.price)}</td>
               <td>${t.note || "—"}</td>
               <td><button class="del-btn" data-id="${t.id}" title="Xóa">✕</button></td>
@@ -1191,8 +1152,8 @@ function renderPortfolio() {
     : `<div class="empty-state">Chưa có giao dịch nào. Thêm ở tab "Thêm giao dịch".</div>`;
 
   txEl.querySelectorAll("[data-id]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      Portfolio.remove(btn.dataset.id);
+    btn.addEventListener("click", async () => {
+      await Portfolio.remove(btn.dataset.id); // await: render reads the cache Store refreshes
       renderPortfolio();
     });
   });
@@ -1302,10 +1263,10 @@ function renderAccount({ positions, cash, fetchedAt }) {
   setAccountStatus(`Cập nhật ${time}`, "up");
 
   document.getElementById("accountSummary").innerHTML = `
-    <div class="stat"><div class="label">Tổng tài sản</div><div class="val">${fmt(cash.totalAssets, 1)} tr đ</div></div>
-    <div class="stat"><div class="label">Tiền mặt</div><div class="val">${fmt(cash.cashBal, 1)} tr đ</div></div>
-    <div class="stat"><div class="label">Sức mua</div><div class="val">${fmt(cash.purchasingPower, 1)} tr đ</div></div>
-    <div class="stat"><div class="label">Dư nợ</div><div class="val ${cash.debt > 0 ? "down" : ""}">${fmt(cash.debt, 1)} tr đ</div></div>
+    <div class="stat"><div class="label">Tổng tài sản</div><div class="val"><span class="money">${fmt(cash.totalAssets, 1)} tr đ</span></div></div>
+    <div class="stat"><div class="label">Tiền mặt</div><div class="val"><span class="money">${fmt(cash.cashBal, 1)} tr đ</span></div></div>
+    <div class="stat"><div class="label">Sức mua</div><div class="val"><span class="money">${fmt(cash.purchasingPower, 1)} tr đ</span></div></div>
+    <div class="stat"><div class="label">Dư nợ</div><div class="val ${cash.debt > 0 ? "down" : ""}"><span class="money">${fmt(cash.debt, 1)} tr đ</span></div></div>
   `;
 
   document.getElementById("accountTable").innerHTML = positions.length
@@ -1317,12 +1278,12 @@ function renderAccount({ positions, cash, fetchedAt }) {
           // shows its column name so no info is lost when the table is stacked.
           (p) => `<tr>
               <td data-label="Mã">${p.symbol}</td>
-              <td class="num" data-label="KL">${fmt(p.qty, 0)}</td>
-              <td class="num" data-label="Bán được">${fmt(p.sellableQty, 0)}</td>
+              <td class="num" data-label="KL"><span class="money">${fmt(p.qty, 0)}</span></td>
+              <td class="num" data-label="Bán được"><span class="money">${fmt(p.sellableQty, 0)}</span></td>
               <td class="num" data-label="Giá vốn">${fmt(p.avgCost)}</td>
               <td class="num" data-label="Giá TT">${fmt(p.marketPrice)}</td>
-              <td class="num" data-label="Giá trị">${fmt(p.marketValue, 1)}</td>
-              <td class="num ${trendClass(p.unrealizedPL)}" data-label="Lãi/lỗ">${fmt(p.unrealizedPL, 1)} (${fmtPct(p.unrealizedPLPct)})</td>
+              <td class="num" data-label="Giá trị"><span class="money">${fmt(p.marketValue, 1)}</span></td>
+              <td class="num ${trendClass(p.unrealizedPL)}" data-label="Lãi/lỗ"><span class="money">${fmt(p.unrealizedPL, 1)}</span> (${fmtPct(p.unrealizedPLPct)})</td>
             </tr>`
           )
           .join("")}</tbody>

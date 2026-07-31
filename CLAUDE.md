@@ -21,7 +21,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260730a`**.
+Cache busting hiện **`?v=20260731b`**.
 
 ---
 
@@ -45,10 +45,10 @@ danh mục SSI thật (chỉ đọc), lịch sử giao dịch cá nhân tính l�
 - Code thẳng, ít giải thích dài dòng — trừ task phức tạp/rủi ro.
 - KHÔNG hỏi xác nhận trước khi sửa file, kể cả nhiều file cùng lúc.
 - CHỈ hỏi xác nhận khi: xóa file/tính năng, hoặc đổi cấu trúc lớn (đổi kiến trúc
-  module, đổi thư viện chart, đổi format dữ liệu giữa `dataService.js` ↔ `app.js`
+  module, đổi thư viện chart, đổi format dữ liệu giữa `dataService.js` ↔ trang
   ↔ `server`).
-- **Sửa JS/CSS xong PHẢI bump `?v=YYYYMMDD<chữ>`** trong `index.html`, không thì
-  user chạy code cũ tới 10 phút do cache GitHub Pages (đã mất 1 vòng debug vì vậy).
+- **Sửa JS/CSS xong PHẢI bump `?v=YYYYMMDD<chữ>` ở MỌI trang HTML dùng file đó**,
+  không thì user chạy code cũ tới 10 phút do cache GitHub Pages. Xem mục 4.
 - **Server chỉ có một bản duy nhất: `server/index.js`.** Sửa xong là xong, KHÔNG
   copy đi đâu cả. (Luật `cp server/index.js index.js` cũ đã bị xoá 31/07 — xem mục 4.)
 - **KHÔNG commit `server/.env`** hay credentials nào. `.gitignore` đã chặn.
@@ -77,9 +77,18 @@ danh mục SSI thật (chỉ đọc), lịch sử giao dịch cá nhân tính l�
   dashboard), `vn_dashboard_account_more_v1` + `vn_dashboard_account_tab_v1`
   (trạng thái accordion). Lãi/lỗ tính theo **giá vốn bình quân gia quyền**.
 - `DEFAULT_WATCHLIST` trong `config.js` chỉ seed lần đầu; sau đó watchlist
-  đọc/ghi localStorage. Danh sách rỗng: tôn trọng, không tự nạp lại seed.
+  đọc/ghi qua `Store`. Danh sách rỗng: tôn trọng, không tự nạp lại seed.
 - Font Inter. Theme Sáng/Tối (`[data-theme]`) + slider Trong/Đục (`--glass-a`).
-- Mọi widget lấy dữ liệu qua `dataService.js` — không `fetch()` thẳng trong `app.js`.
+- Mọi widget lấy dữ liệu qua `dataService.js` — không `fetch()` thẳng trong trang.
+- **Mọi dữ liệu người dùng đọc/ghi qua `store.js`** — không gọi thẳng
+  `localStorage` từ trang. Toàn bộ API của `Store` **trả Promise**, kể cả driver
+  localStorage hiện tại. Supabase (GĐ 5) là bất đồng bộ; viết đồng bộ bây giờ thì
+  tới lúc đổi driver phải sửa lại mọi chỗ gọi. Đây là chỗ dễ làm ẩu nhất.
+- `Portfolio` giữ cache trong bộ nhớ vì render chạy đồng bộ. **Phải
+  `await Portfolio.load()` trước lần vẽ đầu tiên**, nếu không danh mục hiện rỗng
+  rồi mới nhảy số.
+- **Số tiền tuyệt đối và số lượng nắm giữ phải bọc `<span class="money">`** —
+  xem mục 3b.
 
 ### Luật vàng: KHÔNG BAO GIỜ HIỂN THỊ SỐ BỊA
 
@@ -94,11 +103,48 @@ Rút ra ngày 30/07/2026 (xem mục 7), áp cho mọi tính năng về sau:
 
 ---
 
+## 3b. Chế độ riêng tư (nút con mắt)
+
+Mục đích: mở website cho người khác xem mà không lộ số tài sản.
+
+- Công tắc toàn cục, nút nằm trên thanh điều hướng dùng chung (`nav.js`), lưu qua
+  `Store.setSetting("privacyMode")`. Mặc định **TẮT** — bật sẵn dễ khiến user
+  tưởng dữ liệu chưa nạp.
+- Bật = class `privacy` trên `<html>`; **CSS lo phần che**, không sửa từng chỗ
+  render. Thêm ô hiển thị tiền mới chỉ cần bọc `<span class="money">`.
+- **Che:** số tiền tuyệt đối, số lượng nắm giữ.
+  **Vẫn hiện:** giá thị trường, % lãi/lỗ, tỷ trọng, hình dạng biểu đồ.
+- Biểu đồ tài sản phải gắn `.hide-axis-labels` cho nhãn trục Y — nhìn trục là
+  đoán ra ngay.
+- Giới hạn đã biết: bề rộng ô vẫn theo số cũ nên đoán được số chữ số. Chấp nhận
+  được cho mục đích khoe sản phẩm.
+- **Thêm trang mới: bật nút rồi rà lại cả trang**, tìm số tiền còn lọt.
+
 ## 4. Cấu trúc file
 
-Thứ tự nạp script trong `index.html` (đừng đổi):
-lightweight-charts → `config.js` → `mockData.js` → `dataService.js` →
-`portfolio.js` → `signals.js` → `chartModule.js` → `app.js`
+```
+/index.html            ← trang tổng (placeholder tới GĐ 6)
+/chung-khoan.html      ← dashboard chứng khoán
+/assets/css/base.css       dùng chung 6 trang
+/assets/css/chung-khoan.css
+/assets/js/core/       config · store · theme · nav · mockData ·
+                       dataService · portfolio · signals · chartModule
+/assets/js/pages/      chung-khoan.js · tong.js
+/server/index.js       backend (Render Root Directory = server)
+/docs/                 QUYHOACH.md · CLAUDE.moi.md
+```
+
+**Thứ tự nạp script (đừng đổi):**
+lightweight-charts → `config.js` → `store.js` → `theme.js` → `nav.js` →
+`mockData.js` → `dataService.js` → `portfolio.js` → `signals.js` →
+`chartModule.js` → `pages/<trang>.js`
+
+`store.js` phải đứng trước `nav.js` và `portfolio.js` — cả hai gọi `Store`.
+
+**Bump `?v=` ở CẢ `index.html` LẪN `chung-khoan.html`.** Chúng dùng chung
+`base.css`, `store.js`, `theme.js`, `nav.js`; bump một file là file kia chạy code
+cũ. Đã dính ngay trong phiên tách file: sửa `nav.js` mà không bump, trình duyệt
+phục vụ bản cũ và mất 2 vòng debug tưởng lỗi CSS.
 
 ### Backend deploy — hack `cp` đã bị xoá (31/07/2026)
 
@@ -449,7 +495,18 @@ giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 
 ### Nhật ký theo phiên
 
-**31/07/2026 — xoá hack `cp` + `/health` báo uptime.**
+**31/07/2026 (phiên 2) — GĐ 0: tái cấu trúc đa trang.**
+`style.css` tách thành `assets/css/base.css` (dùng chung) + `chung-khoan.css`.
+JS chuyển vào `assets/js/core` + `assets/js/pages`. `index.html` cũ đổi tên
+`chung-khoan.html`; `index.html` mới là trang tổng (placeholder tới GĐ 6).
+Thêm `store.js` (lớp lưu trữ, API trả Promise), `nav.js` (thanh điều hướng 6
+trang + nút con mắt), `theme.js` (tách chrome dùng chung khỏi trang chứng khoán).
+`portfolio.js` và watchlist chuyển sang `Store`. Bọc 14 chỗ `<span class="money">`.
+Đã kiểm chứng trên trình duyệt thật: chỉ số, tape, heatmap, watchlist, chart+RSI,
+chỉ số cơ bản, tin tức, 5 tab thị trường, đổi theme, che số qua 2 trang — đều
+đúng như trước. Version `?v=20260731b`.
+
+**31/07/2026 (phiên 1) — xoá hack `cp` + `/health` báo uptime.**
 Phát hiện Render vốn đã có Root Directory = `server`, nên `index.js` +
 `package.json` ở gốc là code chết và luật `cp` là thừa. Đã xác minh bằng phép thử
 `/health` (mục 4) rồi xoá 2 file. `/health` giờ trả `startedAt` + `uptimeSec` —

@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dashboard Stock — Chứng Khoán Cá Nhân</title>
+<title>Tổng gia sản</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260730a" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260731b" />
 </head>
 <body>
 
@@ -15,23 +15,18 @@
   <div class="aurora"><span class="b1"></span><span class="b2"></span><span class="b3"></span><span class="b4"></span><span class="b5"></span></div>
   <div class="grain"></div>
 
-  <!-- Ticker tape: dải giá chạy liên tục kiểu bảng điện sàn giao dịch -->
-  <div class="ticker-tape">
-    <span class="ticker-track" id="tickerTrack"></span>
-  </div>
+  <!-- Shared nav across all 6 pages; rendered by assets/js/core/nav.js -->
+  <div id="appNav"></div>
 
   <header class="app-header">
     <div class="brand">
       <div class="brand-top">
-        <div class="mark">Dashboard <span>Stock</span></div>
-        <span class="live-dot">LIVE</span>
+        <div class="mark">Tổng <span>gia sản</span></div>
       </div>
-      <div class="sub">Tổng hợp danh mục cổ phiếu cá nhân &amp; thông tin</div>
+      <div class="sub">Tổng hợp 5 kênh đầu tư: chứng khoán · vàng · ngoại tệ · coin · tiết kiệm</div>
       <div class="clock" id="clock"></div>
     </div>
     <div class="header-right">
-      <span class="mock-badge" id="mockBadge">DỮ LIỆU MẪU — XEM config.js</span>
-      <span class="backend-status" id="backendStatus"></span>
       <div class="controls">
         <div class="segmented">
           <button type="button" id="tLight">Sáng</button>
@@ -46,219 +41,47 @@
     </div>
   </header>
 
-  <section class="index-strip" id="indexStrip"></section>
-
-  <!-- Market overview: tabbed card (heatmap / sector / rankings). All three
-       panes render from the already-warmed VN30 quotes — no extra API calls. -->
-  <section class="market-section">
+  <main class="main-grid-single">
     <div class="panel">
-      <div class="market-tabs" id="marketTabs">
-        <button type="button" data-mtab="heatmap" class="active">Bản đồ nhiệt</button>
-        <button type="button" data-mtab="sector">Theo ngành</button>
-        <button type="button" data-mtab="rank">Top tăng/giảm</button>
-        <button type="button" data-mtab="foreign">Khối ngoại</button>
-        <button type="button" data-mtab="signal">Tín hiệu</button>
-      </div>
-
-      <!-- Heatmap: whole-basket colour map, green up / red down by % -->
-      <div class="mtab-pane" data-pane="heatmap">
-        <div class="market-head">
-          <h2>Bản đồ nhiệt VN30</h2>
-          <span class="heatmap-legend">
-            <span class="hl-down">Giảm</span>
-            <span class="hl-bar"></span>
-            <span class="hl-up">Tăng</span>
-          </span>
-        </div>
-        <div class="heatmap-grid" id="vn30Heatmap"></div>
-      </div>
-
-      <!-- Sector: average % change of the VN30 members in each sector -->
-      <div class="mtab-pane" data-pane="sector" hidden>
-        <div class="sector-list" id="sectorList"></div>
-      </div>
-
-      <!-- Foreign flow: net foreign buy/sell value per VN30 ticker (tỷ đồng) -->
-      <div class="mtab-pane" data-pane="foreign" hidden>
-        <div class="sector-list" id="foreignList"></div>
-        <div class="foreign-note">Đơn vị: tỷ đồng · dương = mua ròng, âm = bán ròng · rổ VN30</div>
-      </div>
-
-      <!-- Signals: FiinTrade Tier 1 — composite signal, price/volume streaks,
-           TA strategies. Basket history is fetched LAZILY the first time this
-           tab is opened (30–50 sequential calls), never on initial page load. -->
-      <div class="mtab-pane" data-pane="signal" hidden>
-        <div class="signal-bar">
-          <select id="sigBasket" aria-label="Chọn rổ cổ phiếu">
-            <option value="VN30">VN30 (30 mã)</option>
-            <option value="HOSE_LIQUID">HOSE thanh khoản ≥3tr (49 mã)</option>
-            <option value="HNX30">HNX30 (15 mã)</option>
-            <option value="UPCOM">UPCoM (15 mã)</option>
-          </select>
-          <div class="sig-sub" id="sigSubTabs">
-            <button type="button" data-sig="summary" class="active">Tổng hợp</button>
-            <button type="button" data-sig="pv">Giá – KL</button>
-            <button type="button" data-sig="ta">Chiến lược</button>
-          </div>
-          <button type="button" id="sigLoadBtn" class="btn-outline">Tải dữ liệu</button>
-          <span class="sig-status" id="sigStatus"></span>
-        </div>
-        <div id="sigPane"></div>
-      </div>
-
-      <!-- Rankings: top 5 gainers / losers within the selected exchange basket -->
-      <div class="mtab-pane" data-pane="rank" hidden>
-        <div class="rank-ex" id="rankExchanges">
-          <button type="button" data-ex="VNINDEX" class="active">VN-Index</button>
-          <button type="button" data-ex="HNXINDEX">HNX-Index</button>
-          <button type="button" data-ex="UPCOM">UPCoM</button>
-        </div>
-        <div class="rank-cols">
-          <div class="rank-col">
-            <div class="rank-title up">TĂNG MẠNH NHẤT</div>
-            <div id="topGainers"></div>
-          </div>
-          <div class="rank-col">
-            <div class="rank-title down">GIẢM MẠNH NHẤT</div>
-            <div id="topLosers"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <main class="main-grid">
-    <!-- Watchlist -->
-    <div class="panel">
-      <div class="panel-head"><h2>Danh mục theo dõi</h2></div>
-      <form id="addSymbolForm" class="watchlist-add">
-        <input id="newSymbol" placeholder="Mã CK, vd: VIC" maxlength="10" />
-        <button type="submit">+ Thêm</button>
-      </form>
-      <div id="watchlist"></div>
-    </div>
-
-    <!-- Chart + Fundamentals -->
-    <div class="panel">
-      <div class="panel-head"><h2>Biểu đồ giá &amp; chỉ số cơ bản</h2></div>
+      <div class="panel-head"><h2>Trang tổng — đang xây dựng</h2></div>
       <div class="panel-body">
-        <div class="symbol-title" id="symbolTitle"></div>
-        <div class="chart-toolbar">
-          <div class="range-tabs" id="rangeTabs"></div>
-          <label class="chk"><input type="checkbox" id="chkMA10" checked/><span class="sw" style="background:#2a78d6;"></span>MA10</label>
-          <label class="chk"><input type="checkbox" id="chkMA20" checked/><span class="sw" style="background:#4a3aa7;"></span>MA20</label>
-          <label class="chk"><input type="checkbox" id="chkBB"/><span class="sw" style="background:#1baf7a;"></span>Bollinger</label>
-          <label class="chk"><input type="checkbox" id="chkVol" checked/>KL</label>
-          <label class="chk"><input type="checkbox" id="chkRSI" checked/>RSI</label>
-          <button type="button" id="drawTrendBtn" class="btn-outline">Vẽ trendline</button>
-          <button type="button" id="measureBtn" class="btn-outline" title="Click 2 điểm trên biểu đồ để đo số nến và % biến động">Đo</button>
-          <button type="button" id="clearTrendBtn" class="btn-outline">Xóa</button>
+        <p class="build-note">
+          Trang này sẽ gom giá trị của cả 5 kênh về một chỗ: tổng tài sản ròng,
+          tỷ trọng từng kênh, lãi/lỗ, và dòng tiền vào/ra.
+        </p>
+        <p class="build-note">
+          Nó cần đọc danh mục của cả 5 kênh từ một nguồn duy nhất, nên chỉ làm được
+          sau khi xong phần đồng bộ dữ liệu (giai đoạn 5 của quy hoạch).
+          Hiện <a href="chung-khoan.html">trang chứng khoán</a> đã chạy đầy đủ.
+        </p>
+        <p class="build-note">
+          Thử <strong>nút con mắt</strong> ở góc phải thanh điều hướng — nó ẩn mọi số tiền
+          trên toàn bộ website, để mở trang cho người khác xem mà không lộ tài sản.
+          Số dưới đây là số giả, chỉ để xem nút hoạt động thế nào.
+        </p>
+        <div class="demo-stats">
+          <div class="stat">
+            <div class="label">Tổng tài sản ròng</div>
+            <div class="val"><span class="money">1.234.567.890 ₫</span></div>
+          </div>
+          <div class="stat">
+            <div class="label">Lãi/lỗ hôm nay</div>
+            <div class="val up">+2,35%</div>
+          </div>
         </div>
-        <div class="chart-stack">
-          <div class="chart-wrap" id="priceChartContainer"></div>
-          <canvas id="trendOverlay" class="trend-overlay"></canvas>
-        </div>
-        <div class="chart-wrap-rsi" id="rsiChartContainer"></div>
-        <div class="fund-grid" id="fundGrid"></div>
       </div>
-    </div>
-
-    <!-- News -->
-    <div class="panel">
-      <div class="panel-head"><h2>Tin tức liên quan</h2></div>
-      <div id="newsList"></div>
     </div>
   </main>
 
-  <!-- SSI account (read-only) + manual transactions + history, collapsed into a
-       single accordion card. Collapsed by default: only the head and the SSI
-       summary stats show; "Xem thêm" reveals the three tabbed panes below. -->
-  <section class="portfolio-section">
-    <div class="panel">
-      <div class="panel-head">
-        <h2>Tài khoản SSI · Giao dịch · Lịch sử</h2>
-        <div class="account-actions">
-          <span class="account-status" id="accountStatus">Chưa đồng bộ</span>
-          <button type="button" id="syncAccountBtn" class="btn-outline">Đồng bộ</button>
-          <button type="button" id="moreToggle" class="btn-outline" aria-expanded="false" aria-controls="accountMore">Xem thêm ▾</button>
-        </div>
-      </div>
-      <div class="holdings-summary" id="accountSummary"></div>
-
-      <div id="accountMore" hidden>
-        <div class="market-tabs" id="acctTabs">
-          <button type="button" data-atab="ssi" class="active">Danh mục SSI</button>
-          <button type="button" data-atab="add">Thêm giao dịch</button>
-          <button type="button" data-atab="manual">Danh mục &amp; lịch sử tay</button>
-        </div>
-
-        <!-- Pane 1: real SSI positions (read-only) -->
-        <div class="mtab-pane" data-apane="ssi">
-          <div class="panel-body" id="accountTable">
-            <div class="empty-state">Bấm "Đồng bộ" để nạp danh mục thật từ SSI (chỉ đọc).</div>
-          </div>
-        </div>
-
-        <!-- Pane 2: manual transaction entry -->
-        <div class="mtab-pane" data-apane="add" hidden>
-          <div class="panel-body">
-            <form id="txForm" class="tx-form">
-              <div>
-                <label>Mã CK</label>
-                <input name="symbol" placeholder="VNM" required maxlength="10" />
-              </div>
-              <div>
-                <label>Loại lệnh</label>
-                <select name="type">
-                  <option value="buy">Mua</option>
-                  <option value="sell">Bán</option>
-                </select>
-              </div>
-              <div>
-                <label>Khối lượng</label>
-                <input name="qty" type="number" min="1" step="1" required />
-              </div>
-              <div>
-                <label>Giá (nghìn đồng)</label>
-                <input name="price" type="number" min="0" step="0.01" required />
-              </div>
-              <div>
-                <label>Ngày</label>
-                <input name="date" type="date" />
-              </div>
-              <div>
-                <label>Ghi chú</label>
-                <input name="note" placeholder="Tùy chọn" />
-              </div>
-              <button type="submit" class="btn btn-submit">Lưu giao dịch</button>
-            </form>
-          </div>
-        </div>
-
-        <!-- Pane 3: manual holdings + transaction history -->
-        <div class="mtab-pane" data-apane="manual" hidden>
-          <div class="holdings-summary" id="holdingsSummary"></div>
-          <div class="panel-body" id="holdingsTable"></div>
-          <div class="panel-head"><h2>Lịch sử giao dịch</h2></div>
-          <div class="panel-body" id="txTable"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <footer class="app-footer">
-    Giá &amp; chỉ số: SSI FastConnect Data · Chỉ số cơ bản: VNDirect · Tin tức: CafeF ·
-    Danh mục thật: SSI FastConnect Trading (chỉ đọc).
-    Watchlist và lịch sử giao dịch nhập tay được lưu cục bộ trong trình duyệt (localStorage).
+    Dữ liệu chỉ mang tính tham khảo, không phải khuyến nghị đầu tư.
+    Quy hoạch đầy đủ ở <code>docs/QUYHOACH.md</code>.
   </footer>
 
-  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="config.js?v=20260730a"></script>
-  <script src="mockData.js?v=20260730a"></script>
-  <script src="dataService.js?v=20260730a"></script>
-  <script src="portfolio.js?v=20260730a"></script>
-  <script src="signals.js?v=20260730a"></script>
-  <script src="chartModule.js?v=20260730a"></script>
-  <script src="app.js?v=20260730a"></script>
+  <script src="assets/js/core/config.js?v=20260731b"></script>
+  <script src="assets/js/core/store.js?v=20260731b"></script>
+  <script src="assets/js/core/theme.js?v=20260731b"></script>
+  <script src="assets/js/core/nav.js?v=20260731b"></script>
+  <script src="assets/js/pages/tong.js?v=20260731b"></script>
 </body>
 </html>
