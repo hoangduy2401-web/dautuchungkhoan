@@ -341,15 +341,17 @@ app.get("/api/price/history", async (req, res) => {
   }
 });
 
+// UI code -> SSI IndexId. DailyIndex only accepts one IndexId per call
+// (IndexId=ALL -> NoDataFound), so every index lookup goes through this map.
+const INDEX_IDS = {
+  VNINDEX: "VNINDEX",
+  VN30: "VN30",
+  HNXINDEX: "HNXIndex",
+  UPCOM: "HNXUpcomIndex",
+};
+
 async function computeIndices() {
-  // DailyIndex only accepts one IndexId per call (IndexId=ALL -> NoDataFound),
-  // so query each index we display. Left = SSI IndexId, right = UI code.
-  const WANTED = [
-    ["VNINDEX", "VNINDEX"],
-    ["VN30", "VN30"],
-    ["HNXIndex", "HNXINDEX"],
-    ["HNXUpcomIndex", "UPCOM"],
-  ];
+  const WANTED = Object.entries(INDEX_IDS).map(([uiCode, indexId]) => [indexId, uiCode]);
 
   const today = new Date();
   const from = fmtSsiDate(new Date(today.getTime() - 7 * 24 * 3600 * 1000));
@@ -446,6 +448,87 @@ app.get("/api/price/indices", async (req, res) => {
     res.json(items);
   } catch (err) {
     console.error("[/api/price/indices]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// DailyIndex rejects any window wider than 30 days — it answers HTTP 200 with an
+// EMPTY data array plus `message: "... max range 30 days"`, so an over-wide call
+// looks like "this index has no history" rather than an error. Chunk or get
+// nothing. Measured 04/08/2026; full note in CLAUDE.md section 7.
+const INDEX_CHUNK_DAYS = 30;
+
+async function fetchIndexChunk(indexId, from, to) {
+  // Sequential on purpose: SSI rate-limits concurrent calls hard.
+  const raw = await ssiGet("/api/v2/Market/DailyIndex", {
+    IndexId: indexId,
+    FromDate: fmtSsiDate(from),
+    ToDate: fmtSsiDate(to),
+    PageIndex: 1,
+    PageSize: 100, // a 30-day window is ~22 trading days, one page always covers it
+    ascending: true,
+  });
+  return extractRows(raw);
+}
+
+// History for ONE index. Shape deliberately differs from /api/price/history:
+// DailyIndex carries no OHLC, only a single IndexValue per day, so there is
+// nothing to build candles from — the client draws a line. Don't "fix" this by
+// faking open/high/low from close.
+async function computeIndexHistory(code, days) {
+  const indexId = INDEX_IDS[code];
+  if (!indexId) throw new Error(`unknown index: ${code}`);
+
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 24 * 3600 * 1000);
+
+  const rows = [];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const chunkEnd = new Date(
+      Math.min(cursor.getTime() + (INDEX_CHUNK_DAYS - 1) * 24 * 3600 * 1000, end.getTime())
+    );
+    rows.push(...(await fetchIndexChunk(indexId, cursor, chunkEnd)));
+    cursor = new Date(chunkEnd.getTime() + 24 * 3600 * 1000);
+  }
+
+  const byDate = new Map();
+  for (const r of rows) {
+    const date = normalizeDate(pickField(r, ["TradingDate", "Date"]));
+    const value = num(pickField(r, ["IndexValue", "Value", "IndexVal"]));
+    // Drop the still-forming row: during the session SSI publishes today with
+    // IndexValue=0 and only a live RatioChange. Plotting 0 would draw a cliff to
+    // the floor. The live value for today comes from /api/price/indices instead.
+    if (!date || !(value > 0)) continue;
+    byDate.set(date, {
+      date,
+      // Index values are already in points, do NOT divide by 1000.
+      close: Math.round(value * 100) / 100,
+      volume: num(pickField(r, ["TotalVol", "TotalMatchVol"])) || 0,
+    });
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// GET /api/price/index-history?code=VNINDEX&days=90
+app.get("/api/price/index-history", async (req, res) => {
+  const code = String(req.query.code || "").toUpperCase();
+  const days = Number(req.query.days) || 90;
+  if (!INDEX_IDS[code]) {
+    return res.status(400).json({ error: "unknown_index", detail: code });
+  }
+
+  try {
+    // 30-day chunks mean a long range costs a LOT of sequential calls
+    // (1Y ~ 13, 5Y ~ 61), so long ranges get a much longer TTL than the 60s used
+    // for short ones — otherwise stale-while-revalidate re-hammers SSI.
+    const ttlMs = days > 270 ? 6 * 60 * 60_000 : days > 100 ? 30 * 60_000 : 60_000;
+    const items = await withCache(`index-history:${code}:${days}`, ttlMs, () =>
+      computeIndexHistory(code, days)
+    );
+    res.json(items);
+  } catch (err) {
+    console.error("[/api/price/index-history]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
   }
 });

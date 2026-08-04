@@ -147,6 +147,7 @@
   --chart-boll: #8a8a8a;
   --chart-rsi: #e5d26b;
   --chart-trend: #f0a94e;
+  --chart-line: #f5f5f0;
 }
 
 /* Dark = mac dinh, nhung viet lai tuong minh de nut "Tối" luon thang */
@@ -187,6 +188,7 @@
   --chart-boll: #8a8a8a;
   --chart-rsi: #e5d26b;
   --chart-trend: #f0a94e;
+  --chart-line: #f5f5f0;
 }
 
 /* Light — nguyen van khoi [data-theme="light"] cua file design */
@@ -230,6 +232,7 @@
   --chart-boll: #8a8a8a;
   --chart-rsi: #a68c17;
   --chart-trend: #b9740a;
+  --chart-line: #14171f;
 }
 
 * { box-sizing: border-box; }

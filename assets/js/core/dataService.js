@@ -133,6 +133,29 @@ const DataService = (function () {
     );
   }
 
+  // ---- Index history: [{date, close, volume}] — NO open/high/low ----
+  // Different shape from getHistory on purpose: SSI DailyIndex has no OHLC, only
+  // one IndexValue per day, so the chart draws a line. Don't fake candles.
+  // Costlier per day than stock history (30-day chunks, 1Y ~13 calls / 5Y ~61),
+  // measured cold on the local backend: 90d 5,5s · 1Y 8,0s · 5Y 34,9s.
+  // Budgets are much larger than the stock ones and NOT shared with them: the
+  // backend limiter runs concurrency=1, so clicking two indices in a row makes
+  // the second wait out the whole first job. Measured failure: HNX 90d then
+  // UPCoM 90d then UPCoM 1Y back-to-back — the last two died on
+  // net::ERR_ABORTED at the 12s stock budget while the backend was still
+  // working through the queue and eventually answered every one of them.
+  function getIndexHistory(code, days) {
+    const timeoutMs = days > 730 ? 90000 : days > 270 ? 45000 : 25000;
+    return livePrice(
+      () =>
+        fetchJson(
+          `${cfg.priceProvider.baseUrl}/index-history?code=${encodeURIComponent(code)}&days=${days}`,
+          timeoutMs
+        ),
+      () => generateHistory(code, days).map((d) => ({ date: d.date, close: d.close, volume: d.volume }))
+    );
+  }
+
   // ---- Fundamentals: {marketCap, pe, pb, eps, roe, roa, ...} ----
   function getFundamentals(symbol) {
     return withFallback(
@@ -186,6 +209,7 @@ const DataService = (function () {
     getIndices,
     getQuote,
     getHistory,
+    getIndexHistory,
     getFundamentals,
     getNews,
     getAccountPortfolio,

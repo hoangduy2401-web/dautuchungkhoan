@@ -193,6 +193,11 @@ CLAUDE.md cho site đa kênh, chưa áp dụng).
 GET /api/price/history?symbol=X&days=N
 → [{ date:"YYYY-MM-DD", open, high, low, close, volume }, ...]  (tăng dần, giá nghìn VND)
 
+GET /api/price/index-history?code=VNINDEX&days=N
+→ [{ date:"YYYY-MM-DD", close, volume }, ...]   (tăng dần, close = ĐIỂM)
+   KHÔNG có open/high/low — DailyIndex không trả OHLC. Đừng bịa nến từ close.
+   Bỏ luôn dòng trong phiên (IndexValue=0); giá trị hôm nay lấy ở /indices.
+
 GET /api/price/indices
 → [{ code, value, changePct,
      totalVol, totalVal, advances, declines, noChanges }, ...]
@@ -297,6 +302,34 @@ bấm tab thị trường **trước** khi mở accordion nên chưa lộ.
 
 **Cách sửa.** Quét `[data-pane]` thay cho `.mtab-pane`. Luật chung: **chọn theo
 thuộc tính dữ liệu, đừng chọn theo class trình bày** khi class đó cố ý dùng chung.
+
+### Ngân sách timeout của chỉ số phải RIÊNG, không dùng chung với cổ phiếu (04/08/2026)
+
+**Triệu chứng.** Bấm liên tiếp HNX → UPCoM → khung 1Y: tiêu đề đổi sang UPCOM và
+5 ô thống kê cũng đổi, nhưng **chart vẫn là nến của mã cổ phiếu đang xem trước
+đó**. Không có lỗi console.
+
+**Số đo.** Bảng network: `index-history?code=HNXINDEX&days=90`,
+`code=UPCOM&days=90`, `code=UPCOM&days=365` đều `net::ERR_ABORTED` — tức
+`AbortController` của `fetchJson` hết giờ, không phải backend lỗi. Gọi thẳng
+cùng URL bằng `curl` thì cả ba trả 200 đầy đủ dữ liệu.
+
+**Nguyên nhân.** Một lần lấy lịch sử cổ phiếu = 1–2 call SSI; **một lần lấy lịch
+sử chỉ số = 4–61 call** (chunk 30 ngày). Backend chạy `ssiLimit` **concurrency=1**
+nên bấm chỉ số thứ hai là nó xếp hàng sau **toàn bộ** job của chỉ số thứ nhất.
+Ngân sách 12s vay từ đường cổ phiếu hết giờ khi backend vẫn đang chạy — và nó
+chạy xong thật, chỉ là không ai còn nghe.
+
+**Đã loại trừ**: không phải backend lỗi (curl 200); không phải mã chỉ số sai
+(cả 4 mã đều ra dữ liệu); không phải CORS.
+
+**Cách sửa.** `getIndexHistory` có ngân sách riêng **25s / 45s / 90s** theo độ
+dài, thay vì 12s/30s/75s của `getHistory`. Kèm hai lớp chống nhiễu:
+- Bỏ qua phản hồi lạc hậu: chụp `code` + `range` lúc gọi, khi trả về mà
+  `state.selected`/`state.range` đã khác thì không vẽ.
+- `drawChartOrClear`: hỏng mà chart đang là **dataset khác** thì xoá trắng, chứ
+  không để lịch sử giá của mã này nằm dưới tên mã kia (luật vàng mục 3). Hỏng
+  mà **cùng key** (nhịp làm mới 45s) thì giữ nguyên chart.
 
 ### Format SSI thật (đã xác nhận 22/07/2026 — hết mơ hồ)
 
@@ -574,7 +607,31 @@ giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 
 ### Nhật ký theo phiên
 
-**04/08/2026 — bước A của chart chỉ số: thăm dò `DailyIndex` + 5 trường mới
+**04/08/2026 (phiên 2) — bước B: chart chỉ số chạy được (ĐỤNG `server/index.js`).**
+Bấm thẻ chỉ số giờ nạp chart chỉ số đó + cuộn xuống, đúng phần cuối cùng còn
+thiếu của design 03/08.
+- Backend: `computeIndexHistory` + `GET /api/price/index-history?code=&days=`,
+  **chunk 30 ngày** (giới hạn cứng của SSI). TTL theo độ dài: ≤100 ngày 60s,
+  ≤270 ngày 30 phút, dài hơn **6 giờ** — 5Y tốn 61 call, không thể để TTL ngắn.
+  `INDEX_IDS` tách ra dùng chung với `computeIndices`.
+- `chartModule.js`: thêm `lineSeries`. **Tự nhận dạng từ dữ liệu** — bar đầu
+  không có `open` nghĩa là chỉ số → ẩn nến, hiện đường. Không thêm tham số nên
+  mọi chỗ gọi `setData` cũ giữ nguyên. Màu đường = `--chart-line`.
+  Cột khối lượng của chỉ số so close với **close phiên trước** (không có open).
+  Thêm `ChartModule.currentKey()`.
+- `chung-khoan.js`: `INDEX_CODES` + `isIndexCode`; `loadSelectedIndex` tách
+  riêng khỏi `loadSelectedSymbol` (chỉ số không có info doanh nghiệp, không có
+  fundamentals VNDirect, không có badge tín hiệu rổ); `renderIndexStats` 5 ô
+  dùng 5 trường của bước A, `null` → `—`; `syncIndexCardActive`.
+- Đo cold trên backend local: 90d 5,5s (4 call) · 1Y 8,0s (13 call) ·
+  **5Y 34,9s (61 call), 1245 điểm**.
+- Kiểm chứng trình duyệt (config tạm trỏ `localhost:3999`, đã trả lại):
+  VNINDEX/VN30/HNX/UPCoM vẽ đường đúng, đổi khung 3M→1Y→5Y, quay lại cổ phiếu
+  thì nến trở lại, VN30 hiện `—` ở 3 ô độ rộng, Sáng/Tối đổi màu đường,
+  0 lỗi console.
+- Version `?v=20260804a` (cả 2 trang).
+
+**04/08/2026 (phiên 1) — bước A của chart chỉ số: thăm dò `DailyIndex` + 5 trường mới
 (ĐỤNG `server/index.js` → Render deploy lại).**
 Chạy script thăm dò dùng credentials ở `server/.env`, gọi thẳng SSI. Kết quả đo
 được chép vào mục 7 (dump 21 trường, giới hạn 30 ngày, độ rộng chỉ có theo sàn).
@@ -710,7 +767,20 @@ Website quản lý gia sản đa kênh: `docs/QUYHOACH.md`. 8 giai đoạn, ~23 
 vào `assets/`, `nav.js`, `store.js` — xem nhật ký mục 9). Việc kế tiếp theo quy
 hoạch là **GĐ 1**, đọc `docs/QUYHOACH.md`.
 
-### Chart cho chỉ số (phần duy nhất của design 03/08 chưa dựng)
+### Chart cho chỉ số — XONG 04/08 (giữ lại phần cần biết)
+
+Bước A + B đã xong, xem nhật ký mục 9. Ba điều đừng "sửa lại cho đúng":
+1. `/api/price/index-history` trả `{date, close, volume}` — **không có OHLC** vì
+   `DailyIndex` không có. `chartModule` tự nhận ra và vẽ đường.
+2. **Chunk 30 ngày là bắt buộc**, không phải chọn lựa (mục 7).
+3. **Timeout của chỉ số phải riêng**, đừng gộp lại với `getHistory` (mục 7).
+
+Việc còn có thể làm thêm, chưa ai yêu cầu: sizing ô heatmap theo vốn hóa, và
+`Ceilings`/`Floors` (số mã trần/sàn) — đã có sẵn trong row `DailyIndex`, chỉ
+việc thêm vào payload như 5 trường của bước A.
+
+<details>
+<summary>Khảo sát gốc trước khi làm (giữ để đối chiếu ước lượng)</summary>
 
 Design cho phép **bấm thẻ chỉ số → nạp chart chỉ số đó + cuộn xuống**. Chưa làm
 vì backend chưa có đường dữ liệu: `/api/price/history` chạy `DailyOhlc` (chỉ mã
@@ -742,6 +812,12 @@ tiết đo đạc ở mục 7.
 
 **Ước lượng bước B: 50–75k token, ~35–50 phút.** Đụng `server/` → Render deploy
 lại, phải kiểm `/health` sau khi push.
+
+Đối chiếu thực tế: bước B rơi vào **khoảng giữa** ước lượng. Phần phát sinh ngoài
+dự kiến là lỗi timeout ở trên — không nằm trong khảo sát vì nó chỉ lộ ra khi bấm
+nhanh giữa hai chỉ số, không lộ khi test từng cái một.
+
+</details>
 
 ### Tính năng chứng khoán chưa làm
 1. **Theo dõi dòng tiền** (user đã chọn từ 24/07, chưa làm): phát hiện đột biến

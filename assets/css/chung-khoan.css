@@ -48,6 +48,8 @@
   transition: background var(--duration-base) var(--ease-standard);
 }
 .index-card:hover { background: var(--surface-hover); }
+/* Chỉ số đang vẽ trên chart — cùng vòng accent với ô heatmap đang chọn */
+.index-card.active { box-shadow: var(--shadow-card), inset 0 0 0 2px var(--accent-orange); }
 .index-card .code {
   font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); letter-spacing: 0.02em;
 }

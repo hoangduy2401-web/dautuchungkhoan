@@ -12,6 +12,9 @@
 const ChartModule = (function () {
   let priceChart, rsiChart, candleSeries, ma10Series, ma20Series, volumeSeries, rsiSeries;
   let bbUpperSeries, bbBasisSeries, bbLowerSeries;
+  // Chỉ số (VNINDEX/VN30/...) không có OHLC — SSI DailyIndex chỉ trả một
+  // IndexValue mỗi ngày — nên vẽ bằng đường thay cho nến. Xem CLAUDE.md mục 7.
+  let lineSeries;
   let priceContainer, rsiContainer, overlayCanvas, overlayCtx;
   let trendline = null;
   let ruler = null;
@@ -132,6 +135,12 @@ const ChartModule = (function () {
     bbBasisSeries = priceChart.addLineSeries({ color: boll, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false });
     bbLowerSeries = priceChart.addLineSeries({ color: boll, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
     [bbUpperSeries, bbBasisSeries, bbLowerSeries].forEach((s) => s.applyOptions({ visible: false }));
+    // Index line. Created once and toggled, not created per dataset: adding and
+    // removing a series on every symbol switch resets the time scale.
+    lineSeries = priceChart.addLineSeries({
+      color: cssColor("--chart-line", "#f5f5f0"), lineWidth: 2,
+      priceLineVisible: false, lastValueVisible: true, visible: false,
+    });
     volumeSeries = priceChart.addHistogramSeries({
       priceFormat: { type: "volume" }, priceScaleId: "volume", lastValueVisible: false, priceLineVisible: false,
     });
@@ -217,8 +226,21 @@ const ChartModule = (function () {
     const sameDataset = key != null && key === dataKey;
     dataKey = key != null ? key : null;
     bars = ohlcv;
-    const candleData = ohlcv.map((d) => ({ time: toTime(d.date), open: d.open, high: d.high, low: d.low, close: d.close }));
-    candleSeries.setData(candleData);
+
+    // No `open` on the first bar => index data (close only). Detected from the
+    // payload rather than passed in, so every existing call site keeps working.
+    const isLine = ohlcv.length > 0 && ohlcv[0].open == null;
+    candleSeries.applyOptions({ visible: !isLine });
+    lineSeries.applyOptions({ visible: isLine });
+    if (isLine) {
+      lineSeries.setData(ohlcv.map((d) => ({ time: toTime(d.date), value: d.close })));
+      candleSeries.setData([]);
+    } else {
+      lineSeries.setData([]);
+      candleSeries.setData(
+        ohlcv.map((d) => ({ time: toTime(d.date), open: d.open, high: d.high, low: d.low, close: d.close }))
+      );
+    }
 
     const closes = ohlcv.map((d) => d.close);
     const ma10 = sma(closes, 10), ma20 = sma(closes, 20);
@@ -230,7 +252,15 @@ const ChartModule = (function () {
     bbBasisSeries.setData(ohlcv.map((d, i) => (bb.basis[i] != null ? { time: toTime(d.date), value: bb.basis[i] } : null)).filter(Boolean));
     bbLowerSeries.setData(ohlcv.map((d, i) => (bb.lower[i] != null ? { time: toTime(d.date), value: bb.lower[i] } : null)).filter(Boolean));
 
-    volumeSeries.setData(ohlcv.map((d) => ({ time: toTime(d.date), value: d.volume, color: d.close >= d.open ? UP + "aa" : DOWN + "aa" })));
+    // Bar colour normally compares close to its own open. Index bars have no
+    // open, so fall back to the previous close — same up/down meaning, and the
+    // volume itself (TotalVol of the whole exchange) is real data worth keeping.
+    volumeSeries.setData(
+      ohlcv.map((d, i) => {
+        const ref = d.open != null ? d.open : i > 0 ? ohlcv[i - 1].close : d.close;
+        return { time: toTime(d.date), value: d.volume, color: d.close >= ref ? UP + "aa" : DOWN + "aa" };
+      })
+    );
 
     const rsiArr = rsiCalc(closes, 14);
     // Keep one point per bar — whitespace {time} for the leading nulls instead of
@@ -485,6 +515,7 @@ const ChartModule = (function () {
     if (candleSeries) {
       candleSeries.applyOptions({ upColor: UP, downColor: DOWN, wickUpColor: UP, wickDownColor: DOWN });
     }
+    if (lineSeries) lineSeries.applyOptions({ color: cssColor("--chart-line", "#f5f5f0") });
     if (ma10Series) ma10Series.applyOptions({ color: cssColor("--chart-ma10", "#f0a94e") });
     if (ma20Series) ma20Series.applyOptions({ color: cssColor("--chart-ma20", "#a78bfa") });
     [bbUpperSeries, bbBasisSeries, bbLowerSeries].forEach((s) => s && s.applyOptions({ color: boll }));
@@ -492,8 +523,14 @@ const ChartModule = (function () {
     redrawOverlay(); // trendline/ruler ink follows the theme too
   }
 
+  // Which dataset is currently drawn ("SYMBOL|range"), so callers can tell a
+  // transient refresh failure (same key — keep the chart) from a failed switch
+  // to another symbol (different key — a stale chart under the new title would
+  // read as that symbol's price history).
+  function currentKey() { return dataKey; }
+
   return {
-    init, setData, toggleSeries, applyTheme,
+    init, setData, toggleSeries, applyTheme, currentKey,
     setDrawMode, setMeasureMode,
     clearTrendline, clearMeasure, clearAll,
     redrawOverlay,

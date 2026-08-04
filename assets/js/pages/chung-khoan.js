@@ -24,6 +24,12 @@ function saveWatchlist() {
   );
 }
 
+// Mã chỉ số có thể chọn để vẽ chart — phải khớp INDEX_IDS ở server/index.js.
+// Chỉ số đi đường dữ liệu KHÁC hẳn cổ phiếu: /index-history (không OHLC, vẽ
+// đường), không có chỉ số cơ bản doanh nghiệp, không có tín hiệu kỹ thuật rổ.
+const INDEX_CODES = new Set(["VNINDEX", "VN30", "HNXINDEX", "UPCOM"]);
+const isIndexCode = (s) => INDEX_CODES.has(s);
+
 const state = {
   watchlist: [...APP_CONFIG.DEFAULT_WATCHLIST],
   selected: null, // set right below, once the watchlist is known
@@ -272,13 +278,18 @@ async function loadIndices() {
   el.innerHTML = state.indices
     .map(
       (ix) => `
-    <div class="index-card">
+    <div class="index-card${ix.code === state.selected ? " active" : ""}" data-index="${ix.code}">
       <div class="code">${ix.code}</div>
       <div class="val">${fmt(ix.value, 2)}</div>
       <div class="chg ${trendClass(ix.changePct)}">${arrow(ix.changePct)} ${fmtPct(ix.changePct)}</div>
     </div>`
     )
     .join("");
+
+  // Click a card to chart that index, same selection model as the watchlist.
+  el.querySelectorAll(".index-card[data-index]").forEach((card) => {
+    card.addEventListener("click", () => selectSymbol(card.dataset.index));
+  });
 }
 
 /* ============================================================
@@ -850,6 +861,7 @@ function renderWatchlist() {
   const el = document.getElementById("watchlist");
   if (state.watchlist.length === 0) {
     el.innerHTML = `<div class="empty-state">Chưa có mã theo dõi.<br>Thêm mã ở ô phía trên.</div>`;
+    syncIndexCardActive(); // watchlist rỗng vẫn chọn được chỉ số
     return;
   }
   el.innerHTML = state.watchlist
@@ -902,6 +914,19 @@ function renderWatchlist() {
       if (state.selected) loadSelectedSymbol();
     });
   });
+
+  syncIndexCardActive();
+}
+
+// Move the accent ring on the index strip to match state.selected — and take it
+// OFF every card when a stock is selected. Called from renderWatchlist because
+// every selection change already goes through it (watchlist row, heatmap tile,
+// rankings row, index card, selectSymbol); toggling classes in place avoids
+// calling loadIndices(), which would refetch all four indices to move a ring.
+function syncIndexCardActive() {
+  document
+    .querySelectorAll(".index-card[data-index]")
+    .forEach((c) => c.classList.toggle("active", c.dataset.index === state.selected));
 }
 
 // Pointer-based drag reorder (works with mouse AND touch, no HTML5 DnD which is
@@ -1016,6 +1041,7 @@ function renderRangeTabs() {
 
 async function loadSelectedSymbol() {
   if (!state.selected) return;
+  if (isIndexCode(state.selected)) return loadSelectedIndex(state.selected);
   const sym = state.selected;
   const info = DataService.getCompanyInfo(sym);
   // Quote/history no longer fall back to mock, so every call here can reject.
@@ -1043,10 +1069,7 @@ async function loadSelectedSymbol() {
 
   // Pass the dataset identity so the 45s refresh keeps any trendline/ruler the
   // user drew (same symbol + range = same anchors); switching either clears it.
-  // No history = keep whatever the chart already shows rather than blanking it.
-  if (Array.isArray(history) && history.length) {
-    ChartModule.setData(history, `${sym}|${state.range}`);
-  }
+  drawChartOrClear(history, `${sym}|${state.range}`);
   renderFundamentals(fundamentals);
   renderNews(news);
 
@@ -1054,6 +1077,65 @@ async function loadSelectedSymbol() {
   // starting this before the chart would put a 180-day fetch ahead of the data
   // the user is actually looking at and delay the chart on a cold cache.
   renderSymbolSignal(sym);
+}
+
+// Index counterpart of loadSelectedSymbol. Deliberately NOT a branch inside that
+// function: an index has no company info, no VNDirect fundamentals and no
+// basket-signal badge, so almost none of the stock path applies.
+async function loadSelectedIndex(code) {
+  const ix = state.indices.find((i) => i.code === code) || null;
+
+  document.getElementById("symbolTitle").innerHTML = `
+    <span class="sym">${code}</span>
+    <span class="name">Chỉ số thị trường</span>
+    <span class="price ${ix ? trendClass(ix.changePct) : ""}">${
+      ix ? `${fmt(ix.value, 2)} <small>${fmtPct(ix.changePct)}</small>` : "—"
+    }</span>
+  `;
+
+  const range = state.range;
+  const key = `${code}|${range}`;
+  const history = await DataService.getIndexHistory(code, range).catch(() => null);
+  // A slow index fetch (up to 61 sequential SSI calls) can land long after the
+  // user moved on — dropping it here stops an old response from repainting the
+  // chart under someone else's title.
+  if (state.selected !== code || state.range !== range) return;
+  drawChartOrClear(history, key);
+  renderIndexStats(ix);
+}
+
+// Draw, or clear when there is nothing to draw AND the pane currently shows a
+// DIFFERENT dataset. Keeping the old chart is right for a transient failure on
+// the 45s refresh (same key), but after a switch it would put one instrument's
+// price history under another one's name — an invented chart (mục 3).
+function drawChartOrClear(history, key) {
+  if (Array.isArray(history) && history.length) {
+    ChartModule.setData(history, key);
+  } else if (ChartModule.currentKey() !== key) {
+    ChartModule.setData([], key);
+  }
+}
+
+// Whole-market stats in place of company fundamentals. `null` means SSI does not
+// publish the figure for this index (breadth is per exchange, so VN30 has none)
+// — show "—", never 0: see the golden rule in CLAUDE.md section 3.
+function renderIndexStats(ix) {
+  const dash = "—";
+  const billions = (v) => (v == null ? dash : fmt(v / 1e9, 0)); // VND -> tỷ
+  const millions = (v) => (v == null ? dash : fmt(v / 1e6, 1)); // CP -> triệu
+  const count = (v) => (v == null ? dash : String(v));
+  const cells = ix
+    ? [
+        ["GTGD toàn sàn (tỷ)", billions(ix.totalVal)],
+        ["KLGD (triệu CP)", millions(ix.totalVol)],
+        ["Số mã tăng", count(ix.advances)],
+        ["Số mã giảm", count(ix.declines)],
+        ["Số mã đứng giá", count(ix.noChanges)],
+      ]
+    : [["Chỉ số", "Đang chờ máy chủ"]];
+  document.getElementById("fundGrid").innerHTML = cells
+    .map(([label, value]) => `<div class="fund-cell"><div class="label">${label}</div><div class="value">${value}</div></div>`)
+    .join("");
 }
 
 function renderFundamentals(f) {
