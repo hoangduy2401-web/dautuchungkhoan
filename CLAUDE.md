@@ -194,7 +194,10 @@ GET /api/price/history?symbol=X&days=N
 → [{ date:"YYYY-MM-DD", open, high, low, close, volume }, ...]  (tăng dần, giá nghìn VND)
 
 GET /api/price/indices
-→ [{ code, value, changePct }, ...]
+→ [{ code, value, changePct,
+     totalVol, totalVal, advances, declines, noChanges }, ...]
+   value: điểm (KHÔNG chia 1000) · totalVol: cổ phiếu · totalVal: VND (thô)
+   advances/declines/noChanges: SỐ MÃ, hoặc null khi SSI không có (xem mục 7)
 
 GET /api/price/quote?symbol=X
 → { price, changePct, volume, netForeignVal }
@@ -303,11 +306,44 @@ thuộc tính dữ liệu, đừng chọn theo class trình bày** khi class đ�
   `"Size of a page must 10, 20, 50, 100 or 1000"`.
 - `DailyOhlc`: `{Symbol, Market, TradingDate:"dd/mm/yyyy", Time, Open, High, Low,
   Close, Volume, Value}` — trả **giảm dần theo ngày**.
-- `DailyIndex`: `{IndexId, IndexName, IndexValue, TradingDate, Change,
-  RatioChange, TotalMatchVol, Advances/Declines/Ceilings/Floors, ...}`.
-  **`IndexId=ALL` trả `NoDataFound`** → phải gọi từng mã một.
+- `DailyIndex`: **`IndexId=ALL` trả `NoDataFound`** → phải gọi từng mã một.
   Dùng `RatioChange` làm `changePct`; **`Change` bị scale sai** (-0.6203 cho cú
   giảm -62.03 điểm) — đừng dùng.
+
+#### `DailyIndex` — dump thật 04/08/2026 (VNINDEX, giữa phiên)
+
+21 trường, không thiếu trường nào:
+```
+IndexId IndexName IndexValue TradingDate Time Change RatioChange
+TotalTrade TotalMatchVol TotalMatchVal TotalDealVol TotalDealVal
+TotalVol TotalVal Advances NoChanges Declines Ceilings Floors
+TypeIndex TradingSession
+```
+
+- **KHÔNG có OHLC** — chỉ `IndexValue`, một giá trị mỗi ngày. Hệ quả: **không
+  vẽ nến được cho chỉ số**, phải dùng biểu đồ đường. Đừng đi tìm endpoint khác:
+  `DailyStockPrice` chỉ có snapshot cuối ngày (mục 11 tầng 4).
+- **Giới hạn cứng 30 ngày mỗi call.** Vượt là trả `data: []`, `totalRecord: 0`,
+  `status 200` (KHÔNG phải lỗi HTTP) kèm `message`:
+  `"Date time format dd/MM/yyyy and ('from date' <= 'to date') < now , max range 30 days"`.
+  Đo 04/08: `days=90/400/1825` đều ra 0 dòng. Nên lịch sử chỉ số **phải chunk 30
+  ngày** y như `fetchOhlcChunked` — 1Y ≈ 13 call, 5Y ≈ 61 call, tuần tự.
+  Phân trang `PageSize: 1000` **không cứu được**: rào chắn nằm ở khoảng ngày,
+  không phải số dòng.
+- **Độ rộng thị trường (`Advances`/`Declines`/`NoChanges`) chỉ có theo SÀN,
+  không theo rổ.** Đo cùng một lượt gọi: VNINDEX 124/95/64, HNX 45/30/34,
+  UPCoM 61/30/49, **VN30 = 0/0/0**. `computeIndices` gom bộ ba toàn-0 thành
+  `null` để UI hiện `—` — "0 mã tăng" trên 30 mã là số bịa (mục 3).
+  `TotalVol`/`TotalVal` của VN30 thì có thật, vẫn dùng được.
+- **`TotalVol`/`TotalVal` LÀ số trực tiếp trong phiên**, kể cả khi
+  `IndexValue = 0`. Xác nhận: row 04/08 có `IndexValue "0"`,
+  `TradingSession "LO"`, mà `TotalVol 76.720.564` và `Advances 128`. Nên lấy
+  thống kê từ row MỚI NHẤT, đừng lấy từ row prev-close như cách chữa
+  `IndexValue` — độ rộng của hôm qua dán nhãn hôm nay là số bịa.
+- Dùng `TotalVol`/`TotalVal` (khớp + thỏa thuận) chứ không phải `TotalMatchVol`
+  /`TotalMatchVal` — chỉ lấy phần khớp sẽ thấp hơn con số "GTGD toàn sàn" mà sàn
+  công bố.
+- Độ trễ đo được: 90–230ms mỗi call `DailyIndex`.
   - **QUAN TRỌNG — intraday `IndexValue=0` (fix 24/07/2026):** trong phiên
     (`TradingSession` = `LO`/`ATO`) SSI trả row hôm nay với `IndexValue="0"`
     nhưng `RatioChange` LÀ SỐ LIVE. Giá trị điểm thật chỉ có sau đóng cửa
@@ -538,6 +574,19 @@ giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 
 ### Nhật ký theo phiên
 
+**04/08/2026 — bước A của chart chỉ số: thăm dò `DailyIndex` + 5 trường mới
+(ĐỤNG `server/index.js` → Render deploy lại).**
+Chạy script thăm dò dùng credentials ở `server/.env`, gọi thẳng SSI. Kết quả đo
+được chép vào mục 7 (dump 21 trường, giới hạn 30 ngày, độ rộng chỉ có theo sàn).
+`computeIndices` giờ trả thêm `totalVol / totalVal / advances / declines /
+noChanges` lấy từ **đúng row đang gọi — 0 call SSI thêm**. Bộ ba độ rộng toàn-0
+gom thành `null` (VN30 không có dữ liệu này).
+Kiểm chứng: `PORT=3999 node index.js` + `curl /api/price/indices` — VNINDEX
+129/98/58, VN30 `null`, HNX 43/30/36, UPCoM 61/31/50.
+**Frontend chưa dùng 5 trường này** — chờ bước B (chart chỉ số). Thêm trường là
+thay đổi cộng thêm, `loadIndices` chỉ đọc `code/value/changePct` nên không hỏng.
+Không sửa JS/CSS frontend → **không cần bump `?v=`**, vẫn `20260803a`.
+
 **03/08/2026 — reskin Fey design system (frontend-only, KHÔNG đụng `server/`).**
 Nhập design `Stock Dashboard Redesign.dc.html` từ claude.ai/design (project
 `f0e78ba8-9439-4af1-848b-6012fe2cc380`) qua MCP `DesignSync`, dựng lại bằng
@@ -667,31 +716,32 @@ Design cho phép **bấm thẻ chỉ số → nạp chart chỉ số đó + cu�
 vì backend chưa có đường dữ liệu: `/api/price/history` chạy `DailyOhlc` (chỉ mã
 CK). Gắn click bây giờ chỉ hiện `—`, phạm luật vàng ở mục 3.
 
-Đã khảo sát phạm vi ngày 03/08 (chưa viết dòng code nào):
+**Bước A XONG 04/08** (xem nhật ký mục 9): đã thăm dò `DailyIndex` và đã có 5
+trường thống kê trong `/api/price/indices`. Mọi ẩn số về dữ liệu đã đóng — chi
+tiết đo đạc ở mục 7.
 
-- Backend: thêm `computeIndexHistory(code, days)` **dùng lại đúng call
-  `DailyIndex` mà `computeIndices` đang gọi**, chỉ nới `FromDate/ToDate`. Rồi
-  thêm `GET /api/price/index-history` + `withCache` TTL co giãn như `/history`.
-- **`DailyIndex` KHÔNG có OHLC** — chỉ `IndexValue`, một giá trị mỗi ngày (xem
-  mục 7, format SSI đã xác nhận 22/07). Nên **không vẽ nến được cho chỉ số**:
-  `chartModule.js` phải thêm chế độ đường. MA10/MA20/RSI vẫn chạy vì tính trên
-  close; nến / khối lượng / Bollinger phải ẩn khi chọn chỉ số.
-- 4 ô chỉ số cơ bản của index (GTGD, KLGD, số mã tăng, số mã giảm) lấy từ
-  `TotalMatchVol` + `Advances`/`Declines` — **có sẵn trong đúng row đang gọi,
-  0 call SSI thêm**.
-- Frontend: `dataService.getIndexHistory` (~15 dòng, nhân bản `getHistory`);
-  `chung-khoan.js` cho `state.selected` nhận mã chỉ số + rẽ nhánh trong
-  `loadSelectedSymbol` (bỏ qua fundamentals/tin/tín hiệu); rà các chỗ ngầm giả
-  định `selected ∈ watchlist ∪ VN30` (sparkline, badge tín hiệu, tin theo mã).
-- **Ẩn số còn lại**: `DailyIndex` có nhận khoảng ngày rộng + phân trang như
-  `DailyOhlc` không, hay phải chunk 30 ngày. Không kiểm được từ máy local
-  (không có credentials SSI) — phải gọi thật.
+**Bước B còn lại:**
 
-**Ước lượng: 70–100k token, 1 phiên, ~45–70 phút.** Phần dao động nằm ở vòng
-verify live (cold start Render 15–40s mỗi lần). Nếu muốn rẻ, tách 2 bước:
-**A** (~25k, ~15 phút) chỉ thêm 4 ô chỉ số index vào `computeIndices` + 1 call
-thăm dò giới hạn phân trang → **B** (~50–75k) dựng chart đường sau khi đã biết
-chắc dạng dữ liệu.
+- Backend: `computeIndexHistory(code, days)` — **bắt buộc chunk 30 ngày**, dùng
+  lại y khuôn `fetchOhlcChunked` (1Y ≈ 13 call, 5Y ≈ 61 call, tuần tự qua
+  `ssiLimit`). Thêm `GET /api/price/index-history?code=&days=` + `withCache`,
+  TTL co giãn như `/history` (>270 ngày = 30 phút). **Cân nhắc chặn 5Y cho chỉ
+  số** hoặc cho nó TTL dài hơn nữa — 61 call tuần tự × ~150ms là ~10s trong
+  điều kiện tốt, chưa tính throttle.
+- `chartModule.js`: **thêm chế độ đường** (`DailyIndex` không có OHLC). MA10/
+  MA20/RSI vẫn chạy vì tính trên close; nến / khối lượng / Bollinger phải ẩn
+  khi đang chọn chỉ số. Đây là phần tốn nhất của bước B.
+- `dataService.getIndexHistory` (~15 dòng, nhân bản `getHistory`).
+- `chung-khoan.js`: thẻ chỉ số bấm được; `state.selected` nhận mã chỉ số; rẽ
+  nhánh trong `loadSelectedSymbol` (bỏ qua fundamentals/tin/tín hiệu, dùng 5
+  trường mới cho lưới chỉ số cơ bản); rà các chỗ ngầm giả định
+  `selected ∈ watchlist ∪ VN30` (sparkline, badge tín hiệu, tin theo mã).
+  Nhớ hiện `—` khi `advances/declines` là `null` (VN30).
+- Cuộn xuống chart: **tính offset tay**, đừng dùng `scrollIntoView` (mục 9,
+  phiên 03/08).
+
+**Ước lượng bước B: 50–75k token, ~35–50 phút.** Đụng `server/` → Render deploy
+lại, phải kiểm `/health` sau khi push.
 
 ### Tính năng chứng khoán chưa làm
 1. **Theo dõi dòng tiền** (user đã chọn từ 24/07, chưa làm): phát hiện đột biến

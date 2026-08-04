@@ -396,11 +396,44 @@ async function computeIndices() {
     }
     if (!(value > 0)) continue; // still nothing usable — skip rather than show 0
 
+    // Whole-market session stats, straight off the SAME row we already fetched —
+    // zero extra SSI calls. Verified live 04/08/2026 on VNINDEX mid-session:
+    // TotalVol 76.720.564, TotalVal 2.003.851.832.920, Advances 128, Declines 93
+    // while IndexValue was still 0 — so these ARE live intraday, unlike the index
+    // value itself. Always read them off `newest`, never off the prev-close row:
+    // yesterday's breadth shown as today's is exactly the kind of made-up number
+    // the golden rule (section 3) forbids.
+    // Units are raw: VND for *Val, shares for *Vol, plain counts for breadth.
+    // null (not 0) when SSI omits the field, so the UI can render "—".
+    const stat = (names) => {
+      const v = pickField(newest.row, names);
+      return v == null || v === "" ? null : num(v);
+    };
+
+    // Breadth is published per EXCHANGE, not per basket: VN30 comes back
+    // 0/0/0 (verified live 04/08/2026 while VNINDEX read 124/95/64 in the same
+    // batch). "0 mã tăng" across 30 constituents is a fabricated number, so
+    // collapse an all-zero triplet to null and let the UI render "—".
+    // Pre-open on a real exchange also yields 0/0/0 — null is right there too.
+    let advances = stat(["Advances"]);
+    let declines = stat(["Declines"]);
+    let noChanges = stat(["NoChanges"]);
+    if (!advances && !declines && !noChanges) {
+      advances = declines = noChanges = null;
+    }
+
     items.push({
       code: uiCode,
       // Index values are already in points, do NOT divide by 1000.
       value: Math.round(value * 100) / 100,
       changePct,
+      // TotalVol/TotalVal = matched + put-through. TotalMatchVol/Val alone would
+      // under-report turnover vs what the exchange publishes as "GTGD toàn sàn".
+      totalVol: stat(["TotalVol", "TotalMatchVol"]),
+      totalVal: stat(["TotalVal", "TotalMatchVal"]),
+      advances,
+      declines,
+      noChanges,
     });
   }
   return items;
