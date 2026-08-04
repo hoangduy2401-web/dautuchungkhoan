@@ -1,317 +1,451 @@
 /* ============================================================
    BASE.CSS — dung chung cho MOI trang cua website gia san.
    Tach tu style.css ngay 31/07/2026 (GD 0 muc 0.2).
-   Chua: tokens theme, aurora, header, thanh dieu huong, panel,
-   nut, bang, che do rieng tu (nut con mat).
-   NOTE: --border va --text-muted duoc chartModule.js doc qua
-   getComputedStyle -> phai giu la mau CU THE (khong var()).
+   Reskin sang "Fey Design System" ngay 03/08/2026: bo Liquid Glass
+   (aurora + backdrop-filter + slider Trong/Duc), chuyen sang be mat
+   PHANG DUC theo design "Stock Dashboard Redesign.dc.html".
+
+   NOTE: --border, --text-muted, --amber duoc chartModule.js doc qua
+   getComputedStyle -> PHAI la mau CU THE trong tung khoi theme
+   (khong duoc la var(), vi getPropertyValue tra ve chuoi "var(...)").
+   ============================================================ */
+
+/* ============================================================
+   TOKENS — Fey design system. Dark la mac dinh (DS goc la dark-mode).
+   Light lay tu khoi [data-theme="light"] cua file design.
    ============================================================ */
 :root {
-  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Inter", ui-monospace, "JetBrains Mono", monospace;
+  /* base neutrals — warm-tinted near-black scale */
+  --gray-0: #000000;
+  --gray-50: #0a0a0a;
+  --gray-100: #0d0d0d;
+  --gray-150: #121212;
+  --gray-200: #161616;
+  --gray-250: #1a1a1a;
+  --gray-300: #212121;
+  --gray-400: #2c2c2c;
+  --gray-500: #3d3d3d;
+  --gray-600: #5c5c5c;
+  --gray-700: #8a8a8a;
+  --gray-800: #b3b3b0;
+  --gray-900: #e8e8e3;
+  --white: #f5f5f0;
 
-  --radius: 20px;
-  --radius-sm: 14px;
-  --blur: 28px;
+  /* accents */
+  --accent-orange: #f0a94e;
+  --accent-green: #3ddc97;
+  --accent-red: #f0625f;
+  --accent-purple: #a78bfa;
+  --accent-yellow: #e5d26b;
+  --accent-teal: #2dd4bf;
 
-  /* ---- light (default) ---- */
-  --ground: #e9edf6;
-  --ground-2: #dde3f0;
-  --text: #0b1324;
-  --text-muted: #4a566f;
-  --text-dim: #7a869e;
+  /* semantic surfaces */
+  --surface-app: var(--gray-50);
+  --surface-card: var(--gray-150);
+  --surface-card-raised: var(--gray-200);
+  --surface-inset: var(--gray-100);
+  --surface-hover: var(--gray-250);
+  --surface-pill-active: var(--white);
 
-  --glass-a: 0.42;
-  --glass-raised-a: 0.60;
-  --panel: rgba(255, 255, 255, var(--glass-a));
-  --panel-2: rgba(255, 255, 255, var(--glass-raised-a));
-  --field-bg: rgba(255, 255, 255, 0.30);
-  --border: rgba(24, 34, 64, 0.10);
-  --glass-highlight: rgba(255, 255, 255, 0.9);
-  --glass-shadow: rgba(31, 45, 80, 0.18);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.14);
 
-  --amber: #f5811f;
-  --amber-dim: rgba(245, 129, 31, 0.14);
-  --up: #1faa4c;   --up-dim: rgba(40, 175, 75, 0.16);
-  --down: #e5342a; --down-dim: rgba(230, 55, 45, 0.14);
-  /* Solid fills for the two extreme signal levels (Tăng/Giảm mạnh). Plain
-     --up/--down are too light to read as "strong" next to their own dim tint. */
-  --up-strong: #0f7a4a;   --down-strong: #b3172a;
-  --on-strong: #ffffff;
-  --blue: #4a6cf7;
+  /* semantic text */
+  --text-primary: var(--white);
+  --text-secondary: var(--gray-700);
+  --text-tertiary: var(--gray-600);
+  --text-on-accent: #0a0a0a;
 
-  /* aliases the existing markup already references */
-  --bg: var(--ground);
-  --bg-alt: var(--field-bg);
-  --green: var(--up);   --green-dim: var(--up-dim);
-  --red: var(--down);   --red-dim: var(--down-dim);
+  /* semantic feedback */
+  --positive: var(--accent-green);
+  --negative: var(--accent-red);
+
+  /* chart series palette, in order */
+  --chart-2: var(--accent-orange);
+  --chart-3: var(--accent-purple);
+  --chart-4: var(--accent-yellow);
+  --chart-5: var(--accent-teal);
+
+  /* type */
+  --font-sans: "Roboto", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Roboto Mono", monospace;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --leading-tight: 1.1;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --type-title: 600 var(--text-lg) / var(--leading-snug) var(--font-sans);
+  --type-label: 500 var(--text-sm) / var(--leading-snug) var(--font-sans);
+  --type-caption: 400 var(--text-xs) / var(--leading-normal) var(--font-sans);
+
+  /* space / radius / shadow / motion */
+  --space-4: 16px;
+  --space-6: 24px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+
+  /* ---- accent tints (dung cho vung chon / chip bat) ---- */
+  --accent-soft: rgba(240, 169, 78, 0.14);
+  --positive-soft: rgba(61, 220, 151, 0.14);
+  --negative-soft: rgba(240, 98, 95, 0.14);
+
+  /* ============================================================
+     ALIAS TUONG THICH — ten bien cu ma ~4000 dong CSS/JS dang goi.
+     Giu lai de khong phai sua tung cho; chi doi GIA TRI o day.
+     ============================================================ */
+  --font-display: var(--font-sans);
+  --font-body: var(--font-sans);
+  --radius: var(--radius-lg);
+
+  --ground: var(--surface-app);
+  --ground-2: var(--surface-inset);
+  --text: var(--text-primary);
+  --text-dim: var(--text-tertiary);
+  --panel: var(--surface-card);
+  --panel-2: var(--surface-card-raised);
+  --field-bg: var(--surface-inset);
+
+  --amber-dim: var(--accent-soft);
+  --up: var(--positive);
+  --up-dim: var(--positive-soft);
+  --down: var(--negative);
+  --down-dim: var(--negative-soft);
+  --up-strong: #1f9d68;
+  --down-strong: #b3403d;
+  --on-strong: #f5f5f0;
+  --blue: var(--accent-purple);
+
+  --bg: var(--surface-app);
+  --bg-alt: var(--surface-inset);
+  --green: var(--positive);
+  --green-dim: var(--positive-soft);
+  --red: var(--negative);
+  --red-dim: var(--negative-soft);
+
+  /* Doc boi chartModule.js qua getComputedStyle -> mau cu the, khong var().
+     getPropertyValue tra ve CHUOI chua giai, nen alias kieu var(--x) se hong. */
+  --border: rgba(255, 255, 255, 0.09);
+  --text-muted: #8a8a8a;
+  --amber: #f0a94e;
+  --chart-up: #3ddc97;
+  --chart-down: #f0625f;
+  --chart-ma10: #f0a94e;
+  --chart-ma20: #a78bfa;
+  --chart-boll: #8a8a8a;
+  --chart-rsi: #e5d26b;
+  --chart-trend: #f0a94e;
 }
 
-/* Explicit toggle wins over anything else, both directions */
-:root[data-theme="light"] {
-  --ground: #e9edf6; --ground-2: #dde3f0;
-  --text: #0b1324; --text-muted: #4a566f; --text-dim: #7a869e;
-  --glass-a: 0.42; --glass-raised-a: 0.60;
-  --field-bg: rgba(255, 255, 255, 0.30);
-  --border: rgba(24, 34, 64, 0.10);
-  --glass-highlight: rgba(255, 255, 255, 0.9);
-  --glass-shadow: rgba(31, 45, 80, 0.18);
-  --amber: #f5811f;
-  --amber-dim: rgba(245, 129, 31, 0.14);
-  --up: #1faa4c; --up-dim: rgba(40, 175, 75, 0.16);
-  --down: #e5342a; --down-dim: rgba(230, 55, 45, 0.14);
-}
+/* Dark = mac dinh, nhung viet lai tuong minh de nut "Tối" luon thang */
 :root[data-theme="dark"] {
-  --ground: #070b16; --ground-2: #0a1120;
-  --text: #f3f6ff; --text-muted: #9fabc4; --text-dim: #6b7896;
-  --glass-a: 0.06; --glass-raised-a: 0.10;
-  --field-bg: rgba(255, 255, 255, 0.05);
-  --border: rgba(255, 255, 255, 0.12);
-  --glass-highlight: rgba(255, 255, 255, 0.4);
-  --glass-shadow: rgba(2, 6, 18, 0.55);
-  --amber: #ff9d47;
-  --amber-dim: rgba(255, 157, 71, 0.16);
-  --up: #30d158; --up-dim: rgba(48, 209, 88, 0.15);
-  --down: #ff453a; --down-dim: rgba(255, 69, 58, 0.15);
-  --up-strong: #2fbf6b; --down-strong: #ff6257;
-  --on-strong: #06101f;
-  --blue: #5b8cff;
+  --surface-app: var(--gray-50);
+  --surface-card: var(--gray-150);
+  --surface-card-raised: var(--gray-200);
+  --surface-inset: var(--gray-100);
+  --surface-hover: var(--gray-250);
+  --surface-pill-active: var(--white);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: var(--white);
+  --text-secondary: var(--gray-700);
+  --text-tertiary: var(--gray-600);
+  --text-on-accent: #0a0a0a;
+  --positive: var(--accent-green);
+  --negative: var(--accent-red);
+  --accent-orange: #f0a94e;
+  --accent-soft: rgba(240, 169, 78, 0.14);
+  --positive-soft: rgba(61, 220, 151, 0.14);
+  --negative-soft: rgba(240, 98, 95, 0.14);
+  --chart-2: var(--accent-orange);
+  --chart-3: var(--accent-purple);
+  --chart-4: var(--accent-yellow);
+  --up-strong: #1f9d68;
+  --down-strong: #b3403d;
+  --on-strong: #f5f5f0;
+
+  --border: rgba(255, 255, 255, 0.09);
+  --text-muted: #8a8a8a;
+  --amber: #f0a94e;
+  --chart-up: #3ddc97;
+  --chart-down: #f0625f;
+  --chart-ma10: #f0a94e;
+  --chart-ma20: #a78bfa;
+  --chart-boll: #8a8a8a;
+  --chart-rsi: #e5d26b;
+  --chart-trend: #f0a94e;
+}
+
+/* Light — nguyen van khoi [data-theme="light"] cua file design */
+:root[data-theme="light"] {
+  --white: #14171f;
+  --text-on-accent: #ffffff;
+  --surface-app: #f7f7f4;
+  --surface-card: #ffffff;
+  --surface-card-raised: #f0f0ec;
+  --surface-inset: #eeeeea;
+  --surface-hover: #e6e6e1;
+  --surface-pill-active: #14171f;
+  --border-subtle: rgba(20, 23, 31, 0.07);
+  --border-default: rgba(20, 23, 31, 0.11);
+  --border-strong: rgba(20, 23, 31, 0.18);
+  --text-primary: #14171f;
+  --text-secondary: #5c5c5c;
+  --text-tertiary: #8a8a8a;
+  --positive: #1f9d68;
+  --negative: #c9433f;
+  --accent-orange: #b9740a;
+  --accent-soft: rgba(185, 116, 10, 0.12);
+  --positive-soft: rgba(31, 157, 104, 0.13);
+  --negative-soft: rgba(201, 67, 63, 0.12);
+  --chart-2: #b9740a;
+  --chart-3: #7c5cd1;
+  --chart-4: #a68c17;
+  --chart-5: #0f8f80;
+  --shadow-card: 0 1px 2px rgba(20, 23, 31, 0.04), 0 8px 24px rgba(20, 23, 31, 0.06);
+  --up-strong: #157a50;
+  --down-strong: #a5322e;
+  --on-strong: #ffffff;
+
+  --border: rgba(20, 23, 31, 0.11);
+  --text-muted: #5c5c5c;
+  --amber: #b9740a;
+  --chart-up: #1f9d68;
+  --chart-down: #c9433f;
+  --chart-ma10: #b9740a;
+  --chart-ma20: #7c5cd1;
+  --chart-boll: #8a8a8a;
+  --chart-rsi: #a68c17;
+  --chart-trend: #b9740a;
 }
 
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
-  background: var(--ground);
-  color: var(--text);
-  font-family: var(--font-body);
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
 a { color: inherit; }
-::selection { background: var(--amber-dim); color: var(--amber); }
+::selection { background: var(--accent-soft); color: var(--accent-orange); }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* ============================================================
-   AURORA — colour layer the glass refracts. Warm amber + calm
-   indigo/violet (no green/teal: it clashed with the up-colour).
-   ============================================================ */
-.aurora {
-  position: fixed; inset: -20vmax; z-index: -2;
-  filter: blur(72px) saturate(115%); opacity: 0.55;
-}
-.aurora span {
-  position: absolute; border-radius: 50%;
-  mix-blend-mode: screen;
-  animation: drift 26s ease-in-out infinite alternate;
-}
-:root[data-theme="light"] .aurora span { mix-blend-mode: multiply; opacity: 0.42; }
-.aurora .b1 { width: 40vmax; height: 40vmax; left: -4vmax; top: -6vmax; background: radial-gradient(circle, #f2a93b, transparent 64%); }
-.aurora .b2 { width: 38vmax; height: 38vmax; right: -6vmax; top: -4vmax; background: radial-gradient(circle, #5b7bf0, transparent 64%); animation-delay: -6s; }
-.aurora .b3 { width: 36vmax; height: 36vmax; left: 30vmax; top: 26vmax; background: radial-gradient(circle, #8a86d8, transparent 66%); animation-delay: -13s; opacity: 0.6; }
-.aurora .b4 { width: 34vmax; height: 34vmax; right: 2vmax; bottom: -6vmax; background: radial-gradient(circle, #b078d8, transparent 64%); animation-delay: -3s; }
-.aurora .b5 { width: 32vmax; height: 32vmax; left: -4vmax; bottom: -8vmax; background: radial-gradient(circle, #f0b45a, transparent 64%); animation-delay: -18s; }
-@keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(4vmax, 5vmax) scale(1.12); } }
-.grain {
-  position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 3px 3px;
+/* Moi trang deu la mot cot noi dung can giua, khong tran vien */
+.app-nav, .app-header, .app-footer, .main-grid-single {
+  max-width: 1440px; margin-left: auto; margin-right: auto;
 }
 
-/* Shared glass material for panels/cards */
-.panel, .index-card, .chart-wrap, .chart-wrap-rsi, .fund-cell {
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-}
-/* LIVE badge — now sits beside the BẢNG ĐIỆN wordmark, not in the ticker */
+/* LIVE badge — Badge component, tone "warning" */
 .live-dot {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 10px; border-radius: 999px;
-  background: var(--up-dim); color: var(--up);
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-orange);
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.02em;
 }
 .live-dot::before {
-  content: ""; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--up); animation: pulse 1.4s infinite;
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent-orange); animation: pulse 1.6s ease-in-out infinite;
 }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
 /* ============================================================
-   HEADER — glass card
+   HEADER — dai phang, chi co vien duoi (khong con la the kinh noi)
    ============================================================ */
 .app-header {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; margin: 16px 20px 0; padding: 18px 22px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-  border: 1px solid var(--border);
-  box-shadow: 0 10px 30px -12px var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight);
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; padding: 16px 20px;
+  background: var(--surface-app);
+  border-bottom: 1px solid var(--border-default);
   flex-wrap: wrap;
 }
-.brand { display: flex; flex-direction: column; gap: 4px; }
-.brand-top { display: flex; align-items: center; gap: 10px; }
-.brand .mark {
-  font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em;
-}
-.brand .mark span { color: var(--amber); }
-.brand .sub { font-size: 12.5px; color: var(--text-muted); }
-.brand .clock { margin-top: 2px; }
+.brand { display: flex; flex-direction: column; gap: 3px; }
+.brand-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.brand .mark { font: var(--type-title); letter-spacing: -0.01em; }
+.brand .mark span { color: var(--accent-orange); }
+.brand .sub { font: var(--type-caption); color: var(--text-secondary); }
+.brand .clock { margin-top: 1px; }
 
-.header-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mock-badge {
-  font-size: 10.5px; padding: 4px 10px; border-radius: 999px;
-  border: 1px solid var(--amber); color: var(--amber); letter-spacing: 0.05em;
+  font-size: var(--text-2xs); font-weight: 600; padding: 3px 9px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-orange); letter-spacing: 0.02em;
 }
 /* Backend connection state. Only visible while the Render instance is waking
    up or unreachable — an empty board must always say why it is empty. */
 .backend-status {
   display: none;
-  font-size: 10.5px; padding: 4px 10px; border-radius: 999px;
-  letter-spacing: 0.05em; font-variant-numeric: tabular-nums;
+  font-size: var(--text-2xs); font-weight: 600; padding: 3px 9px; border-radius: var(--radius-sm);
+  letter-spacing: 0.02em; font-variant-numeric: tabular-nums;
 }
-.backend-status.warn { border: 1px solid var(--amber); color: var(--amber); }
-.backend-status.err { border: 1px solid var(--down); color: var(--down); }
-.clock { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.backend-status.warn { background: var(--accent-soft); color: var(--accent-orange); }
+.backend-status.err { background: var(--negative-soft); color: var(--negative); }
+.clock { font-size: var(--text-xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 
-/* Theme toggle + opacity slider (ported from mock) */
-.controls { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+/* Theme toggle — khoi 2 nut, nut dang chon to mau accent */
+.controls { display: flex; align-items: center; gap: 8px; }
 .segmented {
-  display: inline-flex; padding: 3px; border-radius: 999px; gap: 2px;
-  background: var(--panel-2); border: 1px solid var(--border);
+  display: inline-flex; padding: 3px; gap: 2px;
+  background: var(--surface-inset); border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
 }
 .segmented button {
-  border: 0; background: transparent; color: var(--text-muted); font-family: inherit;
-  font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
-  cursor: pointer; transition: all 0.25s;
+  border: 0; background: transparent; color: var(--text-secondary); font-family: inherit;
+  font-size: var(--text-xs); font-weight: 600; padding: 6px 12px; border-radius: 6px;
+  cursor: pointer; transition: background var(--duration-fast) var(--ease-standard);
 }
-.segmented button.on { background: var(--amber); color: #1a1205; box-shadow: 0 2px 8px -2px var(--amber); }
-.glass-slider {
-  display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px;
-  border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border);
-}
-.gs-label { font-size: 10.5px; font-weight: 600; color: var(--text-dim); }
-.glass-slider input[type="range"] {
-  -webkit-appearance: none; appearance: none; width: 92px; height: 4px; border-radius: 999px;
-  background: linear-gradient(90deg, var(--text-dim), var(--amber)); cursor: pointer;
-}
-.glass-slider input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none; width: 15px; height: 15px; border-radius: 50%;
-  background: var(--amber); border: 2px solid #fff; box-shadow: 0 1px 4px -1px var(--glass-shadow);
-}
-.glass-slider input[type="range"]::-moz-range-thumb {
-  width: 15px; height: 15px; border-radius: 50%; background: var(--amber);
-  border: 2px solid #fff; box-shadow: 0 1px 4px -1px var(--glass-shadow);
-}
+.segmented button.on { background: var(--accent-orange); color: var(--text-on-accent); }
 
-/* Tabbed market card: pill tab row, then one pane visible at a time. */
-.market-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-.market-tabs button {
-  border: 1px solid var(--border); background: var(--panel-2); color: var(--text-muted);
-  font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 999px; cursor: pointer; transition: all 0.2s;
+/* ============================================================
+   SEGMENTED CONTROL — tab thi truong / tab tai khoan.
+   Fey SegmentedControl: khong vien, nut dang chon dao mau (nen sang,
+   chu toi o dark; nen den, chu trang o light).
+   ============================================================ */
+.market-tabs {
+  display: flex; gap: 2px; flex-wrap: wrap;
+  padding: 0 0 14px; margin: 0;
 }
-.market-tabs button:hover { color: var(--text); }
-.market-tabs button.active { background: var(--amber); color: #1a1205; border-color: var(--amber); box-shadow: 0 2px 8px -2px var(--amber); }
+.market-tabs button {
+  border: none; background: transparent; color: var(--text-secondary); font-family: inherit;
+  font-size: var(--text-xs); font-weight: 600; padding: 6px 12px;
+  border-radius: var(--radius-sm); cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+.market-tabs button:hover { color: var(--text-primary); background: var(--surface-hover); }
+.market-tabs button.active { background: var(--surface-pill-active); color: var(--text-on-accent); }
 .mtab-pane[hidden] { display: none; }
+
 .market-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
-  padding: 14px 18px 0;
+  margin-bottom: 12px;
 }
-.market-head h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin: 0; }
+.market-head h2 { font: var(--type-label); color: var(--text-primary); margin: 0; }
+
+/* ============================================================
+   PANEL — the phang, vien hairline, bong nhe
+   ============================================================ */
 .panel {
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: 0 10px 30px -14px var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
 }
 .panel-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 15px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap; margin-bottom: 12px;
 }
-.panel-head h2 {
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-  color: var(--text-muted); margin: 0;
-}
-.panel-body { padding: 16px 18px; }
+.panel-head h2 { font: var(--type-label); color: var(--text-primary); margin: 0; }
+.panel-body { padding: 0; }
+
+/* Button component: primary = nen dao mau, secondary/outline = the noi */
 .watchlist-add button, .btn {
-  background: var(--amber); color: #1a1205; border: none; border-radius: 12px;
-  font-weight: 600; font-size: 13px; padding: 10px 16px; cursor: pointer;
-  transition: all 0.25s cubic-bezier(.2,.8,.2,1); box-shadow: 0 4px 14px -4px var(--amber);
+  background: var(--surface-pill-active); color: var(--text-on-accent);
+  border: 1px solid var(--surface-pill-active); border-radius: var(--radius-sm);
+  font-family: inherit; font-weight: 500; font-size: var(--text-sm); padding: 9px 16px;
+  cursor: pointer; transition: opacity var(--duration-fast) var(--ease-standard);
 }
-.watchlist-add button:hover, .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -6px var(--amber); }
-.up { color: var(--up); }
-.down { color: var(--down); }
-.flat { color: var(--text-muted); }
+.watchlist-add button:hover, .btn:hover { opacity: 0.85; }
 .btn-outline {
-  background: var(--panel-2); border: 1px solid var(--border); color: var(--text-muted);
-  padding: 5px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  background: var(--surface-card-raised); border: 1px solid var(--border-default);
+  color: var(--text-primary); font-family: inherit;
+  padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: var(--text-xs); font-weight: 500; cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
 }
-.btn-outline.active { background: var(--amber); color: #1a1205; border-color: var(--amber); }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--border); }
-th { color: var(--text-dim); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; }
+.btn-outline:hover { background: var(--surface-hover); }
+.btn-outline.active {
+  background: var(--accent-soft); border-color: var(--accent-orange); color: var(--accent-orange);
+}
+
+.up { color: var(--positive); }
+.down { color: var(--negative); }
+.flat { color: var(--text-secondary); }
+
+/* DataTable component: khong ke doc, chi hairline giua cac hang */
+table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th, td { text-align: left; padding: 11px 8px; border-bottom: 1px solid var(--border-subtle); }
+th { color: var(--text-tertiary); font-weight: 400; font-size: var(--text-xs); letter-spacing: 0; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-tbody tr { transition: background 0.15s; }
-tr:hover td { background: var(--panel-2); }
-.pill { padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; }
-.pill.buy { background: var(--up-dim); color: var(--up); }
-.pill.sell { background: var(--down-dim); color: var(--down); }
-.del-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; }
-.del-btn:hover { color: var(--down); }
-
-.holdings-summary { display: flex; gap: 22px; padding: 16px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.holdings-summary:empty { display: none; }
-.holdings-summary .stat .label { font-size: 11px; color: var(--text-dim); }
-.holdings-summary .stat .val { font-size: 19px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
-
-.empty-state { padding: 24px; text-align: center; color: var(--text-dim); font-size: 12.5px; }
-.app-footer {
-  margin: 4px 20px 28px; padding: 18px 22px; color: var(--text-dim); font-size: 11.5px;
-  border-radius: var(--radius); border: 1px solid var(--border); background: var(--panel);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+tbody tr { transition: background var(--duration-fast) var(--ease-standard); }
+tr:hover td { background: var(--surface-hover); }
+.pill {
+  padding: 3px 9px; border-radius: var(--radius-sm);
+  font-size: var(--text-xs); font-weight: 600;
 }
-.app-footer code { color: var(--amber); }
+.pill.buy { background: var(--positive-soft); color: var(--positive); }
+.pill.sell { background: var(--negative-soft); color: var(--negative); }
+.del-btn { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 13px; }
+.del-btn:hover { color: var(--negative); }
+
+.holdings-summary {
+  display: flex; gap: 22px; padding: 0 0 14px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap;
+}
+.holdings-summary:empty { display: none; }
+.holdings-summary .stat .label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.holdings-summary .stat .val {
+  font-size: var(--text-xl); font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums;
+}
+
+.empty-state { padding: 24px; text-align: center; color: var(--text-tertiary); font-size: var(--text-xs); }
+.app-footer {
+  padding: 16px 20px 32px; color: var(--text-tertiary); font-size: var(--text-2xs);
+  text-align: center; line-height: 1.6;
+}
+.app-footer code { color: var(--accent-orange); }
 
 /* ============================================================
    THANH DIEU HUONG — dung chung 6 trang. Render boi assets/js/core/nav.js
    ============================================================ */
 .app-nav {
   display: flex; align-items: center; gap: 6px;
-  margin: 14px 20px 0; padding: 8px 10px; border-radius: 999px;
-  background: var(--panel-2);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-  border: 1px solid var(--border);
-  box-shadow: 0 10px 30px -12px var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight);
+  padding: 10px 20px 0;
 }
 .app-nav a {
-  text-decoration: none; color: var(--text-muted);
-  font-size: 12.5px; font-weight: 700; padding: 8px 15px;
-  border-radius: 999px; transition: all 0.2s; white-space: nowrap;
+  text-decoration: none; color: var(--text-secondary);
+  font-size: var(--text-xs); font-weight: 600; padding: 6px 12px;
+  border-radius: var(--radius-sm); white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
-.app-nav a:hover { color: var(--text); background: var(--field-bg); }
-.app-nav a.active { background: var(--amber); color: #1a1205; box-shadow: 0 2px 8px -2px var(--amber); }
+.app-nav a:hover { color: var(--text-primary); background: var(--surface-hover); }
+.app-nav a.active { background: var(--surface-pill-active); color: var(--text-on-accent); }
 /* Trang chua lam: van hien de biet lo trinh, nhung khong bam duoc */
 .app-nav a.soon { opacity: 0.45; pointer-events: none; }
 .app-nav a.soon::after {
   content: "sắp có"; font-size: 9px; font-weight: 600; margin-left: 6px;
-  padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor;
+  padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid currentColor;
 }
 /* Links take the slack so the eye button sits hard right on desktop. */
-.nav-links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.nav-links { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; }
 
 /* Nut con mat — bat/tat che so tien. Xem khoi CHE DO RIENG TU ben duoi. */
 .eye-btn {
-  border: 1px solid var(--border); background: var(--field-bg); color: var(--text-muted);
-  width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--border-default); background: var(--surface-card-raised); color: var(--text-secondary);
+  width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 15px; line-height: 1; transition: all 0.2s; flex: 0 0 auto;
+  font-size: 14px; line-height: 1; flex: 0 0 auto;
+  transition: background var(--duration-fast) var(--ease-standard);
 }
-.eye-btn:hover { color: var(--text); border-color: var(--text-dim); }
-.eye-btn.on { background: var(--amber); color: #1a1205; border-color: var(--amber); }
+.eye-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
+.eye-btn.on { background: var(--accent-orange); color: var(--text-on-accent); border-color: var(--accent-orange); }
 
 /* ============================================================
    CHE DO RIENG TU
@@ -335,7 +469,7 @@ tr:hover td { background: var(--panel-2); }
   content: "••••"; visibility: visible;
   position: absolute; left: 0; top: 0; right: 0;
   text-align: inherit; letter-spacing: 0.12em;
-  color: var(--text-dim); font-weight: 700;
+  color: var(--text-tertiary); font-weight: 700;
 }
 /* Bieu do tai san: bo nhan truc Y, nhin truc la doan ra ngay */
 :root.privacy .hide-axis-labels { visibility: hidden; }
@@ -343,27 +477,28 @@ tr:hover td { background: var(--panel-2); }
 /* ============================================================
    TRANG TONG — layout mot cot (tam thoi, GD 0)
    ============================================================ */
-.main-grid-single { padding: 16px 20px; }
-.build-note { font-size: 13.5px; line-height: 1.65; color: var(--text-muted); margin: 0 0 14px; }
-.build-note a { color: var(--amber); font-weight: 600; }
+.main-grid-single { padding: 16px 20px 40px; }
+.build-note { font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary); margin: 0 0 14px; }
+.build-note a { color: var(--accent-orange); font-weight: 600; }
 .demo-stats { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 20px; }
-.demo-stats .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
-.demo-stats .val { font-size: 24px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
-@media (max-width: 640px) { .main-grid-single { padding-left: 14px; padding-right: 14px; } }
+.demo-stats .label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.demo-stats .val {
+  font-size: var(--text-2xl); font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums;
+}
 
 /* ============================================================
    MOBILE — phan dung chung
    ============================================================ */
 @media (max-width: 640px) {
-  .app-header, .app-footer { margin-left: 14px; margin-right: 14px; }
-  .app-header { padding-left: 14px; padding-right: 14px; }
+  .app-header { padding: 14px; }
   .header-right { width: 100%; justify-content: space-between; }
-  .controls { align-items: flex-start; }
+  .main-grid-single { padding-left: 14px; padding-right: 14px; }
+  .panel { padding: 16px; }
   .panel-head { flex-wrap: wrap; gap: 8px 12px; }
 
   /* 6 muc xuong dong tren dien thoai an mat 3 hang man hinh va day nut con mat
      xuong goc. Cuon ngang 1 hang thay vi wrap; nut con mat ghim ben phai. */
-  .app-nav { margin-left: 14px; margin-right: 14px; }
+  .app-nav { padding-left: 14px; padding-right: 14px; }
   /* Chi khoi link cuon ngang; nut con mat dung yen ben ngoai vung cuon,
      nen khong bao gio de len chu. */
   .nav-links {
@@ -372,8 +507,13 @@ tr:hover td { background: var(--panel-2); }
   }
   .nav-links::-webkit-scrollbar { display: none; }
   .nav-links a { flex: 0 0 auto; }
+
+  /* Hang tab cuon ngang thay vi xuong dong — 5 tab wrap an mat 2 hang */
+  .market-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .market-tabs::-webkit-scrollbar { display: none; }
+  .market-tabs button { flex: 0 0 auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .aurora span, .ticker-track, .live-dot::before { animation: none; }
+  .ticker-track, .live-dot::before { animation: none; }
 }

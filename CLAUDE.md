@@ -21,7 +21,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260731b`**.
+Cache busting hiện **`?v=20260803a`**.
 
 ---
 
@@ -78,7 +78,24 @@ danh mục SSI thật (chỉ đọc), lịch sử giao dịch cá nhân tính l�
   (trạng thái accordion). Lãi/lỗ tính theo **giá vốn bình quân gia quyền**.
 - `DEFAULT_WATCHLIST` trong `config.js` chỉ seed lần đầu; sau đó watchlist
   đọc/ghi qua `Store`. Danh sách rỗng: tôn trọng, không tự nạp lại seed.
-- Font Inter. Theme Sáng/Tối (`[data-theme]`) + slider Trong/Đục (`--glass-a`).
+- **Ngôn ngữ thiết kế: Fey design system** (từ 03/08/2026, xem mục 9). Bề mặt
+  PHẲNG ĐỤC, font Roboto, accent cam `#f0a94e` (tối) / `#b9740a` (sáng), radius
+  16, viền hairline. Theme Sáng/Tối qua `[data-theme]`, **mặc định TỐI**.
+  **Đừng phục hồi Liquid Glass**: aurora blob, `backdrop-filter`, slider
+  Trong/Đục và biến `--glass-a` đã bỏ có chủ đích — design nguồn quy định bề mặt
+  đục hoàn toàn. Bản mock kính cũ vẫn xem được ở `/mock-liquid-glass.html`.
+- Token màu/chữ/khoảng cách của Fey nằm ở đầu `assets/css/base.css`. Tên biến cũ
+  (`--panel`, `--amber`, `--up`, `--field-bg`…) giữ lại làm **alias** trỏ vào
+  token mới, nên code cũ không phải sửa — đổi da chỉ cần đổi giá trị ở một chỗ.
+- **NGOẠI LỆ của luật alias**: 10 biến `chartModule.js` đọc qua
+  `getComputedStyle().getPropertyValue()` phải là **hex/rgba literal, lặp lại
+  trong TỪNG khối theme** — `--border`, `--text-muted`, `--amber`, và 7 biến
+  `--chart-up/-down/-ma10/-ma20/-boll/-rsi/-trend`. `getPropertyValue` trả
+  **chuỗi thô chưa giải**, nên viết `--border: var(--border-default)` sẽ khiến
+  hàm trả đúng chuỗi `"var(--border-default)"`; Lightweight Charts nhận màu
+  không hợp lệ và **im lặng** rơi về màu mặc định, không có lỗi console nào.
+  (Cảnh báo này có sẵn ở đầu `base.css` từ trước, phiên 03/08 mở rộng cho 7
+  biến chart mới; chưa đo lại.)
 - Mọi widget lấy dữ liệu qua `dataService.js` — không `fetch()` thẳng trong trang.
 - **Mọi dữ liệu người dùng đọc/ghi qua `store.js`** — không gọi thẳng
   `localStorage` từ trang. Toàn bộ API của `Store` **trả Promise**, kể cả driver
@@ -251,6 +268,32 @@ Actions bấm *Enable workflow*.
 
 - Regex `\b` **không hoạt động với tiếng Việt** → dùng lookaround Unicode
   `(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])` với cờ `u`.
+
+### Class `.mtab-pane` dùng chung 2 nơi → tab thị trường nuốt accordion (03/08/2026)
+
+**Triệu chứng.** Mở accordion "Tài khoản SSI · Giao dịch · Lịch sử" thì thấy
+hàng sub-tab nhưng **thân thẻ trống trơn**. Bấm lại một sub-tab là hiện bình
+thường. Không có lỗi console.
+
+**Số đo.** Sau khi bấm bất kỳ tab thị trường nào: cả 3 pane
+`[data-apane]` (`ssi`/`add`/`manual`) đều có `hidden === true`,
+`offsetHeight === 0`, trong khi `localStorage.vn_dashboard_account_tab_v1` vẫn
+đúng bằng `"ssi"` và nút "Danh mục SSI" vẫn đang `.active` — nút và pane lệch
+trạng thái nhau.
+
+**Nguyên nhân.** `wireMarketTabs` quét `document.querySelectorAll(".mtab-pane")`
+rồi gán `p.hidden = p.dataset.pane !== state.marketTab`. Accordion tài khoản
+**dùng lại đúng class đó** (cố ý, để khỏi viết lại CSS `[hidden]`), mà 3 pane của
+nó không có thuộc tính `data-pane` → `undefined !== "heatmap"` → ẩn sạch.
+
+**Đã loại trừ** (đừng điều tra lại): không phải localStorage cũ (đã đọc, giá trị
+đúng); không phải `setAcctTab` sai (nó dùng `[data-apane]`, đúng); không phải do
+reskin CSS (luật `.mtab-pane[hidden] { display: none }` giữ nguyên từ 31/07).
+Lỗi có từ phiên 25/07 khi gộp 3 khối cuối trang thành accordion, chỉ là không ai
+bấm tab thị trường **trước** khi mở accordion nên chưa lộ.
+
+**Cách sửa.** Quét `[data-pane]` thay cho `.mtab-pane`. Luật chung: **chọn theo
+thuộc tính dữ liệu, đừng chọn theo class trình bày** khi class đó cố ý dùng chung.
 
 ### Format SSI thật (đã xác nhận 22/07/2026 — hết mơ hồ)
 
@@ -477,7 +520,7 @@ giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 ## 9. Trạng thái hiện tại
 
 **Dự án hoàn thành, chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn**
-— `USE_MOCK: false`. Cache busting `?v=20260730a`.
+— `USE_MOCK: false`. Cache busting `?v=20260803a`.
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
@@ -494,6 +537,42 @@ giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
+
+**03/08/2026 — reskin Fey design system (frontend-only, KHÔNG đụng `server/`).**
+Nhập design `Stock Dashboard Redesign.dc.html` từ claude.ai/design (project
+`f0e78ba8-9439-4af1-848b-6012fe2cc380`) qua MCP `DesignSync`, dựng lại bằng
+HTML/CSS/JS thuần đang có — **không port file `.dc.html`**, nó chạy trên runtime
+riêng của công cụ design (`support.js`), README handoff ghi rõ đừng import thẳng.
+
+Đụng 7 file: `base.css`, `chung-khoan.css`, `chung-khoan.html`, `index.html`,
+`theme.js`, `chartModule.js`, `pages/chung-khoan.js`. Version `?v=20260803a`
+(đã bump đủ 13 chỗ ở cả 2 trang).
+
+- **Token**: tầng token Fey thay tầng Liquid Glass ở đầu `base.css`. Tối mặc
+  định; khối sáng copy nguyên văn từ `[data-theme="light"]` của file design.
+- **Bỏ kính**: aurora 5 blob, `.grain`, mọi `backdrop-filter`, slider Trong/Đục
+  (cả markup lẫn `GLASS`/`setGlass` trong `theme.js`). Font Inter → Roboto.
+- **Component**: SegmentedControl (tab thị trường / khung thời gian / switcher
+  sàn / sub-tab tài khoản) — không viền, nút chọn **đảo màu** chứ không phải nền
+  cam. Nút cam chỉ còn dùng cho toggle Sáng/Tối và chip chỉ báo đang bật.
+- **Bố cục**: cột 1440px căn giữa; header dải phẳng viền dưới; ticker tape
+  chuyển xuống **dưới header** (đúng thứ tự design), tràn viền; index card
+  `minmax(150px,1fr)`, hover đổi nền chứ không nhấc `-5px` nữa; heatmap
+  `minmax(84px,1fr)`; watchlist thành hàng bo tròn 44px, bỏ kẻ ngang.
+- **Heatmap**: `heatColor` đổi từ HSL đục sang **alpha tint** (`rgba` xanh/đỏ,
+  α 0,10→0,44 theo |%|). Ô giờ dùng màu chữ chung — bỏ được mực ghim `#0f172a`
+  vốn phải có vì nền HSL sáng ở cả 2 theme. Thêm vòng accent cho mã đang chọn,
+  re-render ở cả 4 chỗ đổi lựa chọn.
+- **Chart**: màu chuyển sang biến CSS `--chart-*`. Nến `#3ddc97`/`#f0625f`
+  (sáng: `#1f9d68`/`#c9433f`), MA10 cam, MA20 tím, Bollinger xám nét đứt 1px,
+  RSI vàng. `applyTheme()` giờ tô lại **cả series**, trước chỉ đổi lưới + chữ
+  nên đổi theme xong nến vẫn giữ màu cũ.
+- **`selectSymbol`** bỏ `scrollIntoView`, tính offset tay
+  (`pageYOffset + rect.top - 70`) — xem mục 7.
+
+Kiểm chứng trên trình duyệt thật (localhost, backend Render thật, dữ liệu SSI
+thật): 5 tab thị trường, watchlist + sparkline, chart + RSI + fund grid, tin
+tức, accordion tài khoản (cả 3 sub-tab), đổi Sáng/Tối — 0 lỗi console.
 
 **31/07/2026 (phiên 2) — GĐ 0: tái cấu trúc đa trang.**
 `style.css` tách thành `assets/css/base.css` (dùng chung) + `chung-khoan.css`.
@@ -578,9 +657,41 @@ Trong/Đục, `chartModule.applyTheme()`. Backup `style.css.pre-glass.bak` (loca
 
 ### Ưu tiên — quy hoạch mới
 Website quản lý gia sản đa kênh: `docs/QUYHOACH.md`. 8 giai đoạn, ~23 phiên,
-~11 tuần. Mục 0.1 đã xong 31/07. **Việc kế tiếp: GĐ 0 mục 0.2–0.9** — tách
-`style.css`, chuyển JS vào `assets/`, viết `nav.js` (kèm nút con mắt) và
-`store.js`. Toàn bộ làm được ngay, không cần user bấm gì.
+~11 tuần. **GĐ 0 đã xong hết ngày 31/07** (mục 0.1–0.9: tách `style.css`, dời JS
+vào `assets/`, `nav.js`, `store.js` — xem nhật ký mục 9). Việc kế tiếp theo quy
+hoạch là **GĐ 1**, đọc `docs/QUYHOACH.md`.
+
+### Chart cho chỉ số (phần duy nhất của design 03/08 chưa dựng)
+
+Design cho phép **bấm thẻ chỉ số → nạp chart chỉ số đó + cuộn xuống**. Chưa làm
+vì backend chưa có đường dữ liệu: `/api/price/history` chạy `DailyOhlc` (chỉ mã
+CK). Gắn click bây giờ chỉ hiện `—`, phạm luật vàng ở mục 3.
+
+Đã khảo sát phạm vi ngày 03/08 (chưa viết dòng code nào):
+
+- Backend: thêm `computeIndexHistory(code, days)` **dùng lại đúng call
+  `DailyIndex` mà `computeIndices` đang gọi**, chỉ nới `FromDate/ToDate`. Rồi
+  thêm `GET /api/price/index-history` + `withCache` TTL co giãn như `/history`.
+- **`DailyIndex` KHÔNG có OHLC** — chỉ `IndexValue`, một giá trị mỗi ngày (xem
+  mục 7, format SSI đã xác nhận 22/07). Nên **không vẽ nến được cho chỉ số**:
+  `chartModule.js` phải thêm chế độ đường. MA10/MA20/RSI vẫn chạy vì tính trên
+  close; nến / khối lượng / Bollinger phải ẩn khi chọn chỉ số.
+- 4 ô chỉ số cơ bản của index (GTGD, KLGD, số mã tăng, số mã giảm) lấy từ
+  `TotalMatchVol` + `Advances`/`Declines` — **có sẵn trong đúng row đang gọi,
+  0 call SSI thêm**.
+- Frontend: `dataService.getIndexHistory` (~15 dòng, nhân bản `getHistory`);
+  `chung-khoan.js` cho `state.selected` nhận mã chỉ số + rẽ nhánh trong
+  `loadSelectedSymbol` (bỏ qua fundamentals/tin/tín hiệu); rà các chỗ ngầm giả
+  định `selected ∈ watchlist ∪ VN30` (sparkline, badge tín hiệu, tin theo mã).
+- **Ẩn số còn lại**: `DailyIndex` có nhận khoảng ngày rộng + phân trang như
+  `DailyOhlc` không, hay phải chunk 30 ngày. Không kiểm được từ máy local
+  (không có credentials SSI) — phải gọi thật.
+
+**Ước lượng: 70–100k token, 1 phiên, ~45–70 phút.** Phần dao động nằm ở vòng
+verify live (cold start Render 15–40s mỗi lần). Nếu muốn rẻ, tách 2 bước:
+**A** (~25k, ~15 phút) chỉ thêm 4 ô chỉ số index vào `computeIndices` + 1 call
+thăm dò giới hạn phân trang → **B** (~50–75k) dựng chart đường sau khi đã biết
+chắc dạng dữ liệu.
 
 ### Tính năng chứng khoán chưa làm
 1. **Theo dõi dòng tiền** (user đã chọn từ 24/07, chưa làm): phát hiện đột biến

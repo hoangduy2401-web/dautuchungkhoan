@@ -1,28 +1,19 @@
 <!DOCTYPE html>
-<html lang="vi" data-theme="light">
+<html lang="vi" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Chứng khoán VN — Quản lý gia sản</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260731b" />
-<link rel="stylesheet" href="assets/css/chung-khoan.css?v=20260731b" />
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/base.css?v=20260803a" />
+<link rel="stylesheet" href="assets/css/chung-khoan.css?v=20260803a" />
 </head>
 <body>
 
-  <!-- Liquid Glass background: aurora colour layer the glass panels refract -->
-  <div class="aurora"><span class="b1"></span><span class="b2"></span><span class="b3"></span><span class="b4"></span><span class="b5"></span></div>
-  <div class="grain"></div>
-
   <!-- Shared nav across all 6 pages; rendered by assets/js/core/nav.js -->
   <div id="appNav"></div>
-
-  <!-- Ticker tape: dải giá chạy liên tục kiểu bảng điện sàn giao dịch -->
-  <div class="ticker-tape">
-    <span class="ticker-track" id="tickerTrack"></span>
-  </div>
 
   <header class="app-header">
     <div class="brand">
@@ -41,14 +32,15 @@
           <button type="button" id="tLight">Sáng</button>
           <button type="button" id="tDark">Tối</button>
         </div>
-        <div class="glass-slider" title="Độ trong / đục của kính">
-          <span class="gs-label">Trong</span>
-          <input id="glassRange" type="range" min="0" max="100" value="29" aria-label="Độ trong đục của kính" />
-          <span class="gs-label">Đục</span>
-        </div>
       </div>
     </div>
   </header>
+
+  <!-- Ticker tape: dải giá chạy liên tục kiểu bảng điện sàn giao dịch.
+       Nằm NGAY DƯỚI header theo thứ tự của design (header -> marquee). -->
+  <div class="ticker-tape">
+    <span class="ticker-track" id="tickerTrack"></span>
+  </div>
 
   <section class="index-strip" id="indexStrip"></section>
 
@@ -149,9 +141,10 @@
         <div class="symbol-title" id="symbolTitle"></div>
         <div class="chart-toolbar">
           <div class="range-tabs" id="rangeTabs"></div>
-          <label class="chk"><input type="checkbox" id="chkMA10" checked/><span class="sw" style="background:#2a78d6;"></span>MA10</label>
-          <label class="chk"><input type="checkbox" id="chkMA20" checked/><span class="sw" style="background:#4a3aa7;"></span>MA20</label>
-          <label class="chk"><input type="checkbox" id="chkBB"/><span class="sw" style="background:#1baf7a;"></span>Bollinger</label>
+          <span class="tb-sep"></span>
+          <label class="chk"><input type="checkbox" id="chkMA10" checked/><span class="sw" style="background:var(--chart-ma10);"></span>MA10</label>
+          <label class="chk"><input type="checkbox" id="chkMA20" checked/><span class="sw" style="background:var(--chart-ma20);"></span>MA20</label>
+          <label class="chk"><input type="checkbox" id="chkBB"/><span class="sw" style="background:var(--chart-boll);"></span>Bollinger</label>
           <label class="chk"><input type="checkbox" id="chkVol" checked/>KL</label>
           <label class="chk"><input type="checkbox" id="chkRSI" checked/>RSI</label>
           <button type="button" id="drawTrendBtn" class="btn-outline">Vẽ trendline</button>
@@ -257,15 +250,15 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="assets/js/core/config.js?v=20260731b"></script>
-  <script src="assets/js/core/store.js?v=20260731b"></script>
-  <script src="assets/js/core/theme.js?v=20260731b"></script>
-  <script src="assets/js/core/nav.js?v=20260731b"></script>
-  <script src="assets/js/core/mockData.js?v=20260731b"></script>
-  <script src="assets/js/core/dataService.js?v=20260731b"></script>
-  <script src="assets/js/core/portfolio.js?v=20260731b"></script>
-  <script src="assets/js/core/signals.js?v=20260731b"></script>
-  <script src="assets/js/core/chartModule.js?v=20260731b"></script>
-  <script src="assets/js/pages/chung-khoan.js?v=20260731b"></script>
+  <script src="assets/js/core/config.js?v=20260803a"></script>
+  <script src="assets/js/core/store.js?v=20260803a"></script>
+  <script src="assets/js/core/theme.js?v=20260803a"></script>
+  <script src="assets/js/core/nav.js?v=20260803a"></script>
+  <script src="assets/js/core/mockData.js?v=20260803a"></script>
+  <script src="assets/js/core/dataService.js?v=20260803a"></script>
+  <script src="assets/js/core/portfolio.js?v=20260803a"></script>
+  <script src="assets/js/core/signals.js?v=20260803a"></script>
+  <script src="assets/js/core/chartModule.js?v=20260803a"></script>
+  <script src="assets/js/pages/chung-khoan.js?v=20260803a"></script>
 </body>
 </html>

@@ -24,13 +24,20 @@ const ChartModule = (function () {
   let dataKey = null; // "SYMBOL|range" of the loaded bars — see setData()
   let resizeObserver;
 
-  const UP = "#17d980";
-  const DOWN = "#ff4d5e";
-  const TREND = "#eb6834";
+  // Chart colours live in base.css so both themes are defined in one place.
+  // They must be LITERAL hex there — getPropertyValue returns the raw string, so
+  // an alias written as var(--x) would come back unresolved. UP/DOWN are also
+  // concatenated with an alpha suffix below, which only works on hex.
+  function cssColor(name, fallback) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  }
+  let UP = cssColor("--chart-up", "#3ddc97");
+  let DOWN = cssColor("--chart-down", "#f0625f");
+  let TREND = cssColor("--chart-trend", "#f0a94e");
 
-  // RSI line follows the brand accent so it reads clearly against the glass.
+  // RSI line: chart-series yellow in the design system.
   function accentColor() {
-    return getComputedStyle(document.documentElement).getPropertyValue("--amber").trim() || "#f5811f";
+    return cssColor("--chart-rsi", "#e5d26b");
   }
 
   function sma(values, period) {
@@ -83,7 +90,7 @@ const ChartModule = (function () {
       layout: {
         background: { color: "transparent" },
         textColor: css.getPropertyValue("--text-muted").trim() || "#8493b3",
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "'Roboto', 'Inter', sans-serif",
         fontSize: 11,
       },
       grid: {
@@ -116,11 +123,14 @@ const ChartModule = (function () {
     candleSeries = priceChart.addCandlestickSeries({
       upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN,
     });
-    ma10Series = priceChart.addLineSeries({ color: "#2a78d6", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    ma20Series = priceChart.addLineSeries({ color: "#4a3aa7", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    bbUpperSeries = priceChart.addLineSeries({ color: "#1baf7a", lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
-    bbBasisSeries = priceChart.addLineSeries({ color: "#1baf7a", lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false });
-    bbLowerSeries = priceChart.addLineSeries({ color: "#1baf7a", lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
+    const ma10 = cssColor("--chart-ma10", "#f0a94e");
+    const ma20 = cssColor("--chart-ma20", "#a78bfa");
+    const boll = cssColor("--chart-boll", "#8a8a8a");
+    ma10Series = priceChart.addLineSeries({ color: ma10, lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    ma20Series = priceChart.addLineSeries({ color: ma20, lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    bbUpperSeries = priceChart.addLineSeries({ color: boll, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
+    bbBasisSeries = priceChart.addLineSeries({ color: boll, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false });
+    bbLowerSeries = priceChart.addLineSeries({ color: boll, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
     [bbUpperSeries, bbBasisSeries, bbLowerSeries].forEach((s) => s.applyOptions({ visible: false }));
     volumeSeries = priceChart.addHistogramSeries({
       priceFormat: { type: "volume" }, priceScaleId: "volume", lastValueVisible: false, priceLineVisible: false,
@@ -417,7 +427,7 @@ const ChartModule = (function () {
     const d1 = bars[p1.index] && bars[p1.index].date, d2 = bars[p2.index] && bars[p2.index].date;
     const l2 = d1 && d2 ? `${barCount} nến · ${shortDate(d1)} → ${shortDate(d2)}` : `${barCount} nến`;
 
-    overlayCtx.font = "700 11px Inter, sans-serif";
+    overlayCtx.font = "700 11px Roboto, sans-serif";
     const w = Math.max(overlayCtx.measureText(l1).width, overlayCtx.measureText(l2).width) + 16;
     const h = 34;
     // Keep the label inside the canvas even when a point sits near an edge.
@@ -434,10 +444,10 @@ const ChartModule = (function () {
     } else {
       overlayCtx.fillRect(bx, by, w, h); // older browsers: square label chip
     }
-    overlayCtx.fillStyle = "#0a0f1c";
+    overlayCtx.fillStyle = "#0a0a0a";
     overlayCtx.textBaseline = "top";
     overlayCtx.fillText(l1, bx + 8, by + 5);
-    overlayCtx.font = "600 10.5px Inter, sans-serif";
+    overlayCtx.font = "600 10.5px Roboto, sans-serif";
     overlayCtx.fillText(l2, bx + 8, by + 19);
     overlayCtx.restore();
   }
@@ -459,15 +469,27 @@ const ChartModule = (function () {
     }
   }
 
-  // Re-apply theme-dependent colours (grid/text/borders read from CSS vars).
-  // Called by app.js when the Sáng/Tối toggle flips. Candle up/down stay fixed.
+  // Re-apply every theme-dependent colour (grid/text/borders/series) after the
+  // Sáng/Tối toggle. The two themes now use different up/down and MA colours, so
+  // the series have to be re-coloured too — re-reading the CSS vars is enough.
   function applyTheme() {
     if (!priceChart) return;
     const t = chartTheme();
     priceChart.applyOptions(t);
     rsiChart.applyOptions(t);
     rsiChart.applyOptions({ timeScale: { visible: false } });
+    UP = cssColor("--chart-up", "#3ddc97");
+    DOWN = cssColor("--chart-down", "#f0625f");
+    TREND = cssColor("--chart-trend", "#f0a94e");
+    const boll = cssColor("--chart-boll", "#8a8a8a");
+    if (candleSeries) {
+      candleSeries.applyOptions({ upColor: UP, downColor: DOWN, wickUpColor: UP, wickDownColor: DOWN });
+    }
+    if (ma10Series) ma10Series.applyOptions({ color: cssColor("--chart-ma10", "#f0a94e") });
+    if (ma20Series) ma20Series.applyOptions({ color: cssColor("--chart-ma20", "#a78bfa") });
+    [bbUpperSeries, bbBasisSeries, bbLowerSeries].forEach((s) => s && s.applyOptions({ color: boll }));
     if (rsiSeries) rsiSeries.applyOptions({ color: accentColor() });
+    redrawOverlay(); // trendline/ruler ink follows the theme too
   }
 
   return {

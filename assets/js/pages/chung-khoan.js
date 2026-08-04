@@ -290,9 +290,11 @@ function renderTickerTape() {
     .map((s) => {
       const q = state.quotes[s];
       if (!q) return "";
-      return `<span class="ticker-item"><span class="sym">${s}</span><span class="${trendClass(
+      return `<span class="ticker-item"><span class="sym">${s}</span><span class="price">${fmt(
+        q.price
+      )}</span> <span class="${trendClass(q.changePct)}">${arrow(q.changePct)} ${fmtPct(
         q.changePct
-      )}">${fmt(q.price)} ${arrow(q.changePct)} ${fmtPct(q.changePct)}</span></span>`;
+      )}</span></span>`;
     })
     .join("");
   // duplicate content for seamless scroll loop
@@ -302,15 +304,15 @@ function renderTickerTape() {
 /* ============================================================
    VN30 HEATMAP
    ============================================================ */
-// Map a daily % change to a cell colour. Fixed hue (150 green up / 355 red down),
-// lightness scales with |%|: near-flat ≈ 92% (pale), a ≥4.5% mover ≈ 45% (deep),
+// Map a daily % change to a cell colour. Fixed hue (green up / red down),
+// ALPHA scales with |%|: near-flat = 0.10 (barely tinted), a ≥4.5% mover = 0.44,
 // so big movers visually pop instead of every up/down looking equally saturated.
+// Reskin 03/08: alpha tint over the card, not an opaque HSL fill — the tile now
+// works in both themes and its label can use the normal text colour.
 function heatColor(pct) {
   const mag = Math.min(Math.abs(pct || 0) / 4.5, 1);
-  const light = 92 - mag * 47;
-  return (pct || 0) >= 0
-    ? `hsl(150,55%,${light.toFixed(1)}%)`
-    : `hsl(355,70%,${light.toFixed(1)}%)`;
+  const alpha = (0.1 + mag * 0.34).toFixed(2);
+  return (pct || 0) >= 0 ? `rgba(61,220,151,${alpha})` : `rgba(240,98,95,${alpha})`;
 }
 
 function renderHeatmap() {
@@ -329,7 +331,10 @@ function renderHeatmap() {
       if (!q) {
         return `<div class="heat-cell heat-empty"><span class="hc-sym">${s}</span><span class="hc-pct">—</span></div>`;
       }
-      const cls = q.changePct > 0 ? "up" : q.changePct < 0 ? "down" : "flat";
+      // Selected ticker gets the inset accent ring, same as the watchlist row tint.
+      const cls =
+        (q.changePct > 0 ? "up" : q.changePct < 0 ? "down" : "flat") +
+        (s === state.selected ? " active" : "");
       return `<div class="heat-cell ${cls}" data-symbol="${s}" style="background:${heatColor(
         q.changePct
       )}" title="${s} · ${fmt(q.price)} · ${fmtPct(q.changePct)}">
@@ -345,6 +350,7 @@ function renderHeatmap() {
       state.selected = cell.dataset.symbol;
       loadSelectedSymbol();
       renderWatchlist();
+      renderHeatmap(); // move the accent ring to the new tile
     });
   });
 }
@@ -424,6 +430,7 @@ function renderRankings() {
         loadSelectedSymbol();
         renderWatchlist();
         renderRankings();
+        renderHeatmap();
       });
     })
   );
@@ -504,9 +511,16 @@ function selectSymbol(sym) {
   if (!sym || sym === state.selected) return;
   state.selected = sym;
   renderWatchlist();
+  renderHeatmap();
   loadSelectedSymbol();
+  // Measure and scroll the window manually instead of scrollIntoView(): that API
+  // scrolls the nearest scrollable ancestor, so a card that later sits inside an
+  // overflow container would scroll THAT box and leave the page where it was.
   const chart = document.getElementById("symbolTitle");
-  if (chart) chart.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (chart) {
+    const top = window.pageYOffset + chart.getBoundingClientRect().top - 70;
+    window.scrollTo({ top, behavior: "smooth" });
+  }
 }
 
 function sigBasketSymbols() {
@@ -773,7 +787,10 @@ function wireMarketTabs() {
     btn.addEventListener("click", () => {
       state.marketTab = btn.dataset.mtab;
       tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
-      document.querySelectorAll(".mtab-pane").forEach((p) => {
+      // Match on [data-pane], NOT ".mtab-pane": the account accordion reuses the
+      // same class for its own sub-panes, so a class query here silently hid all
+      // three of them and left the accordion body blank until it was re-tabbed.
+      document.querySelectorAll("[data-pane]").forEach((p) => {
         p.hidden = p.dataset.pane !== state.marketTab;
       });
       // Signals need whole-basket history (30–50 sequential calls). Render what
@@ -869,6 +886,7 @@ function renderWatchlist() {
       state.selected = row.dataset.symbol;
       loadSelectedSymbol();
       renderWatchlist();
+      renderHeatmap();
     });
   });
   enableWatchlistDrag(el);
@@ -1069,7 +1087,7 @@ function renderNews(items) {
       const hoursAgo = Math.max(1, Math.round((Date.now() - t) / 3600000));
       return `
       <div class="news-item">
-        <div class="meta"><span class="tag">${escapeHtml(n.symbol)}</span><span>${escapeHtml(n.source)}</span><span>${hoursAgo}h trước</span></div>
+        <div class="meta"><span class="tag">${escapeHtml(n.symbol)}</span><span class="src">${escapeHtml(n.source)} · ${hoursAgo}h trước</span></div>
         <div class="title"><a href="${escapeHtml(safeUrl(n.url))}" target="_blank" rel="noopener">${escapeHtml(n.title)}</a></div>
       </div>`;
     })
