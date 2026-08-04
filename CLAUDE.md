@@ -21,7 +21,8 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260803a`**.
+Cache busting hiện **`?v=20260804a`** (đã kiểm: 18 chỗ trong 2 file HTML, bản live
+cũng đang phục vụ đúng chuỗi này).
 
 ---
 
@@ -588,24 +589,55 @@ giá trị lệnh, nút hủy khẩn cấp, log mọi lệnh.
 
 ## 9. Trạng thái hiện tại
 
-**Dự án hoàn thành, chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn**
-— `USE_MOCK: false`. Cache busting `?v=20260803a`.
+**Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
+Cache busting `?v=20260804a`. Nhánh `main` sạch, đã push, backend đã deploy bản
+mới nhất (đã kiểm 04/08: `/api/price/indices` có đủ 5 trường thống kê và
+`/api/price/index-history` trả dữ liệu).
+
+Website hiện có **2 trang**: `/` (tổng gia sản, mới là khung) và
+`/chung-khoan.html` (đầy đủ). 4 trang còn lại chưa làm — xem mục 10.
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
 | Giá / nến / chỉ số | SSI FCData | chunking 30 ngày; index intraday tái tạo từ RatioChange |
+| **Chart chỉ số** | SSI `DailyIndex` | bấm thẻ chỉ số = vẽ **đường** (không có OHLC); 5 ô thống kê toàn sàn |
 | Chart khung thời gian | — | 1M / 3M / 6M / 1Y / 5Y (30/90/180/365/1825 ngày) |
-| Ticker tape | rổ VN30 | tách khỏi watchlist; cuộn 90s; backend warm cả 30 mã |
-| Bản đồ nhiệt VN30 | quote đã warm | 30 ô màu %, click = load chart; chưa sizing theo vốn hóa |
+| Ticker tape | rổ VN30 | tách khỏi watchlist; backend warm cả 30 mã |
+| Bản đồ nhiệt VN30 | quote đã warm | 30 ô alpha tint, có vòng accent cho mã đang chọn; chưa sizing theo vốn hóa |
 | Theo ngành / Top tăng-giảm / Khối ngoại / Tín hiệu | quote + history | 5 tab, thuần client-side |
 | Chỉ số cơ bản (10 ô) | VNDirect finfo | ratios + tự tính YoY & nợ/VCSH |
 | Tin tức theo mã | CafeF RSS | đã sửa regex tiếng Việt |
-| Watchlist | localStorage | burger ☰ kéo thả sắp xếp, sparkline SVG |
-| Lịch sử giao dịch tay | localStorage | giá vốn bình quân gia quyền |
+| Watchlist | **`Store`** (driver localStorage) | kéo thả sắp xếp, sparkline SVG |
+| Lịch sử giao dịch tay | **`Store`** (driver localStorage) | giá vốn bình quân gia quyền |
 | Danh mục thật SSI (chỉ đọc) | SSI FCTrading | GĐ1, xem mục 8 |
+| **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
+| Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
+
+**04/08/2026 (phiên 3) — chỉ soát tài liệu, KHÔNG đụng code.**
+Không sửa file `.js/.css/.html` nào → **không bump `?v=`**, vẫn `20260804a`.
+Không đụng `server/`. Đã đối chiếu tài liệu với thực tế và sửa 4 chỗ lệch:
+- Mục 0 và mục 9 còn ghi `?v=20260803a` trong khi thực tế đã là `20260804a`.
+  Đây là lỗi có hậu quả thật: phiên sau đọc "hiện là 03a" rồi bump lên "04a" là
+  **trùng chuỗi đã deploy**, user tiếp tục chạy code cũ tới 10 phút mà không ai
+  biết. Đã sửa cả hai.
+- Bảng tính năng mục 9 còn ghi watchlist/giao dịch lưu ở `localStorage` — thực
+  tế đã qua `Store` từ 31/07. Đã bổ sung: chart chỉ số, nút con mắt, giao diện
+  Fey, và ghi rõ website hiện có 2 trang.
+- `docs/CLAUDE.moi.md` còn ghi font Inter + slider Trong/Đục; `docs/QUYHOACH.md`
+  còn mô tả `base.css` là "tokens glass, aurora". Cả hai là bản nháp cho site đa
+  kênh nên sai ở đây sẽ dẫn phiên sau dựng lại thứ đã cố ý bỏ. Đã sửa.
+
+Kiểm chứng trạng thái trước khi ghi (không phải suy đoán):
+- `git status` sạch, `main` == `origin/main` tại `437bdff`.
+- Backend live đã có cả bước A lẫn bước B: `/api/price/indices` trả đủ
+  `totalVol/totalVal/advances/declines/noChanges` (VNINDEX 140/122/63, VN30
+  `null`), `/api/price/index-history?code=VNINDEX&days=30` trả `{date, close,
+  volume}`.
+- Frontend live phục vụ đúng `?v=20260804a`; `/` và `/chung-khoan.html` đều 200.
+- `config.js` đã trỏ lại `onrender.com` (phiên 2 từng tạm trỏ `localhost:3999`).
 
 **04/08/2026 (phiên 2) — bước B: chart chỉ số chạy được (ĐỤNG `server/index.js`).**
 Bấm thẻ chỉ số giờ nạp chart chỉ số đó + cuộn xuống, đúng phần cuối cùng còn
@@ -761,11 +793,29 @@ Trong/Đục, `chartModule.applyTheme()`. Backup `style.css.pre-glass.bak` (loca
 
 ## 10. Việc còn treo
 
+### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
+
+Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy.
+
+Việc kế tiếp theo quy hoạch là **GĐ 1 — trang Ngoại tệ** (3 phiên). Đọc
+`docs/QUYHOACH.md` mục 2.1 + 2.10 (nguồn) và bảng GĐ 1 (8 đầu việc). Tóm tắt
+để khỏi mở file: route `/api/fx/rates` parse XML Vietcombank (**cache ≥5 phút**,
+nguồn ghi rõ 1 request/5 phút), route `/api/fx/history` lấy Yahoo Finance kèm
+**tỷ giá chéo** cho JPY/CNY/AUD, biểu đồ 1M/3M/6M/1Y/5Y, danh mục ngoại tệ nhập
+tay qua `Store`.
+
+**Cạm bẫy đã biết trước của GĐ 1, đừng bỏ qua:** bảng (Vietcombank, giá bán lẻ)
+và biểu đồ (Yahoo, giá liên ngân hàng) **lệch nhau ~0,8% và sẽ không bao giờ
+khớp** — đo 30/07: Yahoo 26.300 vs VCB mua 26.080 / bán 26.490. Bắt buộc ghi
+nhãn nguồn cạnh mỗi con số, nếu không user tự so hai số rồi tưởng hệ thống lỗi.
+
+Ba việc chen ngang đã làm xong ngoài quy hoạch (03–04/08): reskin Fey, bước A và
+bước B của chart chỉ số. Không ảnh hưởng thứ tự GĐ 1–7.
+
 ### Ưu tiên — quy hoạch mới
 Website quản lý gia sản đa kênh: `docs/QUYHOACH.md`. 8 giai đoạn, ~23 phiên,
 ~11 tuần. **GĐ 0 đã xong hết ngày 31/07** (mục 0.1–0.9: tách `style.css`, dời JS
-vào `assets/`, `nav.js`, `store.js` — xem nhật ký mục 9). Việc kế tiếp theo quy
-hoạch là **GĐ 1**, đọc `docs/QUYHOACH.md`.
+vào `assets/`, `nav.js`, `store.js` — xem nhật ký mục 9).
 
 ### Chart cho chỉ số — XONG 04/08 (giữ lại phần cần biết)
 

@@ -227,12 +227,13 @@ ghi rõ thời điểm, còn hơn hiện số bịa hoặc hiện trống không
 ├── tiet-kiem.html
 ├── assets/
 │   ├── css/
-│   │   ├── base.css        ← tokens glass, aurora, layout, nav (tách từ style.css)
+│   │   ├── base.css        ← tokens Fey, layout, nav, chế độ riêng tư
 │   │   └── <trang>.css     ← CSS riêng từng trang
 │   └── js/
 │       ├── core/
 │       │   ├── config.js
-│       │   ├── nav.js      ← render thanh điều hướng dùng chung
+│       │   ├── theme.js    ← Sáng/Tối + đồng hồ, dùng chung
+│       │   ├── nav.js      ← thanh điều hướng + nút con mắt
 │       │   ├── store.js    ← LỚP TRỪU TƯỢNG LƯU TRỮ (xem 3.4)
 │       │   ├── dataService.js
 │       │   └── format.js   ← fmt/fmtPct/trendClass… (đang nằm rải trong app.js)

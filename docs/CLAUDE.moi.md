@@ -49,7 +49,10 @@ Tài liệu chi tiết từng kênh nằm ở `docs/`: `CHUNGKHOAN.md`, `VANG.md
 - Mọi widget lấy dữ liệu qua `dataService.js`, không `fetch()` thẳng trong trang.
 - Mọi dữ liệu người dùng đọc/ghi qua `store.js`, **không gọi thẳng Supabase hay
   localStorage** từ trang. Toàn bộ API của `store.js` trả Promise.
-- Font: Inter. Theme Sáng/Tối + slider Trong/Đục dùng chung mọi trang.
+- Font **Roboto**. Theme Sáng/Tối dùng chung mọi trang, **tối là mặc định**.
+  (Cập nhật 04/08: reskin sang Fey design system ngày 03/08 đã bỏ hẳn Liquid
+  Glass — không còn aurora, `backdrop-filter`, slider Trong/Đục hay `--glass-a`.
+  Đừng phục hồi. Xem `CLAUDE.md` mục 3.)
 
 ## 4. Luật vàng: KHÔNG BAO GIỜ HIỂN THỊ SỐ BỊA
 
