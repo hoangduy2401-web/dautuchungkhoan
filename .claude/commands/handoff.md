@@ -13,6 +13,11 @@ Cập nhật `CLAUDE.md` để phiên sau đọc là hiểu ngay, không cần h
    khuôn các phiên trước: ngày, việc đã làm, file nào đụng, có đụng backend
    không, số phiên bản `?v=` hiện tại.
 
+   **Mục 9 chỉ giữ 2 phiên gần nhất.** Thêm phiên mới thì đẩy phiên cũ nhất
+   xuống đầu `docs/NHATKY.md` (giữ nguyên văn, không viết lại). File `CLAUDE.md`
+   nạp vào context mỗi phiên, nên nhật ký dài làm mọi phiên sau trả giá; `git log`
+   cũng phục dựng được phần lớn vì commit message của dự án viết rất chi tiết.
+
 3. **Mục "Việc còn treo"** — xoá việc đã xong, thêm việc mới phát sinh. Việc nào
    cần user tự làm (bấm nút trên dashboard bên thứ ba, mua tên miền, tạo API
    key…) phải ghi rõ **"user tự làm"** kèm các bước.
