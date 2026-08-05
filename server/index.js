@@ -776,9 +776,9 @@ app.get("/api/news", async (req, res) => {
 // ============================================================
 // FX — two DIFFERENT kinds of exchange rate, on purpose.
 //   /api/fx/rates   Vietcombank: RETAIL board rates, with a buy/sell spread.
-//   /api/fx/history Yahoo:       INTERBANK market rate, a single mid price.
-// They are ~0.8% apart and will never agree (measured 30/07/2026: Yahoo
-// USD/VND 26,300 vs VCB buy 26,080 / sell 26,490). That is normal, but the UI
+//   /api/fx/history FXRatesAPI:  INTERBANK market rate, a single mid price.
+// They are ~0.8% apart and will never agree (measured 05/08/2026: interbank
+// USD/VND 26,259 vs VCB buy 26,050 / sell 26,460). That is normal, but the UI
 // MUST label the source next to every number — an accurate number under the
 // wrong label leads to the same bad decision as a made-up one.
 // ============================================================
@@ -863,132 +863,113 @@ app.get("/api/fx/rates", async (req, res) => {
 });
 
 // ------------------------------------------------------------
-// FX history — Yahoo Finance chart API.
-// Coverage is NOT uniform (measured 30/07/2026): USDVND=X has 1306 points over
-// 5 years, EURVND=X only 23, JPYVND=X exactly 1, AUDVND=X does not exist. So
-// only USD is read directly; every other currency is derived from its major
-// USD pair, which all carry full history:
-//     XXX/VND = XXXUSD × USDVND     (Yahoo quotes XXX per USD: EUR, GBP, AUD)
-//     XXX/VND = USDVND ÷ USDXXX     (Yahoo quotes USD per XXX: JPY, CNY, ...)
+// FX history — FXRatesAPI (free, no key, interbank mid rates).
+//
+// NOT Yahoo Finance, despite what docs/QUYHOACH.md §2.10 planned. Yahoo answers
+// 429 "Too Many Requests" to EVERY chart request from both this laptop and the
+// Render instance (measured 05/08/2026, curl and Node fetch, browser User-Agent
+// set); the same URL fetched from a third network returns 200. The block is by
+// IP, and a datacenter IP is exactly what Render gives us. Don't rebuild the
+// Yahoo path.
+//
+// One upstream call returns EVERY currency for the whole date range, so a cross
+// rate needs no second request: with base=USD each day carries "units of XXX per
+// 1 USD", hence
+//     XXX/VND = (VND per USD) ÷ (XXX per USD)
+// and USD/VND is simply the VND leg. Same formula for all 20 currencies.
+//
+// LIMIT: the free tier only serves 366 days of history ("start_date_too_old"),
+// so the 5Y button of the stock chart has no equivalent here — see CLAUDE.md §10.
 // ------------------------------------------------------------
-const FX_PAIRS = {
-  USD: { method: "direct" },
-  EUR: { method: "cross", pair: "EURUSD=X", op: "mul" },
-  GBP: { method: "cross", pair: "GBPUSD=X", op: "mul" },
-  AUD: { method: "cross", pair: "AUDUSD=X", op: "mul" },
-  JPY: { method: "cross", pair: "USDJPY=X", op: "div" },
-  CNY: { method: "cross", pair: "USDCNY=X", op: "div" },
-  CHF: { method: "cross", pair: "USDCHF=X", op: "div" },
-  CAD: { method: "cross", pair: "USDCAD=X", op: "div" },
-  SGD: { method: "cross", pair: "USDSGD=X", op: "div" },
-  HKD: { method: "cross", pair: "USDHKD=X", op: "div" },
-  THB: { method: "cross", pair: "USDTHB=X", op: "div" },
-  KRW: { method: "cross", pair: "USDKRW=X", op: "div" },
-  SEK: { method: "cross", pair: "USDSEK=X", op: "div" },
-  NOK: { method: "cross", pair: "USDNOK=X", op: "div" },
-  DKK: { method: "cross", pair: "USDDKK=X", op: "div" },
-  INR: { method: "cross", pair: "USDINR=X", op: "div" },
-  MYR: { method: "cross", pair: "USDMYR=X", op: "div" },
-  RUB: { method: "cross", pair: "USDRUB=X", op: "div" },
-  SAR: { method: "cross", pair: "USDSAR=X", op: "div" },
-  KWD: { method: "cross", pair: "USDKWD=X", op: "div" },
-};
+const FX_TS_URL = process.env.FX_TS_URL || "https://api.fxratesapi.com/timeseries";
+const FX_MAX_DAYS = 365; // upstream says "366 days in the past"; 366 exactly already 400s
 
-// The frontend speaks in days (30/90/180/365/1825, same buttons as the stock
-// chart); Yahoo only accepts its own range words.
-function yahooRange(days) {
-  if (days <= 31) return "1mo";
-  if (days <= 93) return "3mo";
-  if (days <= 186) return "6mo";
-  if (days <= 370) return "1y";
-  return "5y";
+// Every currency Vietcombank quotes. The upstream returns all of them in one
+// response, so listing them costs nothing extra per request.
+const FX_CODES = [
+  "USD", "EUR", "GBP", "AUD", "JPY", "CNY", "CHF", "CAD", "SGD", "HKD",
+  "THB", "KRW", "SEK", "NOK", "DKK", "INR", "MYR", "RUB", "SAR", "KWD",
+];
+
+// What to actually ask for: VND is the quote leg of every rate on this page and
+// must be requested explicitly; USD is the base, so it is always 1 and asking
+// for it returns nothing.
+const FX_QUERY_CODES = ["VND", ...FX_CODES.filter((c) => c !== "USD")];
+
+function isoDay(d) {
+  return d.toISOString().slice(0, 10);
 }
 
-// Yahoo answers 429 to requests it considers automated traffic, so keep the
-// calls single-file rather than firing both legs of a cross rate at once.
-const fxLimit = createLimiter(1);
+// Raw daily series for ALL currencies over `days`, keyed by date:
+//   Map("2026-08-04" -> { VND: 26259.0, JPY: 157.7, ... })
+async function fetchFxTimeseries(days) {
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 24 * 3600 * 1000);
+  const url =
+    `${FX_TS_URL}?start_date=${isoDay(start)}&end_date=${isoDay(end)}` +
+    `&base=USD&currencies=${FX_QUERY_CODES.join(",")}`;
 
-// One Yahoo series -> Map(yyyy-mm-dd -> close). Dates come from the UTC day of
-// each bar; both legs of a cross use the same convention, so they line up.
-async function yahooSeries(pair, range) {
-  return fxLimit(async () => {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-      pair
-    )}?range=${range}&interval=1d`;
-    const res = await fetchWithTimeout(
-      url,
-      {
-        headers: {
-          // Without a browser UA Yahoo is far more likely to answer 429.
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Accept: "application/json",
-        },
-      },
-      12000
-    );
-    if (!res.ok) throw new Error(`Yahoo ${pair} HTTP ${res.status}`);
-    const json = await res.json();
-    const result = json?.chart?.result?.[0];
-    if (!result) throw new Error(`Yahoo ${pair}: ${json?.chart?.error?.description || "no result"}`);
+  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 15000);
+  if (!res.ok) throw new Error(`FXRatesAPI HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.success === false) {
+    throw new Error(`FXRatesAPI: ${json.error || "unknown error"}`);
+  }
+  const rows = json.rates || {};
+  const byDate = new Map();
+  // Keys are full timestamps ("2026-08-04T23:59:00.000Z") = that day's close.
+  for (const [stamp, vals] of Object.entries(rows)) {
+    if (vals && Number.isFinite(vals.VND)) byDate.set(String(stamp).slice(0, 10), vals);
+  }
+  if (!byDate.size) throw new Error("FXRatesAPI returned no rows");
+  return byDate;
+}
 
-    const stamps = result.timestamp || [];
-    const closes = result.indicators?.quote?.[0]?.close || [];
-    const out = new Map();
-    for (let i = 0; i < stamps.length; i++) {
-      const c = closes[i];
-      if (c === null || c === undefined || !Number.isFinite(c)) continue; // holidays
-      out.set(new Date(stamps[i] * 1000).toISOString().slice(0, 10), c);
-    }
-    if (!out.size) throw new Error(`Yahoo ${pair}: empty series`);
-    return out;
-  });
+// Cached per range, not per currency: one payload serves all 20.
+function fxTimeseries(days) {
+  // Daily bars only change once a day, and the range endpoints move with the
+  // clock, so a few hours of staleness costs nothing and keeps us far away from
+  // any free-tier quota.
+  return withCache(`fx-ts:${days}`, 6 * 60 * 60_000, () => fetchFxTimeseries(days));
 }
 
 async function computeFxHistory(code, days) {
-  const rule = FX_PAIRS[code];
-  if (!rule) throw new Error(`unsupported currency: ${code}`);
-  const range = yahooRange(days);
-
-  const usdVnd = await yahooSeries("USDVND=X", range);
-  let items;
-  let pairs;
-
-  if (rule.method === "direct") {
-    pairs = ["USDVND=X"];
-    items = [...usdVnd.entries()].map(([date, rate]) => ({ date, rate }));
-  } else {
-    const other = await yahooSeries(rule.pair, range);
-    pairs = ["USDVND=X", rule.pair];
-    items = [];
-    for (const [date, usd] of usdVnd) {
-      const v = other.get(date); // intersection only: a gap in either leg is skipped
-      if (!Number.isFinite(v) || v === 0) continue;
-      items.push({ date, rate: rule.op === "mul" ? v * usd : usd / v });
-    }
+  const byDate = await fxTimeseries(days);
+  const items = [];
+  for (const [date, vals] of byDate) {
+    const vnd = vals.VND;
+    const per = code === "USD" ? 1 : vals[code];
+    if (!Number.isFinite(vnd) || !Number.isFinite(per) || per === 0) continue;
+    // 4 decimals keeps KRW/JPY-sized rates meaningful without bloating the payload.
+    items.push({ date, rate: Math.round((vnd / per) * 10000) / 10000 });
   }
-
   items.sort((a, b) => a.date.localeCompare(b.date));
-  // 4 decimals keeps KRW/JPY-sized rates meaningful without bloating the payload.
-  for (const it of items) it.rate = Math.round(it.rate * 10000) / 10000;
-  if (!items.length) throw new Error(`no overlapping data for ${code}`);
-  return { source: "Yahoo Finance", kind: "interbank", method: rule.method, pairs, code, items };
+  if (!items.length) throw new Error(`no data for ${code}`);
+  return {
+    source: "FXRatesAPI",
+    kind: "interbank", // single mid price — NOT the retail board of /api/fx/rates
+    method: code === "USD" ? "direct" : "cross",
+    code,
+    items,
+  };
 }
 
 // GET /api/fx/history?code=USD&days=365
 app.get("/api/fx/history", async (req, res) => {
   const code = String(req.query.code || "USD").toUpperCase();
   const days = Number(req.query.days) || 365;
-  if (!FX_PAIRS[code]) {
+  if (!FX_CODES.includes(code)) {
     return res.status(400).json({ error: "unsupported_currency", detail: code });
+  }
+  // Refuse rather than silently shorten: quietly returning 1 year of data to a
+  // request for 5 years would put a truthful series under a false label, which
+  // misleads exactly as much as a made-up number (golden rule, CLAUDE.md §3).
+  if (days > FX_MAX_DAYS) {
+    return res.status(400).json({ error: "range_too_long", maxDays: FX_MAX_DAYS });
   }
 
   try {
-    // Daily bars: nothing new appears intraday, and long ranges are the ones
-    // that cost two Yahoo calls, so they get the longest TTL.
-    const range = yahooRange(days);
-    const ttlMs = days > 370 ? 6 * 60 * 60_000 : days > 100 ? 60 * 60_000 : 30 * 60_000;
-    res.json(await withCache(`fx-history:${code}:${range}`, ttlMs, () => computeFxHistory(code, days)));
+    res.json(await computeFxHistory(code, days));
   } catch (err) {
     console.error("[/api/fx/history]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
