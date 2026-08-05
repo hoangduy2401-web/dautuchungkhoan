@@ -774,6 +774,228 @@ app.get("/api/news", async (req, res) => {
 });
 
 // ============================================================
+// FX — two DIFFERENT kinds of exchange rate, on purpose.
+//   /api/fx/rates   Vietcombank: RETAIL board rates, with a buy/sell spread.
+//   /api/fx/history Yahoo:       INTERBANK market rate, a single mid price.
+// They are ~0.8% apart and will never agree (measured 30/07/2026: Yahoo
+// USD/VND 26,300 vs VCB buy 26,080 / sell 26,490). That is normal, but the UI
+// MUST label the source next to every number — an accurate number under the
+// wrong label leads to the same bad decision as a made-up one.
+// ============================================================
+
+// Vietcombank's own XML header says "Only one request every 5 minutes!", so the
+// TTL here is a rate-limit rule, not a tuning knob. 10 min gives head room.
+const VCB_FX_URL =
+  process.env.VCB_FX_URL ||
+  "https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx";
+const FX_RATES_TTL_MS = 10 * 60_000;
+
+// Board values look like "26,050.00", and a missing quote is a literal "-"
+// (VCB does not buy cash for DKK/INR/MYR/NOK/RUB/SAR/SEK/KWD). Return null so
+// the UI can print "—" instead of a fabricated 0 (golden rule, CLAUDE.md §3).
+function parseVcbAmount(v) {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  if (!s || s === "-") return null;
+  const n = Number(s.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+// <DateTime>8/5/2026 8:49:30 PM</DateTime> — M/D/YYYY, 12-hour, Vietnam local
+// time with no offset in the string. Stamp +07:00 explicitly; letting the server
+// parse it as its own local time would shift the timestamp by hours on Render.
+function parseVcbDateTime(s) {
+  const m = String(s || "").match(
+    /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?/i
+  );
+  if (!m) return null;
+  const [, mm, dd, yyyy, hh, mi, ss, ap] = m;
+  let hour = Number(hh);
+  if (ap) {
+    const isPm = ap.toUpperCase() === "PM";
+    if (isPm && hour < 12) hour += 12;
+    if (!isPm && hour === 12) hour = 0;
+  }
+  const p2 = (n) => String(n).padStart(2, "0");
+  return `${yyyy}-${p2(mm)}-${p2(dd)}T${p2(hour)}:${mi}:${ss}+07:00`;
+}
+
+async function computeFxRates() {
+  const res = await fetchWithTimeout(VCB_FX_URL, { headers: { Accept: "application/xml" } }, 8000);
+  if (!res.ok) throw new Error(`Vietcombank HTTP ${res.status}`);
+  const xml = await res.text();
+
+  // Flat attribute-only XML (~2.5KB, one self-closing <Exrate/> per currency).
+  // A regex is enough here; no XML dependency added for this.
+  const rates = [];
+  for (const m of xml.matchAll(/<Exrate\b([^>]*)\/>/g)) {
+    const attrs = {};
+    for (const a of m[1].matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) attrs[a[1]] = a[2];
+    const code = String(attrs.CurrencyCode || "").trim().toUpperCase();
+    if (!code) continue;
+    rates.push({
+      code,
+      name: String(attrs.CurrencyName || "").trim(),
+      buyCash: parseVcbAmount(attrs.Buy),
+      buyTransfer: parseVcbAmount(attrs.Transfer),
+      sell: parseVcbAmount(attrs.Sell),
+    });
+  }
+  if (!rates.length) throw new Error("Vietcombank returned no <Exrate> rows");
+
+  const dt = xml.match(/<DateTime>([^<]*)<\/DateTime>/);
+  return {
+    updatedAt: parseVcbDateTime(dt && dt[1]),
+    source: "Vietcombank",
+    kind: "retail", // board rate with a spread — NOT the same as /api/fx/history
+    rates: rates.sort((a, b) => a.code.localeCompare(b.code)),
+  };
+}
+
+// GET /api/fx/rates
+app.get("/api/fx/rates", async (req, res) => {
+  try {
+    res.json(await withCache("fx:rates", FX_RATES_TTL_MS, computeFxRates));
+  } catch (err) {
+    console.error("[/api/fx/rates]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ------------------------------------------------------------
+// FX history — Yahoo Finance chart API.
+// Coverage is NOT uniform (measured 30/07/2026): USDVND=X has 1306 points over
+// 5 years, EURVND=X only 23, JPYVND=X exactly 1, AUDVND=X does not exist. So
+// only USD is read directly; every other currency is derived from its major
+// USD pair, which all carry full history:
+//     XXX/VND = XXXUSD × USDVND     (Yahoo quotes XXX per USD: EUR, GBP, AUD)
+//     XXX/VND = USDVND ÷ USDXXX     (Yahoo quotes USD per XXX: JPY, CNY, ...)
+// ------------------------------------------------------------
+const FX_PAIRS = {
+  USD: { method: "direct" },
+  EUR: { method: "cross", pair: "EURUSD=X", op: "mul" },
+  GBP: { method: "cross", pair: "GBPUSD=X", op: "mul" },
+  AUD: { method: "cross", pair: "AUDUSD=X", op: "mul" },
+  JPY: { method: "cross", pair: "USDJPY=X", op: "div" },
+  CNY: { method: "cross", pair: "USDCNY=X", op: "div" },
+  CHF: { method: "cross", pair: "USDCHF=X", op: "div" },
+  CAD: { method: "cross", pair: "USDCAD=X", op: "div" },
+  SGD: { method: "cross", pair: "USDSGD=X", op: "div" },
+  HKD: { method: "cross", pair: "USDHKD=X", op: "div" },
+  THB: { method: "cross", pair: "USDTHB=X", op: "div" },
+  KRW: { method: "cross", pair: "USDKRW=X", op: "div" },
+  SEK: { method: "cross", pair: "USDSEK=X", op: "div" },
+  NOK: { method: "cross", pair: "USDNOK=X", op: "div" },
+  DKK: { method: "cross", pair: "USDDKK=X", op: "div" },
+  INR: { method: "cross", pair: "USDINR=X", op: "div" },
+  MYR: { method: "cross", pair: "USDMYR=X", op: "div" },
+  RUB: { method: "cross", pair: "USDRUB=X", op: "div" },
+  SAR: { method: "cross", pair: "USDSAR=X", op: "div" },
+  KWD: { method: "cross", pair: "USDKWD=X", op: "div" },
+};
+
+// The frontend speaks in days (30/90/180/365/1825, same buttons as the stock
+// chart); Yahoo only accepts its own range words.
+function yahooRange(days) {
+  if (days <= 31) return "1mo";
+  if (days <= 93) return "3mo";
+  if (days <= 186) return "6mo";
+  if (days <= 370) return "1y";
+  return "5y";
+}
+
+// Yahoo answers 429 to requests it considers automated traffic, so keep the
+// calls single-file rather than firing both legs of a cross rate at once.
+const fxLimit = createLimiter(1);
+
+// One Yahoo series -> Map(yyyy-mm-dd -> close). Dates come from the UTC day of
+// each bar; both legs of a cross use the same convention, so they line up.
+async function yahooSeries(pair, range) {
+  return fxLimit(async () => {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      pair
+    )}?range=${range}&interval=1d`;
+    const res = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          // Without a browser UA Yahoo is far more likely to answer 429.
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "application/json",
+        },
+      },
+      12000
+    );
+    if (!res.ok) throw new Error(`Yahoo ${pair} HTTP ${res.status}`);
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result) throw new Error(`Yahoo ${pair}: ${json?.chart?.error?.description || "no result"}`);
+
+    const stamps = result.timestamp || [];
+    const closes = result.indicators?.quote?.[0]?.close || [];
+    const out = new Map();
+    for (let i = 0; i < stamps.length; i++) {
+      const c = closes[i];
+      if (c === null || c === undefined || !Number.isFinite(c)) continue; // holidays
+      out.set(new Date(stamps[i] * 1000).toISOString().slice(0, 10), c);
+    }
+    if (!out.size) throw new Error(`Yahoo ${pair}: empty series`);
+    return out;
+  });
+}
+
+async function computeFxHistory(code, days) {
+  const rule = FX_PAIRS[code];
+  if (!rule) throw new Error(`unsupported currency: ${code}`);
+  const range = yahooRange(days);
+
+  const usdVnd = await yahooSeries("USDVND=X", range);
+  let items;
+  let pairs;
+
+  if (rule.method === "direct") {
+    pairs = ["USDVND=X"];
+    items = [...usdVnd.entries()].map(([date, rate]) => ({ date, rate }));
+  } else {
+    const other = await yahooSeries(rule.pair, range);
+    pairs = ["USDVND=X", rule.pair];
+    items = [];
+    for (const [date, usd] of usdVnd) {
+      const v = other.get(date); // intersection only: a gap in either leg is skipped
+      if (!Number.isFinite(v) || v === 0) continue;
+      items.push({ date, rate: rule.op === "mul" ? v * usd : usd / v });
+    }
+  }
+
+  items.sort((a, b) => a.date.localeCompare(b.date));
+  // 4 decimals keeps KRW/JPY-sized rates meaningful without bloating the payload.
+  for (const it of items) it.rate = Math.round(it.rate * 10000) / 10000;
+  if (!items.length) throw new Error(`no overlapping data for ${code}`);
+  return { source: "Yahoo Finance", kind: "interbank", method: rule.method, pairs, code, items };
+}
+
+// GET /api/fx/history?code=USD&days=365
+app.get("/api/fx/history", async (req, res) => {
+  const code = String(req.query.code || "USD").toUpperCase();
+  const days = Number(req.query.days) || 365;
+  if (!FX_PAIRS[code]) {
+    return res.status(400).json({ error: "unsupported_currency", detail: code });
+  }
+
+  try {
+    // Daily bars: nothing new appears intraday, and long ranges are the ones
+    // that cost two Yahoo calls, so they get the longest TTL.
+    const range = yahooRange(days);
+    const ttlMs = days > 370 ? 6 * 60 * 60_000 : days > 100 ? 60 * 60_000 : 30 * 60_000;
+    res.json(await withCache(`fx-history:${code}:${range}`, ttlMs, () => computeFxHistory(code, days)));
+  } catch (err) {
+    console.error("[/api/fx/history]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
 // SSI FastConnect TRADING — READ ONLY (phase 1).
 // Separate host and separate credentials from FCData. Nothing here can
 // place, modify or cancel an order: those need an RSA-SHA256 signature
