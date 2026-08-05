@@ -175,6 +175,29 @@ const DataService = (function () {
     );
   }
 
+  // ---- FX ---------------------------------------------------------------
+  // Both are exchange rates and neither may fall back to mock: an invented rate
+  // is indistinguishable from a real one (golden rule, CLAUDE.md §3).
+  //
+  // getFxRates    Vietcombank retail board: {updatedAt, source, kind:"retail",
+  //               rates:[{code, name, buyCash, buyTransfer, sell}]}
+  //               A null field means Vietcombank does not quote it (it prints
+  //               "-" in the source XML), NOT zero.
+  // getFxHistory  interbank mid series: {source, kind:"interbank", method,
+  //               code, items:[{date, rate}]}
+  //               Max 365 days — the free upstream has no deeper history, so
+  //               this page has no 5Y button (see CLAUDE.md §10).
+  function getFxRates() {
+    return fetchJson(`${cfg.fxProvider.baseUrl}/rates`, T_FAST);
+  }
+
+  function getFxHistory(code, days) {
+    return fetchJson(
+      `${cfg.fxProvider.baseUrl}/history?code=${encodeURIComponent(code)}&days=${days}`,
+      T_HISTORY
+    );
+  }
+
   // ---- SSI account (read-only) ----------------------------------------
   // Never falls back to mock: showing invented holdings would be worse than
   // showing nothing. Errors propagate so the UI can ask for a PIN/OTP.
@@ -212,6 +235,8 @@ const DataService = (function () {
     getIndexHistory,
     getFundamentals,
     getNews,
+    getFxRates,
+    getFxHistory,
     getAccountPortfolio,
     requestAccountOtp,
     loginAccount,

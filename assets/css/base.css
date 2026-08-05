@@ -409,6 +409,24 @@ tr:hover td { background: var(--surface-hover); }
 }
 
 .empty-state { padding: 24px; text-align: center; color: var(--text-tertiary); font-size: var(--text-xs); }
+
+/* Chip bat/tat duong ve tren bieu do. Dung chung trang chung khoan va trang
+   ngoai te — dat o base.css de them trang moi khong phai chep lai. */
+/* Chi bao la chip vien: tat = vien mo + chu xam, bat = vien accent + nen accent mo.
+   Checkbox that bi an; :has() lay trang thai :checked ra ngoai. */
+.chk {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+  padding: 6px 12px; border-radius: var(--radius-pill);
+  font-size: var(--text-2xs); font-weight: 600;
+  border: 1px solid var(--border-default); background: transparent; color: var(--text-secondary);
+  transition: background var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard);
+}
+.chk input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.chk:has(input:checked) {
+  border-color: var(--accent-orange); background: var(--accent-soft); color: var(--accent-orange);
+}
+.sw { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
 .app-footer {
   padding: 16px 20px 32px; color: var(--text-tertiary); font-size: var(--text-2xs);
   text-align: center; line-height: 1.6;

@@ -67,6 +67,10 @@ const APP_CONFIG = {
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;
   // never mocked — an empty account panel is better than fake holdings.
   accountProvider:      { name: "SSI FCTrading", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/account" },
+  // FX. Two upstreams behind one prefix, and they are NOT the same rate:
+  // /rates is Vietcombank's retail board (buy/sell spread), /history is the
+  // interbank mid price. ~0.8% apart, permanently. The page labels both.
+  fxProvider:           { name: "Vietcombank + FXRatesAPI", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/fx" },
 
   currency: "VND",
 };

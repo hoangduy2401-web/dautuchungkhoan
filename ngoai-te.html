@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ngoại tệ — Quản lý gia sản</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/base.css?v=20260805a" />
+<link rel="stylesheet" href="assets/css/ngoai-te.css?v=20260805a" />
+</head>
+<body>
+
+  <!-- Shared nav across all 6 pages; rendered by assets/js/core/nav.js -->
+  <div id="appNav"></div>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-top">
+        <div class="mark">Ngoại <span>tệ</span></div>
+      </div>
+      <div class="sub">Tỷ giá Vietcombank &amp; biểu đồ tỷ giá thị trường</div>
+      <div class="clock" id="clock"></div>
+    </div>
+    <div class="header-right">
+      <span class="backend-status" id="backendStatus"></span>
+      <div class="controls">
+        <div class="segmented">
+          <button type="button" id="tLight">Sáng</button>
+          <button type="button" id="tDark">Tối</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-grid-fx">
+
+    <!-- Rate board. Retail rates: they carry a buy/sell spread and are NOT the
+         same number as the chart below — the source label is required, see
+         docs/QUYHOACH.md 2.10. -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Bảng tỷ giá</h2>
+        <span class="src-badge">Vietcombank · bán lẻ<span id="fxUpdatedAt"></span></span>
+      </div>
+      <div class="fx-toolbar">
+        <input id="fxSearch" class="fx-search" placeholder="Tìm mã hoặc tên, vd: USD" maxlength="20" />
+        <span class="fx-hint">Bấm ★ để ghim · bấm dòng để xem biểu đồ</span>
+      </div>
+      <div class="fx-table-wrap">
+        <table class="fx-table">
+          <thead>
+            <tr>
+              <th class="th-pin"></th>
+              <th data-sort="code" class="sortable">Mã</th>
+              <th data-sort="name" class="sortable th-name">Tên</th>
+              <th data-sort="buyCash" class="sortable num">Mua tiền mặt</th>
+              <th data-sort="buyTransfer" class="sortable num">Mua chuyển khoản</th>
+              <th data-sort="sell" class="sortable num">Bán</th>
+              <th data-sort="spread" class="sortable num">Chênh lệch</th>
+            </tr>
+          </thead>
+          <tbody id="fxTableBody">
+            <tr><td colspan="7" class="empty-state">Đang chờ máy chủ…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Chart: interbank mid rate. Different source AND different kind of rate
+         from the table above; both are labelled on purpose. -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Biểu đồ tỷ giá</h2>
+        <span class="src-badge alt">Thị trường liên ngân hàng · FXRatesAPI</span>
+      </div>
+      <div class="panel-body">
+        <div class="fx-chart-head">
+          <div class="fx-chart-title" id="fxChartTitle">—</div>
+          <div class="fx-chart-tools">
+            <label class="chk"><input type="checkbox" id="chkMA10" checked/><span class="sw" style="background:var(--chart-ma10);"></span>MA10</label>
+            <label class="chk"><input type="checkbox" id="chkMA20" checked/><span class="sw" style="background:var(--chart-ma20);"></span>MA20</label>
+            <div class="range-tabs" id="fxRangeTabs"></div>
+          </div>
+        </div>
+        <div class="fx-chart-stats" id="fxChartStats"></div>
+        <div class="chart-stack">
+          <div class="chart-wrap" id="priceChartContainer"></div>
+          <canvas id="trendOverlay" class="trend-overlay"></canvas>
+        </div>
+        <!-- ChartModule always builds an RSI pane; RSI on a currency pair is not
+             useful here, so it is created and immediately hidden. -->
+        <div class="chart-wrap-rsi" id="rsiChartContainer"></div>
+        <p class="fx-note">
+          Biểu đồ là <strong>tỷ giá thị trường</strong> (một giá duy nhất), bảng bên
+          là <strong>tỷ giá niêm yết bán lẻ</strong> của Vietcombank (có biên mua–bán).
+          Hai con số lệch nhau khoảng 0,8% là bình thường, không phải lỗi.
+          Nguồn miễn phí chỉ có 1 năm lịch sử nên không có khung 5 năm.
+        </p>
+      </div>
+    </div>
+
+    <!-- Quick converter -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Quy đổi nhanh</h2>
+        <span class="src-badge">Theo giá Vietcombank</span>
+      </div>
+      <div class="panel-body fx-conv">
+        <div class="fx-conv-row">
+          <input type="text" inputmode="decimal" id="convForeign" class="fx-conv-input" placeholder="0" />
+          <select id="convCode" class="fx-conv-select"></select>
+        </div>
+        <div class="fx-conv-swap">↕</div>
+        <div class="fx-conv-row">
+          <input type="text" inputmode="decimal" id="convVnd" class="fx-conv-input" placeholder="0" />
+          <span class="fx-conv-unit">VND</span>
+        </div>
+        <div class="fx-conv-note" id="convNote"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="app-footer">
+    Dữ liệu chỉ mang tính tham khảo, không phải khuyến nghị đầu tư.
+    Tỷ giá bán lẻ: Vietcombank · Tỷ giá thị trường: FXRatesAPI.
+  </footer>
+
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="assets/js/core/config.js?v=20260805a"></script>
+  <script src="assets/js/core/store.js?v=20260805a"></script>
+  <script src="assets/js/core/theme.js?v=20260805a"></script>
+  <script src="assets/js/core/nav.js?v=20260805a"></script>
+  <script src="assets/js/core/mockData.js?v=20260805a"></script>
+  <script src="assets/js/core/dataService.js?v=20260805a"></script>
+  <script src="assets/js/core/chartModule.js?v=20260805a"></script>
+  <script src="assets/js/pages/ngoai-te.js?v=20260805a"></script>
+</body>
+</html>
