@@ -117,11 +117,12 @@ JSON, free, không key, không giới hạn thấy được. Trả mảng
 - `KB` — Vàng Kim Bảo 999.9
 - `TL` — Vàng Phúc Lộc Tài 999.9
 
-**PHẢI XÁC MINH TRƯỚC KHI HIỂN THỊ — ĐƠN VỊ.** Giá trị thô đo được ngày
-30/07/2026: `giaban: 14170`. Suy đoán là **nghìn đồng/chỉ** (14,17 triệu/chỉ =
-141,7 triệu/lượng). Đây đúng là loại lỗi đã từng dính với SSI (giá VND thô phải
-chia 1000). Việc đầu tiên của GĐ 2 là đối chiếu với giá niêm yết công khai rồi
-mới quyết hệ số quy đổi, ghi lại vào tài liệu.
+**ĐƠN VỊ — ĐÃ XÁC MINH 06/08/2026, hết suy đoán:** `giaban` là **nghìn đồng/CHỈ**.
+Đối chiếu ba nguồn cùng ngày (PNJ ×10 = 139,7/142,7 triệu/lượng · BTMC ×10 =
+140,3/143,3 · báo chí 138,8/141,8). Chi tiết ở **`docs/VANG.md`**.
+
+**Cạm bẫy:** hai mã `RAW_9999`/`RAW_9900` có `giaban: ""` — PNJ chỉ mua, không
+bán. Trả `null`, không phải 0.
 
 ### 2.3 Vàng — BTMC (CHẠY, nguồn dự phòng + bạc)
 
@@ -402,16 +403,18 @@ sẽ tưởng hệ thống lỗi và mất niềm tin vào toàn bộ số liệ
 
 ---
 
-### GĐ 2 — Trang Vàng · ĐỘ KHÓ: THẤP–TRUNG BÌNH · 2 phiên · Tuần 2-3
+### GĐ 2 — Trang Vàng · ĐỘ KHÓ: THẤP–TRUNG BÌNH · 2 phiên · Tuần 2-3 — **XONG 06/08/2026**
+
+Chi tiết nguồn, đơn vị và các quyết định: **`docs/VANG.md`**.
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 2.1 | **Xác minh đơn vị giá PNJ** trước khi viết gì khác | Đối chiếu giá niêm yết công khai. Ghi kết luận vào `docs/VANG.md` |
-| 2.2 | Route `/api/gold/prices` — PNJ chính, BTMC dự phòng | Hợp nhất 2 nguồn về 1 format |
-| 2.3 | Bảng giá: SJC miếng, nhẫn trơn, Kim Bảo, Phúc Lộc Tài | Hiện rõ chênh lệch mua-bán (%) |
-| 2.4 | Quy đổi lượng / chỉ / gram | 1 lượng = 10 chỉ = 37,5g |
-| 2.5 | Danh mục vàng nhập tay: loại, số lượng, giá vốn, ngày mua | |
-| 2.6 | Cảnh báo chênh lệch mua-bán bất thường | Chênh lệch giãn rộng = tín hiệu thị trường căng |
+| 2.1 | ~~Xác minh đơn vị giá PNJ~~ | **XONG 06/08** — PNJ = nghìn đồng/CHỈ, BTMC = đồng thô/CHỈ, đối chiếu 3 nguồn. Xem `docs/VANG.md` |
+| 2.2 | ~~Route `/api/gold/prices`~~ | **XONG 06/08** — PNJ chính, BTMC dự phòng, TTL 5 phút, payload ghi rõ nguồn nào trả lời |
+| 2.3 | ~~Bảng giá~~ | **XONG 06/08** — 20 loại; mặc định 7 loại chính, vàng tuổi thấp sau checkbox |
+| 2.4 | ~~Quy đổi lượng / chỉ / gram~~ | **XONG 06/08** — kèm thành tiền 2 chiều |
+| 2.5 | ~~Danh mục vàng nhập tay~~ | **XONG 06/08** — `holdings_gold`, giá vốn theo triệu ₫/lượng |
+| 2.6 | ~~Cảnh báo chênh lệch mua-bán~~ | **XONG 06/08** — ngưỡng 5%, **mốc tạm**, chỉ dựa trên một lần đo |
 
 ---
 

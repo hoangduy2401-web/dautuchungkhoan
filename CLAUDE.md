@@ -3,9 +3,10 @@
 > File này nạp vào context **mỗi phiên** — giữ nó gọn là việc thường xuyên, không
 > phải việc một lần. Cuối phiên chạy **`/handoff`** để cập nhật mục 9 + 10.
 >
-> Nội dung không cần đọc mỗi phiên đã tách sang `docs/` (04/08/2026):
+> Nội dung không cần đọc mỗi phiên đã tách sang `docs/`:
 > `NHATKY.md` (nhật ký phiên cũ) · `SSI-TRADING.md` (FastConnect chi tiết) ·
-> `YTUONG.md` (ý tưởng dài hạn) · `QUYHOACH.md` (kế hoạch website gia sản).
+> `YTUONG.md` (ý tưởng dài hạn) · `QUYHOACH.md` (kế hoạch website gia sản) ·
+> `VANG.md` (nguồn + đơn vị giá vàng).
 > **Đọc file tương ứng khi động vào phần đó**, đừng kéo ngược lên đây.
 
 ---
@@ -21,7 +22,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260806a`** (đã kiểm: 28 chỗ trong 3 file HTML, bản live
+Cache busting hiện **`?v=20260806b`** (đã kiểm: 37 chỗ trong 4 file HTML, bản live
 cũng đang phục vụ đúng chuỗi này).
 
 ---
@@ -213,6 +214,16 @@ GET /api/fx/history?code=USD&days=365   (FXRatesAPI — LIÊN NGÂN HÀNG, một
 → { source:"FXRatesAPI", kind:"interbank", method:"direct"|"cross", code,
     items:[{ date:"YYYY-MM-DD", rate }] }                  tăng dần
    days > 365 → 400 `range_too_long` (gói free chỉ có 366 ngày). Mã lạ → 400.
+```
+
+```
+GET /api/gold/prices                    (PNJ chính, BTMC dự phòng)
+→ { updatedAt (ISO +07:00), source:"PNJ"|"BTMC", branch, note?,
+    unit:"nghìn đồng/chỉ",
+    items:[{ code, name, buy, sell, karat? }] }
+   ĐƠN VỊ LÀ NGHÌN ĐỒNG / CHỈ (1 lượng = 10 chỉ = 37,5 g) — đã đo, xem mục 9.
+   buy/sell = null: tiệm không niêm yết chiều đó (PNJ chỉ MUA vàng nguyên liệu).
+   `note` chỉ xuất hiện khi BTMC (nguồn dự phòng) trả lời — UI phải hiện nó.
 ```
 
 **`/api/fx/rates` và `/api/fx/history` là HAI LOẠI tỷ giá khác nhau, lệch ~0,8%
@@ -576,13 +587,13 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260806a`. Nhánh `main` sạch, đã push, backend đã deploy bản
-mới nhất (đã kiểm 05/08 trên Render: `/api/fx/rates` trả 20 mã,
-`/api/fx/history` trả 30/90/365 điểm).
+Cache busting `?v=20260806b`. Nhánh `main` sạch, đã push, backend đã deploy bản
+mới nhất (đã kiểm 06/08 trên Render: `/api/fx/rates` 20 mã, `/api/fx/history`
+30/90/365 điểm, `/api/gold/prices` 20 loại từ PNJ).
 
-Website hiện có **3 trang**: `/` (tổng gia sản, mới là khung),
-`/chung-khoan.html` và `/ngoai-te.html` (cả hai đầy đủ).
-3 trang còn lại chưa làm — xem mục 10.
+Website hiện có **4 trang**: `/` (tổng gia sản, mới là khung),
+`/chung-khoan.html`, `/ngoai-te.html` và `/vang.html` (ba trang sau đầy đủ).
+2 trang còn lại chưa làm — xem mục 10.
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
@@ -601,11 +612,56 @@ Website hiện có **3 trang**: `/` (tổng gia sản, mới là khung),
 | **Chart tỷ giá** (trang Ngoại tệ) | FXRatesAPI | đường, **chỉ 1M/3M/6M/1Y** — nguồn free hết lịch sử ở 366 ngày |
 | Ghim mã ngoại tệ / quy đổi 2 chiều | `Store` + bảng VCB | quy đổi dùng giá mua chuyển khoản (bán cho NH) và giá bán (mua từ NH) |
 | **Danh mục ngoại tệ** | `Store` (`holdings_fx`) | danh sách nắm giữ **sửa tại chỗ**, không phải sổ giao dịch; định giá theo giá mua chuyển khoản VCB |
+| **Bảng giá vàng** | PNJ (dự phòng BTMC) | 20 loại; đổi đơn vị lượng/chỉ/gram; cảnh báo chênh lệch mua-bán ≥5% |
+| **Danh mục vàng** | `Store` (`holdings_gold`) | cùng khuôn `holdings_fx`; giá vốn nhập theo **triệu ₫/lượng**; định giá theo giá tiệm **mua vào** |
 | **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
 | Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
+
+**06/08/2026 (phiên 5) — GĐ 2 trang Vàng: XONG CẢ 6 ĐẦU VIỆC.**
+Bump `?v=20260806a` → **`?v=20260806b`** (37 chỗ trong 4 file HTML). **Có đụng
+`server/`** → Render đã deploy lại, đã kiểm live.
+
+**Việc 2.1 — đơn vị giá, đo bằng ba nguồn độc lập, không suy đoán:**
+
+| Nguồn | SJC mua / bán | Quy ra lượng |
+|---|---|---|
+| PNJ `giamua/giaban` | 13.970 / 14.270 | 139,7 / 142,7 triệu |
+| BTMC `@pb/@ps` | 14.030.000 / 14.330.000 | 140,3 / 143,3 triệu |
+| Báo chí cùng ngày | — | 138,8 / 141,8 triệu |
+
+→ **PNJ trả nghìn đồng/CHỈ, BTMC trả đồng thô/CHỈ.** Route thống nhất về
+**nghìn đồng/chỉ**, BTMC chia 1000. Đừng đổi hệ số mà không đo lại.
+
+- `/api/gold/prices`: PNJ chính, BTMC dự phòng, TTL 5 phút. Payload luôn ghi
+  `source`, và thêm `note` khi bản dự phòng trả lời — hai tiệm báo giá khác
+  nhau, đổi nguồn mà không ghi nhãn thì trông như thị trường biến động.
+- Hai cạm bẫy của nguồn: PNJ để `giaban: ""` cho 2 mã vàng nguyên liệu (chỉ
+  mua, không bán) → `null` chứ không phải 0. BTMC đánh số hậu tố **theo dòng**
+  (`@n_7`, `@pb_7`) nên phải đọc qua `@row`; mỗi sản phẩm xuất hiện 2 lần, giữ
+  bản `@d_` mới nhất; feed có cả **bạc**, phải lọc bỏ.
+- Trang: bảng đổi đơn vị lượng/chỉ/gram, quy đổi khối lượng + thành tiền 2
+  chiều, danh mục `holdings_gold` (cùng khuôn `holdings_fx`).
+- **Bảng mặc định chỉ hiện 7 loại chính.** 13 loại vàng tuổi thấp (18K trở
+  xuống) có chênh lệch mua-bán 9–21%, trộn vào sẽ kéo lệch mọi so sánh — nằm
+  sau checkbox.
+- **Ngưỡng cảnh báo chênh lệch 5% là MỐC TẠM.** Đo 06/08 nhóm 999.9 nằm trong
+  2,10–3,54%; chưa có chuỗi lịch sử để chốt ngưỡng thật. Soát lại khi có dữ
+  liệu nhiều ngày.
+
+**Tái cấu trúc kèm theo:** `.src-badge` / `.asset-table` / `.hold-*` /
+`.row-btn` / `.edit-input` chuyển từ `ngoai-te.css` sang `base.css` (khối
+"TRANG TAI SAN") để 5 trang tài sản dùng chung; `.fx-table` đổi tên thành
+`.asset-table`. Đã kiểm lại trang ngoại tệ sau khi đổi: 20 dòng, padding/font/
+nhãn nguồn/biểu đồ nguyên vẹn.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live): SJC 139.700.000 /
+13.970.000 / 3.725.333 theo lượng/chỉ/gram; 2 lượng = 20 chỉ = 75 g =
+279.400.000 ₫ bán cho tiệm; danh mục 3,5 lượng giá vốn 141,5 tr → −6.300.000 ₫
+(−1,27%); số âm báo lỗi; xoá 2 nhịp; nút con mắt che 8 ô `.money`. Ép PNJ lỗi →
+BTMC trả 9 dòng kèm dải cảnh báo nguồn dự phòng.
 
 **05–06/08/2026 (phiên 4) — GĐ 1 trang Ngoại tệ: XONG CẢ 8 ĐẦU VIỆC.**
 Bump `?v=20260804a` → `?v=20260805a` → **`?v=20260806a`** (28 chỗ trong 3 file
@@ -650,29 +706,6 @@ mã trống xuống cuối; ghim ★ lưu qua `Store` và nổi lên đầu sau 
 theo tên tiếng Việt ("yen" → JPY); chart USD 3M/1Y và JPY 3M ra đủ điểm; quy đổi
 2 chiều đúng cả `1.000.000`, `1,000,000`, `1.234,5`; theme Sáng/Tối; nút con mắt.
 
-**04/08/2026 (phiên 3) — chỉ soát tài liệu, KHÔNG đụng code.**
-Không sửa file `.js/.css/.html` nào → **không bump `?v=`**, vẫn `20260804a`.
-Không đụng `server/`. Đã đối chiếu tài liệu với thực tế và sửa 4 chỗ lệch:
-- Mục 0 và mục 9 còn ghi `?v=20260803a` trong khi thực tế đã là `20260804a`.
-  Đây là lỗi có hậu quả thật: phiên sau đọc "hiện là 03a" rồi bump lên "04a" là
-  **trùng chuỗi đã deploy**, user tiếp tục chạy code cũ tới 10 phút mà không ai
-  biết. Đã sửa cả hai.
-- Bảng tính năng mục 9 còn ghi watchlist/giao dịch lưu ở `localStorage` — thực
-  tế đã qua `Store` từ 31/07. Đã bổ sung: chart chỉ số, nút con mắt, giao diện
-  Fey, và ghi rõ website hiện có 2 trang.
-- `docs/CLAUDE.moi.md` còn ghi font Inter + slider Trong/Đục; `docs/QUYHOACH.md`
-  còn mô tả `base.css` là "tokens glass, aurora". Cả hai là bản nháp cho site đa
-  kênh nên sai ở đây sẽ dẫn phiên sau dựng lại thứ đã cố ý bỏ. Đã sửa.
-
-Kiểm chứng trạng thái trước khi ghi (không phải suy đoán):
-- `git status` sạch, `main` == `origin/main` tại `437bdff`.
-- Backend live đã có cả bước A lẫn bước B: `/api/price/indices` trả đủ
-  `totalVol/totalVal/advances/declines/noChanges` (VNINDEX 140/122/63, VN30
-  `null`), `/api/price/index-history?code=VNINDEX&days=30` trả `{date, close,
-  volume}`.
-- Frontend live phục vụ đúng `?v=20260804a`; `/` và `/chung-khoan.html` đều 200.
-- `config.js` đã trỏ lại `onrender.com` (phiên 2 từng tạm trỏ `localhost:3999`).
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
@@ -682,21 +715,30 @@ Các phiên trước đó: **`docs/NHATKY.md`**.
 Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy, bản
 live đã kiểm. **GĐ 1 xong toàn bộ 8 đầu việc.**
 
-Việc kế tiếp: **GĐ 2 — trang Vàng** (2 phiên). Đọc `docs/QUYHOACH.md` mục
-2.2–2.4 và bảng GĐ 2. Việc đầu tiên **bắt buộc** là xác minh đơn vị giá của PNJ
-(`giaban: 14170` đo 30/07 — nghi là nghìn đồng/chỉ) trước khi viết bất cứ thứ gì
-khác; ghi kết luận vào `docs/VANG.md`. Đây đúng loại lỗi đã dính với SSI.
+Việc kế tiếp: **GĐ 3 — trang Coin** (2 phiên). Đọc `docs/QUYHOACH.md` mục
+2.5–2.6 và bảng GĐ 3. Tóm tắt: `/api/crypto/prices` CoinGecko chính (trả thẳng
+giá VND, khỏi tự nhân tỷ giá) + Binance public dự phòng, cache 60s; danh sách
+theo dõi; danh mục nhập tay; biểu đồ dùng lại `chartModule`.
+Cân nhắc gộp luôn **USDT/VND** vào trang ngoại tệ — user hỏi 06/08 về cách theo
+dõi biến động cuối tuần, và đó là thị trường duy nhất chạy 24/7.
 
-Khuôn mẫu để nhân bản: trang Ngoại tệ. `ngoai-te.html` + `ngoai-te.css` +
-`pages/ngoai-te.js` là bộ ba đầy đủ nhất cho một trang tài sản (bảng giá có
-nhãn nguồn + danh mục nhập tay qua `Store` + `.money`), sao chép cấu trúc đó
-thay vì dựng lại từ trang chứng khoán (trang đó còn mang theo ticker/heatmap/
-tín hiệu không liên quan).
+Khuôn mẫu để nhân bản: **trang Vàng** (mới nhất, sạch nhất). `vang.html` +
+`vang.css` + `pages/vang.js` là bộ ba đầy đủ cho một trang tài sản: bảng giá có
+nhãn nguồn + nguồn dự phòng có cảnh báo + danh mục nhập tay qua `Store` +
+`.money`. Thành phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`,
+`.row-btn`, `.edit-input`) đã nằm ở `base.css` khối "TRANG TAI SAN" — **đừng
+chép lại vào CSS trang mới**. Đừng dựng từ trang chứng khoán: trang đó còn mang
+theo ticker/heatmap/tín hiệu không liên quan.
 
-**Việc còn nợ khi làm GĐ 6 (trang tổng):** giá trị danh mục ngoại tệ hiện chỉ
-tính trong trang ngoại tệ. Trang tổng phải đọc `holdings_fx` từ `Store` rồi
-định giá bằng `/api/fx/rates` — logic quy đổi đang nằm trong `ngoai-te.js`
-(`holdRow`), khi cần dùng ở hai nơi thì tách sang `assets/js/core/`.
+**Việc còn nợ khi làm GĐ 6 (trang tổng):** giá trị danh mục ngoại tệ và vàng
+hiện chỉ tính trong trang của chúng. Trang tổng phải đọc `holdings_fx` +
+`holdings_gold` từ `Store` rồi định giá bằng `/api/fx/rates` và
+`/api/gold/prices`. Logic quy đổi đang nằm trong `ngoai-te.js` và `vang.js`
+(cùng tên `holdRow`, hai bản khác nhau) — khi cần dùng ở hai nơi thì tách sang
+`assets/js/core/`, đừng chép bản thứ ba.
+
+**Cần soát lại khi có dữ liệu nhiều ngày:** ngưỡng cảnh báo chênh lệch mua-bán
+vàng đang để 5%, dựa trên đúng một lần đo (mục 9).
 
 **Đừng "sửa lại cho đúng quy hoạch" ba chỗ sau của trang Ngoại tệ:**
 1. Nguồn lịch sử là **FXRatesAPI, không phải Yahoo** — Yahoo chặn IP Render

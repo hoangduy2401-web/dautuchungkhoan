@@ -5,6 +5,29 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**04/08/2026 (phiên 3) — chỉ soát tài liệu, KHÔNG đụng code.**
+Không sửa file `.js/.css/.html` nào → **không bump `?v=`**, vẫn `20260804a`.
+Không đụng `server/`. Đã đối chiếu tài liệu với thực tế và sửa 4 chỗ lệch:
+- Mục 0 và mục 9 còn ghi `?v=20260803a` trong khi thực tế đã là `20260804a`.
+  Đây là lỗi có hậu quả thật: phiên sau đọc "hiện là 03a" rồi bump lên "04a" là
+  **trùng chuỗi đã deploy**, user tiếp tục chạy code cũ tới 10 phút mà không ai
+  biết. Đã sửa cả hai.
+- Bảng tính năng mục 9 còn ghi watchlist/giao dịch lưu ở `localStorage` — thực
+  tế đã qua `Store` từ 31/07. Đã bổ sung: chart chỉ số, nút con mắt, giao diện
+  Fey, và ghi rõ website hiện có 2 trang.
+- `docs/CLAUDE.moi.md` còn ghi font Inter + slider Trong/Đục; `docs/QUYHOACH.md`
+  còn mô tả `base.css` là "tokens glass, aurora". Cả hai là bản nháp cho site đa
+  kênh nên sai ở đây sẽ dẫn phiên sau dựng lại thứ đã cố ý bỏ. Đã sửa.
+
+Kiểm chứng trạng thái trước khi ghi (không phải suy đoán):
+- `git status` sạch, `main` == `origin/main` tại `437bdff`.
+- Backend live đã có cả bước A lẫn bước B: `/api/price/indices` trả đủ
+  `totalVol/totalVal/advances/declines/noChanges` (VNINDEX 140/122/63, VN30
+  `null`), `/api/price/index-history?code=VNINDEX&days=30` trả `{date, close,
+  volume}`.
+- Frontend live phục vụ đúng `?v=20260804a`; `/` và `/chung-khoan.html` đều 200.
+- `config.js` đã trỏ lại `onrender.com` (phiên 2 từng tạm trỏ `localhost:3999`).
+
 **04/08/2026 (phiên 2) — bước B: chart chỉ số chạy được (ĐỤNG `server/index.js`).**
 Bấm thẻ chỉ số giờ nạp chart chỉ số đó + cuộn xuống, đúng phần cuối cùng còn
 thiếu của design 03/08.
