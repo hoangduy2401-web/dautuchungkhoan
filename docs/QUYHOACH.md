@@ -380,7 +380,7 @@ chứng trên trình duyệt thật trước khi push, không chỉ đọc code.
 
 ---
 
-### GĐ 1 — Trang Ngoại tệ · ĐỘ KHÓ: TRUNG BÌNH · 3 phiên · Tuần 2 — **7/8 XONG 05/08/2026**
+### GĐ 1 — Trang Ngoại tệ · ĐỘ KHÓ: TRUNG BÌNH · 3 phiên · Tuần 2 — **XONG 06/08/2026**
 
 Đã tăng từ 2 lên 3 phiên: user yêu cầu thêm biểu đồ lịch sử, kéo theo nguồn thứ
 hai + logic tỷ giá chéo.
@@ -393,7 +393,7 @@ hai + logic tỷ giá chéo.
 | 1.4 | ~~Biểu đồ~~ | **XONG 05/08** — `chartModule` kiểu đường, **1M/3M/6M/1Y** (không có 5Y, xem 2.10) |
 | 1.5 | ~~Nhãn nguồn trên cả bảng lẫn biểu đồ~~ | **XONG 05/08** — kèm đoạn giải thích vì sao hai số lệch |
 | 1.6 | ~~Ghim mã hay dùng lên đầu~~ | **XONG 05/08** — `Store.setSetting("fxPinned")` |
-| 1.7 | Danh mục ngoại tệ nhập tay + lãi/lỗ theo giá vốn | **CÒN LẠI.** Collection `holdings_fx`; dùng lại bình quân gia quyền của `portfolio.js`; định giá theo giá MUA chuyển khoản của VCB; nhớ `<span class="money">` |
+| 1.7 | ~~Danh mục ngoại tệ nhập tay + lãi/lỗ theo giá vốn~~ | **XONG 06/08** — `holdings_fx`, **danh sách nắm giữ sửa tại chỗ** chứ không phải sổ giao dịch, nên giá vốn là ô nhập chứ không bình quân gia quyền (xem `CLAUDE.md` mục 9) |
 | 1.8 | ~~Công cụ quy đổi nhanh 2 chiều~~ | **XONG 05/08** — mỗi chiều một giá (mua/bán), đúng như ngoài quầy |
 
 **Việc 1.5 không được cắt cho kịp tiến độ.** Bảng và biểu đồ lệch nhau 0,8% là

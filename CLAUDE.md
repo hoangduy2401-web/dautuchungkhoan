@@ -21,7 +21,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260805a`** (đã kiểm: 28 chỗ trong 3 file HTML, bản live
+Cache busting hiện **`?v=20260806a`** (đã kiểm: 28 chỗ trong 3 file HTML, bản live
 cũng đang phục vụ đúng chuỗi này).
 
 ---
@@ -576,12 +576,12 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260805a`. Nhánh `main` sạch, đã push, backend đã deploy bản
+Cache busting `?v=20260806a`. Nhánh `main` sạch, đã push, backend đã deploy bản
 mới nhất (đã kiểm 05/08 trên Render: `/api/fx/rates` trả 20 mã,
 `/api/fx/history` trả 30/90/365 điểm).
 
 Website hiện có **3 trang**: `/` (tổng gia sản, mới là khung),
-`/chung-khoan.html` (đầy đủ) và `/ngoai-te.html` (thiếu danh mục nhập tay).
+`/chung-khoan.html` và `/ngoai-te.html` (cả hai đầy đủ).
 3 trang còn lại chưa làm — xem mục 10.
 
 | Tính năng | Nguồn | Ghi chú |
@@ -600,18 +600,34 @@ Website hiện có **3 trang**: `/` (tổng gia sản, mới là khung),
 | **Bảng tỷ giá** (trang Ngoại tệ) | Vietcombank XML | 20 mã, bán lẻ; ô VCB không niêm yết hiện `—` và luôn xuống cuối khi sắp xếp |
 | **Chart tỷ giá** (trang Ngoại tệ) | FXRatesAPI | đường, **chỉ 1M/3M/6M/1Y** — nguồn free hết lịch sử ở 366 ngày |
 | Ghim mã ngoại tệ / quy đổi 2 chiều | `Store` + bảng VCB | quy đổi dùng giá mua chuyển khoản (bán cho NH) và giá bán (mua từ NH) |
+| **Danh mục ngoại tệ** | `Store` (`holdings_fx`) | danh sách nắm giữ **sửa tại chỗ**, không phải sổ giao dịch; định giá theo giá mua chuyển khoản VCB |
 | **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
 | Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
 
-**05/08/2026 (phiên 4) — GĐ 1 trang Ngoại tệ: backend + trang, XONG 6/8 đầu việc.**
-Bump `?v=20260804a` → **`?v=20260805a`** (28 chỗ trong 3 file HTML). **Có đụng
-`server/`** → Render đã deploy lại, đã kiểm live.
+**05–06/08/2026 (phiên 4) — GĐ 1 trang Ngoại tệ: XONG CẢ 8 ĐẦU VIỆC.**
+Bump `?v=20260804a` → `?v=20260805a` → **`?v=20260806a`** (28 chỗ trong 3 file
+HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.
 
-Làm xong mục 1.1–1.6 và 1.8 của bảng GĐ 1 (`docs/QUYHOACH.md`); **còn mục 1.7
-danh mục ngoại tệ nhập tay** — xem mục 10.
+Làm xong toàn bộ bảng GĐ 1 của `docs/QUYHOACH.md`.
+
+**Danh mục cá nhân (mục 1.7)** — collection `holdings_fx`, row
+`{code, amount, cost|null, updatedAt}`:
+- **Là danh sách nắm giữ sửa trực tiếp, KHÔNG phải sổ giao dịch** như
+  `portfolio.js`. User cầm một số dư ngoại tệ, khi nó đổi thì sửa thẳng con số
+  đó chứ không ghi thêm lệnh mua/bán. Nên **giá vốn là một ô nhập**, không phải
+  kết quả bình quân gia quyền. Đừng "sửa lại cho giống trang chứng khoán".
+- Cho phép **nhiều dòng cùng một mã** (nhiều lô giá vốn khác nhau); tổng cộng
+  dồn, không gộp dòng.
+- Giá vốn để trống → không hiện lãi/lỗ (`—`), không suy ra 0. Thiếu tỷ giá →
+  giá trị `—` và tổng ghi rõ "thiếu tỷ giá N mã".
+- Xoá phải bấm **hai nhịp** ("Xoá" → "Chắc chứ?", tự huỷ sau 4s): nút xoá nằm
+  ngay cạnh nút Sửa và thao tác không hoàn tác được.
+- Số tiền + số lượng nắm giữ đã bọc `.money`; giá vốn / giá quy đổi / % lãi lỗ
+  cố ý **không** che (mục 3b). Lúc đang sửa tại chỗ thì ô input hiện số thật —
+  chấp nhận, đó là thao tác chủ động của chủ nhân.
 
 - Backend: `/api/fx/rates` (parse XML Vietcombank bằng regex, không thêm
   dependency, TTL 10 phút vì nguồn ghi "1 request/5 phút") và `/api/fx/history`.
@@ -664,23 +680,23 @@ Các phiên trước đó: **`docs/NHATKY.md`**.
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
 Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy, bản
-live đã kiểm.
+live đã kiểm. **GĐ 1 xong toàn bộ 8 đầu việc.**
 
-Việc kế tiếp: **nốt GĐ 1 — mục 1.7, danh mục ngoại tệ nhập tay** (một phiên
-ngắn). 7 đầu việc kia của GĐ 1 đã xong ngày 05/08. Cần làm:
-- Form nhập: mã ngoại tệ, số lượng, giá vốn (VND/1 đơn vị), ngày mua. Lưu vào
-  collection **`holdings_fx`** qua `Store` (mọi hàm `await`, mục 3).
-- Lãi/lỗ theo **bình quân gia quyền** — dùng lại đúng cách tính của
-  `portfolio.js`, đừng viết công thức thứ hai.
-- Định giá theo **giá mua chuyển khoản của Vietcombank** (bán lại cho ngân hàng
-  thì được giá đó), không phải giá liên ngân hàng của biểu đồ. Ghi nhãn.
-- **Bọc mọi số tiền và số lượng nắm giữ trong `<span class="money">`** rồi bật
-  nút con mắt rà lại cả trang (mục 3b). Trang ngoại tệ hiện có **0 phần tử
-  `.money`** — đúng, vì chưa có số tài sản nào; thêm danh mục là phải có.
+Việc kế tiếp: **GĐ 2 — trang Vàng** (2 phiên). Đọc `docs/QUYHOACH.md` mục
+2.2–2.4 và bảng GĐ 2. Việc đầu tiên **bắt buộc** là xác minh đơn vị giá của PNJ
+(`giaban: 14170` đo 30/07 — nghi là nghìn đồng/chỉ) trước khi viết bất cứ thứ gì
+khác; ghi kết luận vào `docs/VANG.md`. Đây đúng loại lỗi đã dính với SSI.
 
-Sau đó sang **GĐ 2 — trang Vàng** (2 phiên): `docs/QUYHOACH.md` mục 2.2–2.4 và
-bảng GĐ 2. Việc đầu tiên bắt buộc là **xác minh đơn vị giá của PNJ** trước khi
-viết bất cứ thứ gì khác.
+Khuôn mẫu để nhân bản: trang Ngoại tệ. `ngoai-te.html` + `ngoai-te.css` +
+`pages/ngoai-te.js` là bộ ba đầy đủ nhất cho một trang tài sản (bảng giá có
+nhãn nguồn + danh mục nhập tay qua `Store` + `.money`), sao chép cấu trúc đó
+thay vì dựng lại từ trang chứng khoán (trang đó còn mang theo ticker/heatmap/
+tín hiệu không liên quan).
+
+**Việc còn nợ khi làm GĐ 6 (trang tổng):** giá trị danh mục ngoại tệ hiện chỉ
+tính trong trang ngoại tệ. Trang tổng phải đọc `holdings_fx` từ `Store` rồi
+định giá bằng `/api/fx/rates` — logic quy đổi đang nằm trong `ngoai-te.js`
+(`holdRow`), khi cần dùng ở hai nơi thì tách sang `assets/js/core/`.
 
 **Đừng "sửa lại cho đúng quy hoạch" ba chỗ sau của trang Ngoại tệ:**
 1. Nguồn lịch sử là **FXRatesAPI, không phải Yahoo** — Yahoo chặn IP Render
