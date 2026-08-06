@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260805a" />
-<link rel="stylesheet" href="assets/css/ngoai-te.css?v=20260805a" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260806a" />
+<link rel="stylesheet" href="assets/css/ngoai-te.css?v=20260806a" />
 </head>
 <body>
 
@@ -121,6 +121,42 @@
       </div>
     </div>
 
+    <!-- Danh mục ngoại tệ nhập tay. Đây là DANH SÁCH NẮM GIỮ sửa trực tiếp, cố ý
+         khác sổ giao dịch mua/bán của trang chứng khoán — xem ngoai-te.js. -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Danh mục cá nhân</h2>
+        <span class="src-badge">Quy đổi theo giá mua chuyển khoản Vietcombank</span>
+      </div>
+
+      <form id="holdForm" class="hold-form">
+        <select id="holdCode" class="hold-input hold-code" aria-label="Loại tiền"></select>
+        <input id="holdAmount" class="hold-input" inputmode="decimal" placeholder="Số tiền, vd: 1.500" aria-label="Số tiền" />
+        <input id="holdCost" class="hold-input" inputmode="decimal" placeholder="Giá vốn ₫/1 đơn vị (không bắt buộc)" aria-label="Giá vốn" />
+        <button type="submit" class="btn">+ Thêm</button>
+      </form>
+      <div class="hold-error" id="holdError" hidden></div>
+
+      <div class="hold-summary" id="holdSummary"></div>
+
+      <div class="fx-table-wrap">
+        <table class="fx-table hold-table">
+          <thead>
+            <tr>
+              <th>Mã</th>
+              <th class="num">Số tiền</th>
+              <th class="num">Giá vốn</th>
+              <th class="num col-rate">Giá quy đổi</th>
+              <th class="num">Giá trị (₫)</th>
+              <th class="num">Lãi/lỗ</th>
+              <th class="th-act"></th>
+            </tr>
+          </thead>
+          <tbody id="holdTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
 
   <footer class="app-footer">
@@ -129,13 +165,13 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="assets/js/core/config.js?v=20260805a"></script>
-  <script src="assets/js/core/store.js?v=20260805a"></script>
-  <script src="assets/js/core/theme.js?v=20260805a"></script>
-  <script src="assets/js/core/nav.js?v=20260805a"></script>
-  <script src="assets/js/core/mockData.js?v=20260805a"></script>
-  <script src="assets/js/core/dataService.js?v=20260805a"></script>
-  <script src="assets/js/core/chartModule.js?v=20260805a"></script>
-  <script src="assets/js/pages/ngoai-te.js?v=20260805a"></script>
+  <script src="assets/js/core/config.js?v=20260806a"></script>
+  <script src="assets/js/core/store.js?v=20260806a"></script>
+  <script src="assets/js/core/theme.js?v=20260806a"></script>
+  <script src="assets/js/core/nav.js?v=20260806a"></script>
+  <script src="assets/js/core/mockData.js?v=20260806a"></script>
+  <script src="assets/js/core/dataService.js?v=20260806a"></script>
+  <script src="assets/js/core/chartModule.js?v=20260806a"></script>
+  <script src="assets/js/pages/ngoai-te.js?v=20260806a"></script>
 </body>
 </html>

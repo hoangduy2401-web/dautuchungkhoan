@@ -19,6 +19,9 @@ const fxState = {
   selected: "USD",
   range: 90,
   loadingChart: false,
+  holdings: [], // danh mục cá nhân, bản sao trong bộ nhớ của collection holdings_fx
+  editingId: null, // dòng đang ở chế độ sửa tại chỗ
+  confirmDeleteId: null, // dòng đang chờ xác nhận xoá (bấm Xoá lần hai)
 };
 
 // Nguồn miễn phí chỉ có 366 ngày lịch sử nên KHÔNG có mốc 5 năm như trang chứng
@@ -32,6 +35,7 @@ const FX_RANGES = [
 ];
 
 const PINNED_SETTING = "fxPinned";
+const HOLDINGS_COLLECTION = "holdings_fx"; // tên đã chốt ở docs/QUYHOACH.md 3.4
 
 const hasVal = (n) => n !== null && n !== undefined && Number.isFinite(Number(n));
 const fmtRate = (n) =>
@@ -55,14 +59,21 @@ const FX_NAMES_VI = {
 document.addEventListener("DOMContentLoaded", async () => {
   initChrome();
 
-  // Store bất đồng bộ: nạp mã ghim TRƯỚC lần vẽ đầu, nếu không bảng vẽ xong
-  // rồi mới nhảy thứ tự.
-  fxState.pinned = (await Store.getSetting(PINNED_SETTING, [])) || [];
+  // Store bất đồng bộ: nạp mã ghim và danh mục TRƯỚC lần vẽ đầu, nếu không bảng
+  // vẽ xong rồi mới nhảy thứ tự, và danh mục hiện rỗng rồi mới nhảy số.
+  const [pinned, holdings] = await Promise.all([
+    Store.getSetting(PINNED_SETTING, []),
+    Store.list(HOLDINGS_COLLECTION),
+  ]);
+  fxState.pinned = pinned || [];
+  fxState.holdings = holdings || [];
 
   renderRangeTabs();
   wireTable();
   wireConverter();
   wireChartToggles();
+  wireHoldings();
+  renderHoldings(); // vẽ ngay: danh mục đọc được kể cả khi máy chủ chưa trả lời
   ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
   // Chuỗi tỷ giá không có khối lượng và RSI trên một cặp tiền tệ không nói lên
   // điều gì hữu ích ở đây — tắt cả hai, giữ MA10/MA20.
@@ -114,6 +125,8 @@ async function loadRates() {
     renderTable();
     fillConverterCodes();
     updateConverter("foreign");
+    fillHoldCodes();
+    renderHoldings(); // vẽ lại: giờ mới có tỷ giá để quy đổi giá trị danh mục
   } catch (err) {
     console.warn("[ngoai-te] tỷ giá lỗi:", err.message);
     DataService.markAsleep();
@@ -422,4 +435,229 @@ function wireConverter() {
   document.getElementById("convForeign").addEventListener("input", () => updateConverter("foreign"));
   document.getElementById("convVnd").addEventListener("input", () => updateConverter("vnd"));
   document.getElementById("convCode").addEventListener("change", () => updateConverter("foreign"));
+}
+
+/* ============================================================
+   DANH MỤC CÁ NHÂN (collection `holdings_fx`)
+
+   Đây là DANH SÁCH NẮM GIỮ sửa trực tiếp, KHÔNG phải sổ giao dịch mua/bán như
+   `portfolio.js` của trang chứng khoán. Cố ý khác: user cầm một số dư ngoại tệ
+   và khi nó thay đổi thì sửa thẳng con số đó, chứ không ghi thêm một lệnh mua/
+   bán. Vì vậy giá vốn là MỘT Ô NHẬP, không phải kết quả bình quân gia quyền của
+   nhiều lệnh — đừng "sửa lại cho giống trang chứng khoán".
+
+   Định giá theo **giá mua chuyển khoản của Vietcombank**: đó là giá bán lại cho
+   ngân hàng, tức số tiền thật sự thu về. Không dùng giá liên ngân hàng của biểu
+   đồ — nó cao hơn ~0,8% và không ai mua của bạn ở giá đó.
+
+   Mọi số tiền và số lượng nắm giữ bọc `<span class="money">` để nút con mắt che
+   được (mục 3b). Giá vốn và giá quy đổi là GIÁ, không che — xem cùng mục.
+   ============================================================ */
+
+// Giá dùng để định giá một mã. null = VCB không niêm yết -> hiện "—", không bịa.
+function holdRate(code) {
+  const r = rateFor(code);
+  return r && hasVal(r.buyTransfer) ? r.buyTransfer : null;
+}
+
+// Một dòng danh mục kèm các số đã tính. rate/value/pl = null khi thiếu tỷ giá
+// hoặc thiếu giá vốn — người gọi phải hiện "—" chứ không thay bằng 0.
+function holdRow(h) {
+  const rate = holdRate(h.code);
+  const amount = Number(h.amount) || 0;
+  const cost = hasVal(h.cost) ? Number(h.cost) : null;
+  const value = rate === null ? null : amount * rate;
+  const pl = rate === null || cost === null ? null : amount * (rate - cost);
+  const plPct = rate === null || cost === null || !cost ? null : ((rate - cost) / cost) * 100;
+  return { ...h, amount, cost, rate, value, pl, plPct };
+}
+
+function renderHoldings() {
+  const body = document.getElementById("holdTableBody");
+  const rows = fxState.holdings.map(holdRow);
+
+  if (!rows.length) {
+    body.innerHTML =
+      `<tr><td colspan="7" class="empty-state">Chưa có mã nào. Thêm ở ô phía trên.</td></tr>`;
+    document.getElementById("holdSummary").innerHTML = "";
+    return;
+  }
+
+  body.innerHTML = rows.map((r) => (r.id === fxState.editingId ? editRowHtml(r) : viewRowHtml(r))).join("");
+  renderHoldSummary(rows);
+}
+
+function viewRowHtml(r) {
+  const plCls = r.pl === null ? "" : r.pl > 0 ? "up" : r.pl < 0 ? "down" : "flat";
+  const plText =
+    r.pl === null
+      ? "—"
+      : `<span class="money">${r.pl >= 0 ? "+" : ""}${fmtMoney(r.pl, 0)} ₫</span> <span class="${plCls}">(${r.plPct >= 0 ? "+" : ""}${r.plPct.toFixed(2)}%)</span>`;
+  const delLabel = r.id === fxState.confirmDeleteId ? "Chắc chứ?" : "Xoá";
+
+  return `<tr data-hid="${r.id}">
+    <td class="code">${escapeHtml(r.code)}</td>
+    <td class="num"><span class="money">${fmtMoney(r.amount, r.amount % 1 ? 2 : 0)}</span></td>
+    <td class="num muted">${r.cost === null ? "—" : fmtRate(r.cost)}</td>
+    <td class="num muted col-rate">${r.rate === null ? "—" : fmtRate(r.rate)}</td>
+    <td class="num">${r.value === null ? "—" : `<span class="money">${fmtMoney(r.value, 0)}</span>`}</td>
+    <td class="num ${plCls}">${plText}</td>
+    <td class="act">
+      <button type="button" class="row-btn" data-act="edit">Sửa</button>
+      <button type="button" class="row-btn danger" data-act="del">${delLabel}</button>
+    </td>
+  </tr>`;
+}
+
+// Sửa tại chỗ: chỉ số tiền và giá vốn đổi được. Muốn đổi mã thì xoá rồi thêm
+// lại — đổi mã tại chỗ nghĩa là giá vốn cũ đang tính bằng đơn vị khác.
+function editRowHtml(r) {
+  return `<tr data-hid="${r.id}">
+    <td class="code">${escapeHtml(r.code)}</td>
+    <td class="num"><input class="edit-input" data-edit="amount" value="${fmtMoney(r.amount, r.amount % 1 ? 2 : 0)}" /></td>
+    <td class="num"><input class="edit-input" data-edit="cost" value="${r.cost === null ? "" : fmtMoney(r.cost, 0)}" placeholder="—" /></td>
+    <td class="num muted col-rate">${r.rate === null ? "—" : fmtRate(r.rate)}</td>
+    <td class="num muted">—</td>
+    <td class="num muted">—</td>
+    <td class="act">
+      <button type="button" class="row-btn save" data-act="save">Lưu</button>
+      <button type="button" class="row-btn" data-act="cancel">Huỷ</button>
+    </td>
+  </tr>`;
+}
+
+function renderHoldSummary(rows) {
+  const priced = rows.filter((r) => r.value !== null);
+  const missing = rows.length - priced.length;
+  const total = priced.reduce((s, r) => s + r.value, 0);
+
+  const withCost = rows.filter((r) => r.pl !== null);
+  const totalPl = withCost.reduce((s, r) => s + r.pl, 0);
+  const totalCost = withCost.reduce((s, r) => s + r.amount * r.cost, 0);
+  const plPct = totalCost ? (totalPl / totalCost) * 100 : null;
+  const plCls = totalPl > 0 ? "up" : totalPl < 0 ? "down" : "flat";
+
+  document.getElementById("holdSummary").innerHTML =
+    `<div class="stat">
+       <span class="label">Tổng giá trị${missing ? ` (thiếu tỷ giá ${missing} mã)` : ""}</span>
+       <span class="val"><span class="money">${priced.length ? fmtMoney(total, 0) + " ₫" : "—"}</span></span>
+     </div>` +
+    (withCost.length
+      ? `<div class="stat">
+           <span class="label">Lãi/lỗ (${withCost.length}/${rows.length} mã có giá vốn)</span>
+           <span class="val ${plCls}"><span class="money">${totalPl >= 0 ? "+" : ""}${fmtMoney(totalPl, 0)} ₫</span>${
+             plPct === null ? "" : ` <span>(${plPct >= 0 ? "+" : ""}${plPct.toFixed(2)}%)</span>`
+           }</span>
+         </div>`
+      : "");
+}
+
+function fillHoldCodes() {
+  const sel = document.getElementById("holdCode");
+  const keep = sel.value;
+  sel.innerHTML = fxState.rates.map((r) => `<option value="${r.code}">${escapeHtml(r.code)}</option>`).join("");
+  if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+}
+
+function setHoldError(msg) {
+  const el = document.getElementById("holdError");
+  el.textContent = msg || "";
+  el.hidden = !msg;
+}
+
+function wireHoldings() {
+  document.getElementById("holdForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = document.getElementById("holdCode").value;
+    const amountEl = document.getElementById("holdAmount");
+    const costEl = document.getElementById("holdCost");
+    const amount = parseAmount(amountEl.value);
+    const costRaw = costEl.value.trim();
+    const cost = costRaw ? parseAmount(costRaw) : null;
+
+    if (!code) return setHoldError("Chưa nạp được danh sách ngoại tệ — thử lại khi bảng tỷ giá hiện số.");
+    if (amount === null || amount <= 0) return setHoldError("Số tiền phải là số lớn hơn 0.");
+    if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+    setHoldError("");
+    await Store.add(HOLDINGS_COLLECTION, {
+      code,
+      amount,
+      cost, // null = không theo dõi lãi/lỗ cho mã này
+      updatedAt: new Date().toISOString(),
+    });
+    fxState.holdings = await Store.list(HOLDINGS_COLLECTION);
+    amountEl.value = "";
+    costEl.value = "";
+    renderHoldings();
+  });
+
+  // Uỷ quyền sự kiện: bảng vẽ lại sau mỗi thao tác.
+  document.getElementById("holdTableBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const tr = btn.closest("tr[data-hid]");
+    const id = tr.dataset.hid;
+
+    if (btn.dataset.act === "edit") {
+      fxState.editingId = id;
+      fxState.confirmDeleteId = null;
+      renderHoldings(); // `tr` cũ đã bị thay, phải tìm lại dòng mới để focus
+      document.querySelector(`tr[data-hid="${id}"] [data-edit="amount"]`)?.focus();
+      return;
+    }
+
+    if (btn.dataset.act === "cancel") {
+      fxState.editingId = null;
+      setHoldError("");
+      renderHoldings();
+      return;
+    }
+
+    if (btn.dataset.act === "save") {
+      const amount = parseAmount(tr.querySelector('[data-edit="amount"]').value);
+      const costRaw = tr.querySelector('[data-edit="cost"]').value.trim();
+      const cost = costRaw ? parseAmount(costRaw) : null;
+      if (amount === null || amount <= 0) return setHoldError("Số tiền phải là số lớn hơn 0.");
+      if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+      setHoldError("");
+      await Store.update(HOLDINGS_COLLECTION, id, { amount, cost, updatedAt: new Date().toISOString() });
+      fxState.holdings = await Store.list(HOLDINGS_COLLECTION);
+      fxState.editingId = null;
+      renderHoldings();
+      return;
+    }
+
+    if (btn.dataset.act === "del") {
+      // Hai nhịp thay vì confirm(): bấm lần đầu đổi nhãn thành "Chắc chứ?".
+      // Xoá là thao tác không hoàn tác được và nút nằm ngay cạnh nút Sửa.
+      if (fxState.confirmDeleteId !== id) {
+        fxState.confirmDeleteId = id;
+        renderHoldings();
+        setTimeout(() => {
+          if (fxState.confirmDeleteId === id) {
+            fxState.confirmDeleteId = null;
+            renderHoldings();
+          }
+        }, 4000);
+        return;
+      }
+      fxState.confirmDeleteId = null;
+      await Store.remove(HOLDINGS_COLLECTION, id);
+      fxState.holdings = await Store.list(HOLDINGS_COLLECTION);
+      renderHoldings();
+    }
+  });
+
+  // Enter để lưu, Esc để huỷ khi đang sửa tại chỗ.
+  document.getElementById("holdTableBody").addEventListener("keydown", (e) => {
+    if (!fxState.editingId) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.target.closest("tr")?.querySelector('[data-act="save"]')?.click();
+    } else if (e.key === "Escape") {
+      e.target.closest("tr")?.querySelector('[data-act="cancel"]')?.click();
+    }
+  });
 }

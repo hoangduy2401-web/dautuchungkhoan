@@ -11,13 +11,15 @@
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   grid-template-areas:
     "board chart"
-    "board conv";
+    "board conv"
+    "port  port";
   align-items: start;
   gap: 16px;
 }
 .main-grid-fx > .panel:nth-child(1) { grid-area: board; }
 .main-grid-fx > .panel:nth-child(2) { grid-area: chart; }
 .main-grid-fx > .panel:nth-child(3) { grid-area: conv; }
+.main-grid-fx > .panel:nth-child(4) { grid-area: port; }
 
 /* Nhãn nguồn. Bắt buộc có mặt cạnh mọi con số: bảng là giá bán lẻ có biên
    mua–bán, biểu đồ là giá liên ngân hàng — lệch ~0,8% và không bao giờ khớp. */
@@ -122,11 +124,69 @@
 .fx-conv-note { font-size: var(--text-2xs); color: var(--text-secondary); line-height: 1.6; }
 .fx-conv-note strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
+/* ---- Danh mục cá nhân ---- */
+.hold-form {
+  display: grid; gap: 8px; margin: 12px 0 10px;
+  grid-template-columns: 100px minmax(0, 1fr) minmax(0, 1.4fr) auto;
+}
+.hold-input {
+  background: var(--surface-inset); border: 1px solid var(--border-default);
+  color: var(--text-primary); font-family: inherit; font-size: var(--text-xs);
+  padding: 9px 12px; border-radius: var(--radius-sm); min-width: 0;
+}
+.hold-input:focus { outline: none; border-color: var(--accent-orange); }
+.hold-code { font-weight: 700; }
+.hold-error {
+  font-size: var(--text-2xs); color: var(--negative);
+  background: var(--negative-soft); padding: 7px 10px; border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+.hold-error[hidden] { display: none; }
+
+.hold-summary { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
+.hold-summary:empty { display: none; }
+.hold-summary .label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.hold-summary .val {
+  font-size: var(--text-xl); font-weight: 700; margin-top: 2px;
+  font-variant-numeric: tabular-nums; display: block;
+}
+
+.hold-table tbody tr { cursor: default; }
+.hold-table tbody tr:hover { background: transparent; }
+.hold-table .th-act { width: 96px; }
+.hold-table td.act { text-align: right; white-space: nowrap; }
+.hold-table .row-btn {
+  background: none; border: none; cursor: pointer; padding: 2px 6px;
+  color: var(--text-tertiary); font-family: inherit; font-size: var(--text-2xs); font-weight: 600;
+}
+.hold-table .row-btn:hover { color: var(--text-primary); }
+.hold-table .row-btn.danger:hover { color: var(--negative); }
+.hold-table .row-btn.save { color: var(--accent-orange); }
+/* Ô sửa tại chỗ: cùng chiều cao dòng, không làm bảng nhảy khi vào chế độ sửa. */
+.hold-table .edit-input {
+  width: 100%; background: var(--surface-inset); border: 1px solid var(--accent-orange);
+  color: var(--text-primary); font-family: inherit; font-size: var(--text-xs);
+  padding: 4px 6px; border-radius: var(--radius-sm);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1000px) {
   .main-grid-fx {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "chart" "board" "conv";
+    grid-template-areas: "chart" "board" "conv" "port";
   }
+}
+@media (max-width: 720px) {
+  /* Hàng 1: mã + số tiền. Hàng 2: giá vốn. Hàng 3: nút. Nhồi 4 ô vào 2 cột thì
+     ô giá vốn hẹp tới mức nuốt mất placeholder. */
+  .hold-form { grid-template-columns: 92px minmax(0, 1fr); }
+  .hold-form > .hold-input:nth-child(3),
+  .hold-form > button { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  /* Bảng danh mục cuộn ngang trên điện thoại; bỏ cột giá quy đổi để nút
+     Sửa/Xoá nằm trong tầm nhìn đầu tiên. Giá đó vẫn có ở bảng tỷ giá phía trên. */
+  .hold-table .col-rate { display: none; }
 }
 @media (max-width: 640px) {
   .main-grid-fx { padding-left: 14px; padding-right: 14px; }
