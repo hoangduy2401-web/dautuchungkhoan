@@ -57,53 +57,53 @@ chạy 5 phút/lần là vừa khít, đừng gọi dày hơn.
 
 Nguồn này **chỉ có tỷ giá hiện tại, không có lịch sử** — xem 2.10 cho phần lịch sử.
 
-### 2.10 Lịch sử tỷ giá — Yahoo Finance (CHẠY)
+### 2.10 Lịch sử tỷ giá — FXRatesAPI (CHẠY từ 05/08/2026)
 
-User yêu cầu biểu đồ 1M/3M/6M/1Y/5Y. Vietcombank không có lịch sử nên cần nguồn
-thứ hai:
+> **Yahoo Finance ĐÃ BỊ LOẠI ngày 05/08/2026** — nó chặn theo IP và IP của
+> Render nằm trong diện chặn (429 ngay từ request đầu). Mô tả Yahoo ở bản cũ
+> của mục này không còn đúng; số đo và danh sách nguồn đã dò-và-loại nằm ở
+> `CLAUDE.md` mục 7. **Đừng dựng lại đường Yahoo.**
 
-```
-GET https://query1.finance.yahoo.com/v8/finance/chart/USDVND=X?range=5y&interval=1d
-```
-Free, không key, 0,46s. Trả `timestamp[]` + `indicators.quote[0].close[]`.
-`range` nhận `1mo/3mo/6mo/1y/5y` — **khớp đúng 5 mốc của trang chứng khoán**.
-
-**Độ phủ KHÔNG đều — đã đo ngày 30/07/2026:**
-
-| Cặp | Trực tiếp | Kết luận |
-|---|---|---|
-| `USDVND=X` | 1306 điểm / 5 năm | Dùng thẳng |
-| `EURVND=X`, `GBPVND=X` | 23 điểm / 1 tháng | Không đủ |
-| `JPYVND=X`, `CNYVND=X` | **1 điểm** | Vô dụng |
-| `AUDVND=X` | **không tồn tại** | — |
-
-**Giải pháp: tỷ giá chéo.** Mọi cặp chính với USD đều có đủ 1300 điểm / 5 năm
-(`EURUSD`, `GBPUSD`, `AUDUSD`, `USDJPY`, `USDCNY`). Quy tắc:
+Vietcombank không có lịch sử nên vẫn cần nguồn thứ hai:
 
 ```
-XXX/VND = XXXUSD × USDVND        (khi Yahoo niêm yết XXX/USD: EUR, GBP, AUD)
-XXX/VND = USDVND ÷ USDXXX        (khi Yahoo niêm yết USD/XXX: JPY, CNY)
+GET https://api.fxratesapi.com/timeseries
+      ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&base=USD&currencies=VND,EUR,...
+```
+Free, không key, ~1s cho 365 ngày × 20 ngoại tệ (150KB).
+
+**Một call trả tất cả ngoại tệ cho cả khoảng ngày**, nên tỷ giá chéo không tốn
+thêm request nào. Với `base=USD`, mỗi ngày là "số đơn vị XXX trên 1 USD":
+
+```
+XXX/VND = (VND per USD) ÷ (XXX per USD)      — một công thức cho cả 20 mã
+USD/VND = (VND per USD)
 ```
 
-Đã đối chiếu 2 chiều ngày 30/07/2026:
-- AUD chéo = 0,7018 × 26.300 = **18.457** — nằm gọn trong khoảng VCB mua 17.836
-  / bán 18.593. Đúng.
-- CNY chéo = 26.300 ÷ 6,7413 = **3.901** vs Yahoo trực tiếp 3.888. Lệch 0,3%.
-- EUR chéo = 1,1521 × 26.300 = **30.290** vs trực tiếp 30.256. Lệch 0,1%.
+Đối chiếu ngày 05/08/2026 (liên ngân hàng vs VCB bán lẻ, lệch đúng như dự kiến):
+JPY chéo 166,46 vs VCB chuyển khoản 162,49 · EUR chéo 30.280 vs VCB 29.815 mua /
+31.073 bán · KWD chéo 84.854 vs VCB 85.024 · SAR chéo 6.991 vs VCB 6.955.
+
+**Hai giới hạn phải nhớ:**
+- **Gói free chỉ có 366 ngày lịch sử** → **không có khung 5Y**. Trang ngoại tệ
+  chỉ có 1M/3M/6M/1Y (user chốt 05/08). Muốn 5Y phải đổi nguồn có API key.
+- Điểm mới nhất là **hôm qua**; giá trị hôm nay lấy ở bảng Vietcombank.
 
 **CẠM BẪY LỚN NHẤT CỦA TRANG NGOẠI TỆ — hai loại tỷ giá khác nhau.**
-Bảng tỷ giá (Vietcombank) và biểu đồ lịch sử (Yahoo) **không phải cùng một con
-số** và sẽ không bao giờ khớp:
-- Yahoo = tỷ giá **thị trường liên ngân hàng**, một giá duy nhất.
+Bảng tỷ giá (Vietcombank) và biểu đồ lịch sử (FXRatesAPI) **không phải cùng một
+con số** và sẽ không bao giờ khớp:
+- Nguồn lịch sử = tỷ giá **thị trường liên ngân hàng**, một giá duy nhất.
 - Vietcombank = tỷ giá **bán lẻ niêm yết**, có biên mua-bán.
 
-Đo thật ngày 30/07/2026: Yahoo USD/VND ≈ 26.300, VCB mua 26.080 / bán 26.490.
-Lệch tới **0,8%** so với giá bán.
+Đo thật ngày 05/08/2026: liên ngân hàng USD/VND 26.259, VCB mua 26.050 / bán
+26.460. Lệch **0,8%** so với giá bán. (Số cũ đo 30/07 qua Yahoo: 26.300 vs
+26.080 / 26.490 — cùng độ lệch, nên kết luận không đổi khi đổi nguồn.)
 
-→ Giao diện **bắt buộc ghi rõ nguồn ngay cạnh mỗi con số**: bảng ghi "Tỷ giá
-Vietcombank", biểu đồ ghi "Tỷ giá thị trường (Yahoo Finance)". Để user tự so hai
-số rồi tưởng có lỗi là thất bại thiết kế. Đây cùng bản chất với luật "không hiển
-thị số bịa" — số đúng nhưng dán nhầm nhãn cũng dẫn tới quyết định sai.
+→ Giao diện **bắt buộc ghi rõ nguồn ngay cạnh mỗi con số**: bảng ghi "Vietcombank
+· bán lẻ", biểu đồ ghi "Thị trường liên ngân hàng · FXRatesAPI". Để user tự so
+hai số rồi tưởng có lỗi là thất bại thiết kế. Đây cùng bản chất với luật "không
+hiển thị số bịa" — số đúng nhưng dán nhầm nhãn cũng dẫn tới quyết định sai.
+**Đã làm đúng như vậy ở `ngoai-te.html` (05/08), đừng gỡ nhãn cho gọn.**
 
 ### 2.2 Vàng — PNJ (CHẠY, nguồn chính)
 
@@ -196,7 +196,8 @@ SSI FastConnect Data + Trading, VNDirect finfo, CafeF RSS. Không đụng.
 | PNJ edge-api | Trung bình | API nội bộ, không cam kết |
 | BTMC | Trung bình | Format kỳ dị, key công khai có thể bị thu |
 | CafeF CDN | Trung bình | URL nội bộ, có thể đổi bất cứ lúc nào |
-| Yahoo Finance | Trung bình | API không công bố; độ phủ cặp VND không đều |
+| FXRatesAPI | Trung bình | Free không key; gói free chỉ 366 ngày lịch sử |
+| ~~Yahoo Finance~~ | **Không dùng được** | Chặn theo IP, kể cả IP Render (05/08) |
 | SJC | **Không dùng được** | Cloudflare challenge |
 
 Nguyên tắc: **mọi nguồn "trung bình" phải có bản chụp lưu trong DB** để trang
@@ -317,9 +318,9 @@ GET /api/fx/rates                      (Vietcombank — tỷ giá bán lẻ)
 → { updatedAt, source:"Vietcombank",
     rates:[{code,name,buyCash,buyTransfer,sell}] }
 
-GET /api/fx/history?code=USD&days=365  (Yahoo — tỷ giá thị trường, xem 2.10)
-→ { source:"Yahoo Finance", method:"direct"|"cross",
-    items:[{date,rate}] }
+GET /api/fx/history?code=USD&days=365  (FXRatesAPI — liên ngân hàng, xem 2.10)
+→ { source:"FXRatesAPI", kind:"interbank", method:"direct"|"cross", code,
+    items:[{date,rate}] }        days > 365 -> 400 range_too_long
 
 GET /api/gold/prices
 → { updatedAt, unit:"nghìn đồng/chỉ", items:[{code,name,buy,sell,source}] }
@@ -379,21 +380,21 @@ chứng trên trình duyệt thật trước khi push, không chỉ đọc code.
 
 ---
 
-### GĐ 1 — Trang Ngoại tệ · ĐỘ KHÓ: TRUNG BÌNH · 3 phiên · Tuần 2
+### GĐ 1 — Trang Ngoại tệ · ĐỘ KHÓ: TRUNG BÌNH · 3 phiên · Tuần 2 — **7/8 XONG 05/08/2026**
 
 Đã tăng từ 2 lên 3 phiên: user yêu cầu thêm biểu đồ lịch sử, kéo theo nguồn thứ
 hai + logic tỷ giá chéo.
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 1.1 | Route `/api/fx/rates` — parse XML Vietcombank | Cache **≥5 phút** (nguồn yêu cầu) |
-| 1.2 | Bảng tỷ giá đầy đủ: mua tiền mặt / mua chuyển khoản / bán | Sort, tìm kiếm mã |
-| 1.3 | Route `/api/fx/history` — Yahoo + **tỷ giá chéo** cho JPY/CNY/AUD | Xem 2.10. Cache theo khung như history chứng khoán |
-| 1.4 | Biểu đồ 1M/3M/6M/1Y/5Y | Dùng lại `chartModule.js`, kiểu đường thay vì nến |
-| 1.5 | **Nhãn nguồn rõ ràng trên cả bảng lẫn biểu đồ** | Bắt buộc — xem cảnh báo 2.10 |
-| 1.6 | Ghim mã hay dùng lên đầu | Lưu qua `Store` |
-| 1.7 | Danh mục ngoại tệ nhập tay + lãi/lỗ theo giá vốn | Dùng lại bình quân gia quyền của `portfolio.js` |
-| 1.8 | Công cụ quy đổi nhanh 2 chiều | |
+| 1.1 | ~~Route `/api/fx/rates` — parse XML Vietcombank~~ | **XONG 05/08** — TTL 10 phút; giá trị "-" trả `null`, không phải 0 |
+| 1.2 | ~~Bảng tỷ giá đầy đủ~~ | **XONG 05/08** — 20 mã, sort mọi cột, tìm cả tên tiếng Việt; ô trống luôn xuống cuối |
+| 1.3 | ~~Route `/api/fx/history` + tỷ giá chéo~~ | **XONG 05/08** — FXRatesAPI, KHÔNG phải Yahoo (xem 2.10) |
+| 1.4 | ~~Biểu đồ~~ | **XONG 05/08** — `chartModule` kiểu đường, **1M/3M/6M/1Y** (không có 5Y, xem 2.10) |
+| 1.5 | ~~Nhãn nguồn trên cả bảng lẫn biểu đồ~~ | **XONG 05/08** — kèm đoạn giải thích vì sao hai số lệch |
+| 1.6 | ~~Ghim mã hay dùng lên đầu~~ | **XONG 05/08** — `Store.setSetting("fxPinned")` |
+| 1.7 | Danh mục ngoại tệ nhập tay + lãi/lỗ theo giá vốn | **CÒN LẠI.** Collection `holdings_fx`; dùng lại bình quân gia quyền của `portfolio.js`; định giá theo giá MUA chuyển khoản của VCB; nhớ `<span class="money">` |
+| 1.8 | ~~Công cụ quy đổi nhanh 2 chiều~~ | **XONG 05/08** — mỗi chiều một giá (mua/bán), đúng như ngoài quầy |
 
 **Việc 1.5 không được cắt cho kịp tiến độ.** Bảng và biểu đồ lệch nhau 0,8% là
 chuyện bình thường của hai loại tỷ giá khác nhau, nhưng không ghi nhãn thì user
@@ -539,7 +540,7 @@ chỉ-đọc (đã có), `DASHBOARD_API_KEY` (đã có), origin allowlist (đã 
 |---|---|---|
 | Sàn coin | **Binance** | GĐ 7 ký HMAC-SHA256, key chỉ-đọc |
 | Tên miền | **Giữ `dashboardstock.io.vn`**, mua tên miền mới sau rồi 301 | Không chặn code, chỉ là DNS về sau |
-| Ngoại tệ | Có nắm giữ **và** cần biểu đồ lịch sử 1M/3M/6M/1Y/5Y | GĐ 1 tăng 2→3 phiên, thêm nguồn Yahoo |
+| Ngoại tệ | Có nắm giữ **và** cần biểu đồ lịch sử | GĐ 1 tăng 2→3 phiên, thêm nguồn thứ hai. Thực tế chỉ được 1M/3M/6M/1Y — xem 2.10 |
 | Dùng chung | **Chỉ một người** | Schema đơn giản, không cần chia sẻ/mời |
 | Riêng tư | **Nút con mắt toàn site** | Làm ngay ở GĐ 0 cùng thanh điều hướng |
 

@@ -21,7 +21,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260804a`** (đã kiểm: 18 chỗ trong 2 file HTML, bản live
+Cache busting hiện **`?v=20260805a`** (đã kiểm: 28 chỗ trong 3 file HTML, bản live
 cũng đang phục vụ đúng chuỗi này).
 
 ---
@@ -203,7 +203,21 @@ GET /api/fundamentals/:symbol
 
 GET /api/news?symbols=A,B,C
 → [{ symbol, title, source, time (ISO), url }, ...]
+
+GET /api/fx/rates                       (Vietcombank — BÁN LẺ, có biên mua-bán)
+→ { updatedAt (ISO +07:00), source:"Vietcombank", kind:"retail",
+    rates:[{ code, name, buyCash, buyTransfer, sell }] }   20 mã, sắp theo code
+   Trường = null nghĩa là VCB KHÔNG niêm yết (XML trả "-"), không phải 0.
+
+GET /api/fx/history?code=USD&days=365   (FXRatesAPI — LIÊN NGÂN HÀNG, một giá)
+→ { source:"FXRatesAPI", kind:"interbank", method:"direct"|"cross", code,
+    items:[{ date:"YYYY-MM-DD", rate }] }                  tăng dần
+   days > 365 → 400 `range_too_long` (gói free chỉ có 366 ngày). Mã lạ → 400.
 ```
+
+**`/api/fx/rates` và `/api/fx/history` là HAI LOẠI tỷ giá khác nhau, lệch ~0,8%
+vĩnh viễn** (đo 05/08: liên ngân hàng 26.259 vs VCB mua 26.050 / bán 26.460).
+Mọi chỗ hiển thị phải ghi nhãn nguồn — xem mục 7.
 
 Còn vài endpoint `/api/debug/*` chỉ để dò format SSI, không dùng ở frontend —
 `grep "api/debug" server/index.js` là ra đủ.
@@ -288,6 +302,42 @@ bấm tab thị trường **trước** khi mở accordion nên chưa lộ.
 
 **Cách sửa.** Quét `[data-pane]` thay cho `.mtab-pane`. Luật chung: **chọn theo
 thuộc tính dữ liệu, đừng chọn theo class trình bày** khi class đó cố ý dùng chung.
+
+### Yahoo Finance chặn theo IP — kể cả IP của Render (05/08/2026)
+
+**Triệu chứng.** Mọi request `query1.finance.yahoo.com/v8/finance/chart/...` trả
+`429 Too Many Requests`, ngay từ lần gọi ĐẦU TIÊN, không phải sau khi gọi nhiều.
+
+**Số đo.** `curl` và `node fetch` từ máy local: 429 (đã đặt User-Agent trình
+duyệt). Thêm cookie jar từ `fc.yahoo.com`: vẫn 429. `query2` thay `query1`: 429.
+Sau khi deploy lên Render và gọi từ backend live: **cũng 429**. Cùng URL đó fetch
+qua một mạng khác: **200, có đủ `chart.result[0]`**. → chặn theo IP, và IP
+datacenter (Render) là loại bị chặn chắc nhất.
+
+**Đã loại trừ** (đừng thử lại): thiếu User-Agent; thiếu cookie/crumb; sai host
+`query1`/`query2`; gọi quá dày (lần gọi đầu đã 429).
+
+**Cách sửa.** Đổi sang **FXRatesAPI** (`api.fxratesapi.com/timeseries`), free,
+không cần key. **Một call trả TẤT CẢ ngoại tệ cho cả khoảng ngày** nên tỷ giá
+chéo không tốn thêm request: với `base=USD`, mỗi ngày là "số đơn vị XXX trên 1
+USD", nên `XXX/VND = (VND per USD) ÷ (XXX per USD)` — một công thức cho cả 20 mã,
+không còn phải chia nhánh nhân/chia như kế hoạch cũ.
+
+**Ba cạm bẫy của nguồn mới, đã dính đủ:**
+1. **Phải xin `VND` trong danh sách `currencies`** — nó là vế báo giá. Thiếu nó
+   thì phản hồi vẫn `200` nhưng không có dòng nào dùng được (`"returned no
+   rows"`). `USD` là base nên luôn = 1 và KHÔNG xuất hiện trong phản hồi.
+2. **Gói free chỉ có 366 ngày** (`start_date_too_old`), và `366` chẵn cũng đã
+   400 → chốt `FX_MAX_DAYS = 365`. Vì vậy **trang ngoại tệ không có khung 5Y**.
+3. Điểm mới nhất là **hôm qua**, không phải hôm nay — giá trị hôm nay lấy ở bảng
+   Vietcombank. Nhãn "Mới nhất" trên trang có kèm ngày, đừng bỏ.
+
+**Các nguồn khác đã dò và loại** (đừng dò lại): `stooq.com` bắt giải PoW bằng
+JS; `frankfurter` (ECB) **không có VND**; `exchangerate.host` nay đòi
+`access_key`; `cdn.jsdelivr.net/npm/@fawazahmed0/currency-api` chạy tốt nhưng
+**mỗi ngày là một request** và dữ liệu chỉ có từ **2024-03-06** (2021 và 2023 trả
+404) → 5Y không khả thi. Vietcombank `pXML.aspx` **bỏ qua tham số `date`**, luôn
+trả bảng hôm nay, nên không dựng được lịch sử bán lẻ từ đó.
 
 ### Ngân sách timeout của chỉ số phải RIÊNG, không dùng chung với cổ phiếu (04/08/2026)
 
@@ -526,12 +576,13 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260804a`. Nhánh `main` sạch, đã push, backend đã deploy bản
-mới nhất (đã kiểm 04/08: `/api/price/indices` có đủ 5 trường thống kê và
-`/api/price/index-history` trả dữ liệu).
+Cache busting `?v=20260805a`. Nhánh `main` sạch, đã push, backend đã deploy bản
+mới nhất (đã kiểm 05/08 trên Render: `/api/fx/rates` trả 20 mã,
+`/api/fx/history` trả 30/90/365 điểm).
 
-Website hiện có **2 trang**: `/` (tổng gia sản, mới là khung) và
-`/chung-khoan.html` (đầy đủ). 4 trang còn lại chưa làm — xem mục 10.
+Website hiện có **3 trang**: `/` (tổng gia sản, mới là khung),
+`/chung-khoan.html` (đầy đủ) và `/ngoai-te.html` (thiếu danh mục nhập tay).
+3 trang còn lại chưa làm — xem mục 10.
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
@@ -546,11 +597,42 @@ Website hiện có **2 trang**: `/` (tổng gia sản, mới là khung) và
 | Watchlist | **`Store`** (driver localStorage) | kéo thả sắp xếp, sparkline SVG |
 | Lịch sử giao dịch tay | **`Store`** (driver localStorage) | giá vốn bình quân gia quyền |
 | Danh mục thật SSI (chỉ đọc) | SSI FCTrading | GĐ1, xem mục 8 |
+| **Bảng tỷ giá** (trang Ngoại tệ) | Vietcombank XML | 20 mã, bán lẻ; ô VCB không niêm yết hiện `—` và luôn xuống cuối khi sắp xếp |
+| **Chart tỷ giá** (trang Ngoại tệ) | FXRatesAPI | đường, **chỉ 1M/3M/6M/1Y** — nguồn free hết lịch sử ở 366 ngày |
+| Ghim mã ngoại tệ / quy đổi 2 chiều | `Store` + bảng VCB | quy đổi dùng giá mua chuyển khoản (bán cho NH) và giá bán (mua từ NH) |
 | **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
 | Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
+
+**05/08/2026 (phiên 4) — GĐ 1 trang Ngoại tệ: backend + trang, XONG 6/8 đầu việc.**
+Bump `?v=20260804a` → **`?v=20260805a`** (28 chỗ trong 3 file HTML). **Có đụng
+`server/`** → Render đã deploy lại, đã kiểm live.
+
+Làm xong mục 1.1–1.6 và 1.8 của bảng GĐ 1 (`docs/QUYHOACH.md`); **còn mục 1.7
+danh mục ngoại tệ nhập tay** — xem mục 10.
+
+- Backend: `/api/fx/rates` (parse XML Vietcombank bằng regex, không thêm
+  dependency, TTL 10 phút vì nguồn ghi "1 request/5 phút") và `/api/fx/history`.
+- **Nguồn lịch sử đổi khỏi quy hoạch: Yahoo Finance → FXRatesAPI.** Yahoo chặn
+  theo IP, kể cả IP của Render — chi tiết + số đo ở mục 7. `docs/QUYHOACH.md`
+  mục 2.10 đã sửa lại cho khớp.
+- Frontend: `ngoai-te.html`, `assets/css/ngoai-te.css`,
+  `assets/js/pages/ngoai-te.js`; `dataService.getFxRates/getFxHistory`;
+  `config.fxProvider`; `nav.js` bỏ nhãn "sắp có" ở mục Ngoại tệ.
+- `.chk` / `.sw` (chip bật/tắt đường vẽ) chuyển từ `chung-khoan.css` sang
+  `base.css` để hai trang dùng chung → **đã kiểm lại trang chứng khoán**, chip
+  vẫn đúng (`border-radius 999px`, nền `rgba(240,169,78,0.14)` khi bật).
+- **Khung 5Y bỏ có chủ đích** (user chốt trong phiên): gói free của FXRatesAPI
+  chỉ có 366 ngày. Backend trả 400 `range_too_long` thay vì lặng lẽ cắt còn 1
+  năm — chuỗi thật dưới nhãn sai cũng đánh lừa y như số bịa. Trang ghi rõ lý do.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live) — không phải chỉ đọc code:
+bảng 20 mã khớp số VCB; ô trống DKK/INR/… hiện `—`; sắp xếp theo `buyCash` đẩy
+mã trống xuống cuối; ghim ★ lưu qua `Store` và nổi lên đầu sau reload; tìm kiếm
+theo tên tiếng Việt ("yen" → JPY); chart USD 3M/1Y và JPY 3M ra đủ điểm; quy đổi
+2 chiều đúng cả `1.000.000`, `1,000,000`, `1.234,5`; theme Sáng/Tối; nút con mắt.
 
 **04/08/2026 (phiên 3) — chỉ soát tài liệu, KHÔNG đụng code.**
 Không sửa file `.js/.css/.html` nào → **không bump `?v=`**, vẫn `20260804a`.
@@ -581,19 +663,33 @@ Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
-Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy.
+Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy, bản
+live đã kiểm.
 
-Việc kế tiếp theo quy hoạch là **GĐ 1 — trang Ngoại tệ** (3 phiên). Đọc
-`docs/QUYHOACH.md` mục 2.1 + 2.10 (nguồn) và bảng GĐ 1 (8 đầu việc). Tóm tắt
-để khỏi mở file: route `/api/fx/rates` parse XML Vietcombank (**cache ≥5 phút**,
-nguồn ghi rõ 1 request/5 phút), route `/api/fx/history` lấy Yahoo Finance kèm
-**tỷ giá chéo** cho JPY/CNY/AUD, biểu đồ 1M/3M/6M/1Y/5Y, danh mục ngoại tệ nhập
-tay qua `Store`.
+Việc kế tiếp: **nốt GĐ 1 — mục 1.7, danh mục ngoại tệ nhập tay** (một phiên
+ngắn). 7 đầu việc kia của GĐ 1 đã xong ngày 05/08. Cần làm:
+- Form nhập: mã ngoại tệ, số lượng, giá vốn (VND/1 đơn vị), ngày mua. Lưu vào
+  collection **`holdings_fx`** qua `Store` (mọi hàm `await`, mục 3).
+- Lãi/lỗ theo **bình quân gia quyền** — dùng lại đúng cách tính của
+  `portfolio.js`, đừng viết công thức thứ hai.
+- Định giá theo **giá mua chuyển khoản của Vietcombank** (bán lại cho ngân hàng
+  thì được giá đó), không phải giá liên ngân hàng của biểu đồ. Ghi nhãn.
+- **Bọc mọi số tiền và số lượng nắm giữ trong `<span class="money">`** rồi bật
+  nút con mắt rà lại cả trang (mục 3b). Trang ngoại tệ hiện có **0 phần tử
+  `.money`** — đúng, vì chưa có số tài sản nào; thêm danh mục là phải có.
 
-**Cạm bẫy đã biết trước của GĐ 1, đừng bỏ qua:** bảng (Vietcombank, giá bán lẻ)
-và biểu đồ (Yahoo, giá liên ngân hàng) **lệch nhau ~0,8% và sẽ không bao giờ
-khớp** — đo 30/07: Yahoo 26.300 vs VCB mua 26.080 / bán 26.490. Bắt buộc ghi
-nhãn nguồn cạnh mỗi con số, nếu không user tự so hai số rồi tưởng hệ thống lỗi.
+Sau đó sang **GĐ 2 — trang Vàng** (2 phiên): `docs/QUYHOACH.md` mục 2.2–2.4 và
+bảng GĐ 2. Việc đầu tiên bắt buộc là **xác minh đơn vị giá của PNJ** trước khi
+viết bất cứ thứ gì khác.
+
+**Đừng "sửa lại cho đúng quy hoạch" ba chỗ sau của trang Ngoại tệ:**
+1. Nguồn lịch sử là **FXRatesAPI, không phải Yahoo** — Yahoo chặn IP Render
+   (mục 7). `docs/QUYHOACH.md` mục 2.10 đã sửa theo.
+2. **Không có nút 5Y** — nguồn free hết dữ liệu ở 366 ngày. Muốn có 5Y thì phải
+   đổi nguồn (cần API key, user tự đăng ký), không phải sửa frontend.
+3. Bảng và biểu đồ lệch ~0,8% là **đúng**, không phải lỗi: bán lẻ có biên
+   mua-bán vs liên ngân hàng một giá. Nhãn nguồn ở cả hai chỗ là bắt buộc
+   (mục 1.5), đừng gỡ cho gọn.
 
 Ba việc chen ngang đã làm xong ngoài quy hoạch (03–04/08): reskin Fey, bước A và
 bước B của chart chỉ số. Không ảnh hưởng thứ tự GĐ 1–7.
@@ -689,4 +785,5 @@ cần order book cấp 2 real-time) và các ý tưởng khác: **`docs/YTUONG.m
 - Node v24, npm 11. Shell zsh — lưu ý `read -p` không chạy như bash, dùng
   `printf "..."; read -s VAR`.
 - Test server local: `cd server && PORT=3999 node index.js`
-- Serve frontend: `python3 -m http.server 5599` từ thư mục repo.
+- Serve frontend: `python3 -m http.server 5599` từ thư mục repo. `.claude/launch.json`
+  khai báo sẵn cấu hình này để mở thẳng trong trình duyệt của Claude Code.
