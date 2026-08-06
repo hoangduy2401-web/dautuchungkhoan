@@ -198,6 +198,16 @@ const DataService = (function () {
     );
   }
 
+  // ---- Gold -------------------------------------------------------------
+  // {updatedAt, source:"PNJ"|"BTMC", branch, unit:"nghìn đồng/chỉ", items:[...],
+  //  note?} — `note` only appears when the fallback source answered.
+  // buy/sell = null means that shop does not quote that side (PNJ only buys raw
+  // gold), NOT zero. Never falls back to mock: an invented gold price is
+  // indistinguishable from a real one.
+  function getGoldPrices() {
+    return fetchJson(`${cfg.goldProvider.baseUrl}/prices`, T_FAST);
+  }
+
   // ---- SSI account (read-only) ----------------------------------------
   // Never falls back to mock: showing invented holdings would be worse than
   // showing nothing. Errors propagate so the UI can ask for a PIN/OTP.
@@ -237,6 +247,7 @@ const DataService = (function () {
     getNews,
     getFxRates,
     getFxHistory,
+    getGoldPrices,
     getAccountPortfolio,
     requestAccountOtp,
     loginAccount,

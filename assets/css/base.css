@@ -496,6 +496,97 @@ tr:hover td { background: var(--surface-hover); }
 :root.privacy .hide-axis-labels { visibility: hidden; }
 
 /* ============================================================
+   TRANG TAI SAN (ngoai te, vang, coin, tiet kiem) — thanh phan dung chung.
+   Bang gia, nhan nguon, form danh muc nhap tay, o sua tai cho.
+   Dat o base.css vi 5 trang tai san dung y het nhau; chep lai vao tung file
+   CSS trang la cach chac chan de chung roi ra khac nhau.
+   ============================================================ */
+
+/* Nhan nguon. Bat buoc co mat canh moi con so — hai nguon khac nhau cho hai
+   con so khac nhau, va so dung dan nhan sai danh lua y het so bia. */
+.src-badge {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.src-badge.alt { color: var(--accent-orange); background: var(--accent-soft); border-color: transparent; }
+
+.asset-table-wrap { overflow-x: auto; }
+.asset-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.asset-table th {
+  text-align: left; font-size: var(--text-2xs); font-weight: 600;
+  color: var(--text-secondary); padding: 8px 10px;
+  border-bottom: 1px solid var(--border-default); white-space: nowrap;
+}
+.asset-table th.num, .asset-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.asset-table th.sortable { cursor: pointer; user-select: none; }
+.asset-table th.sortable:hover { color: var(--text-primary); }
+.asset-table th.sorted { color: var(--accent-orange); }
+.asset-table th.sorted[data-dir="asc"]::after { content: " \25B2"; font-size: 9px; }
+.asset-table th.sorted[data-dir="desc"]::after { content: " \25BC"; font-size: 9px; }
+.asset-table td {
+  padding: 9px 10px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap;
+}
+.asset-table tbody tr:hover { background: var(--surface-hover); }
+.asset-table tbody tr.sel { background: var(--accent-soft); }
+.asset-table tbody tr.sel td.code { color: var(--accent-orange); }
+.asset-table td.code { font-weight: 700; }
+.asset-table td.muted { color: var(--text-secondary); }
+.asset-table td.warn { color: var(--accent-orange); font-weight: 600; }
+
+/* ---- Danh muc nhap tay ---- */
+.hold-form { display: grid; gap: 8px; margin: 12px 0 10px; }
+.hold-input {
+  background: var(--surface-inset); border: 1px solid var(--border-default);
+  color: var(--text-primary); font-family: inherit; font-size: var(--text-xs);
+  padding: 9px 12px; border-radius: var(--radius-sm); min-width: 0;
+}
+.hold-input:focus { outline: none; border-color: var(--accent-orange); }
+.hold-error {
+  font-size: var(--text-2xs); color: var(--negative);
+  background: var(--negative-soft); padding: 7px 10px; border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+.hold-error[hidden] { display: none; }
+
+.hold-summary { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
+.hold-summary:empty { display: none; }
+.hold-summary .label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.hold-summary .val {
+  font-size: var(--text-xl); font-weight: 700; margin-top: 2px;
+  font-variant-numeric: tabular-nums; display: block;
+}
+
+.hold-table tbody tr { cursor: default; }
+.hold-table tbody tr:hover { background: transparent; }
+.hold-table .th-act { width: 96px; }
+.hold-table td.act { text-align: right; white-space: nowrap; }
+.hold-table .row-btn {
+  background: none; border: none; cursor: pointer; padding: 2px 6px;
+  color: var(--text-tertiary); font-family: inherit; font-size: var(--text-2xs); font-weight: 600;
+}
+.hold-table .row-btn:hover { color: var(--text-primary); }
+.hold-table .row-btn.danger:hover { color: var(--negative); }
+.hold-table .row-btn.save { color: var(--accent-orange); }
+/* O sua tai cho: cung chieu cao dong, khong lam bang nhay khi vao che do sua. */
+.hold-table .edit-input {
+  width: 100%; background: var(--surface-inset); border: 1px solid var(--accent-orange);
+  color: var(--text-primary); font-family: inherit; font-size: var(--text-xs);
+  padding: 4px 6px; border-radius: var(--radius-sm);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  /* Bang danh muc cuon ngang tren dien thoai; bo cot gia tham chieu de nut
+     Sua/Xoa nam trong tam nhin dau tien. Gia do van co o bang gia phia tren. */
+  .hold-table .col-rate { display: none; }
+}
+
+/* ============================================================
    TRANG TONG — layout mot cot (tam thoi, GD 0)
    ============================================================ */
 .main-grid-single { padding: 16px 20px 40px; }

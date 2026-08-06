@@ -1,0 +1,102 @@
+/* ============================================================
+   VÀNG — CSS riêng của trang. Bảng giá, form danh mục, nhãn nguồn và ô sửa tại
+   chỗ đều dùng chung ở base.css (khối "TRANG TAI SAN"); ở đây chỉ có layout và
+   những thứ chỉ trang này có.
+   ============================================================ */
+
+.main-grid-gold {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 16px 20px 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-areas:
+    "board conv"
+    "port  port";
+  align-items: start;
+  gap: 16px;
+}
+.main-grid-gold > .panel:nth-child(1) { grid-area: board; }
+.main-grid-gold > .panel:nth-child(2) { grid-area: conv; }
+.main-grid-gold > .panel:nth-child(3) { grid-area: port; }
+
+/* Nguồn dự phòng đang trả lời = giá của MỘT TIỆM KHÁC, không phải thị trường
+   biến động. Phải nói ra, nên dải này cố ý nổi. */
+.gold-fallback {
+  margin: 12px 0 0; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-orange);
+  font-size: var(--text-2xs); font-weight: 600;
+}
+.gold-fallback[hidden] { display: none; }
+
+.gold-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0 8px;
+}
+.unit-tabs button { padding: 6px 14px; }
+
+.asset-table .gold-name { white-space: normal; min-width: 160px; }
+.asset-table tbody tr { cursor: default; }
+.warn-dot { font-size: 9px; }
+.gold-note {
+  margin: 10px 0 0; font-size: var(--text-2xs); line-height: 1.6; color: var(--text-secondary);
+}
+.gold-note strong { color: var(--text-primary); }
+.gold-note .warn { color: var(--accent-orange); font-weight: 600; }
+
+/* ---- Quy đổi ---- */
+.gold-conv { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.conv-row { display: flex; gap: 8px; }
+.conv-input {
+  flex: 1 1 auto; min-width: 0;
+  background: var(--surface-inset); border: 1px solid var(--border-default);
+  color: var(--text-primary); font-family: inherit; font-size: var(--text-lg); font-weight: 700;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.conv-input:focus { outline: none; border-color: var(--accent-orange); }
+.conv-select {
+  flex: 0 0 96px; background: var(--surface-inset); border: 1px solid var(--border-default);
+  color: var(--text-primary); font-family: inherit; font-size: var(--text-sm); font-weight: 700;
+  border-radius: var(--radius-sm); padding: 0 10px;
+}
+.conv-select.wide { flex: 1 1 auto; width: 100%; padding: 9px 10px; font-size: var(--text-xs); }
+
+.conv-out { display: flex; gap: 8px; flex-wrap: wrap; }
+.conv-out span {
+  flex: 1 1 90px; text-align: center;
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 8px 6px;
+  font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+.conv-money { display: flex; flex-direction: column; gap: 8px; }
+.conv-label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.conv-money-out { display: flex; flex-direction: column; gap: 6px; }
+.conv-money-out div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.conv-money-out .lbl { font-size: var(--text-2xs); color: var(--text-secondary); }
+.conv-money-out strong { font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+
+/* ---- Danh mục ---- */
+.gold-hold-form {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) 96px minmax(0, 1.4fr) 150px auto;
+}
+.hold-table .gold-name { white-space: normal; min-width: 140px; }
+
+@media (max-width: 1040px) {
+  .main-grid-gold {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "board" "conv" "port";
+  }
+}
+@media (max-width: 860px) {
+  /* Nhồi 6 ô vào một hàng thì mọi ô đều hẹp tới mức nuốt placeholder. */
+  .gold-hold-form { grid-template-columns: minmax(0, 1fr) 96px; }
+  .gold-hold-form > :nth-child(1),
+  .gold-hold-form > :nth-child(4),
+  .gold-hold-form > :nth-child(5),
+  .gold-hold-form > button { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .main-grid-gold { padding-left: 14px; padding-right: 14px; }
+  .hold-table .col-date { display: none; }
+}

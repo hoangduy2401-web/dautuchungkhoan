@@ -14,7 +14,7 @@ const Nav = (function () {
   const PAGES = [
     { href: "index.html", label: "Tổng gia sản" },
     { href: "chung-khoan.html", label: "Chứng khoán" },
-    { href: "vang.html", label: "Vàng", soon: true },
+    { href: "vang.html", label: "Vàng" },
     { href: "ngoai-te.html", label: "Ngoại tệ" },
     { href: "coin.html", label: "Coin", soon: true },
     { href: "tiet-kiem.html", label: "Tiết kiệm", soon: true },

@@ -67,6 +67,10 @@ const APP_CONFIG = {
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;
   // never mocked — an empty account panel is better than fake holdings.
   accountProvider:      { name: "SSI FCTrading", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/account" },
+  // Gold. PNJ primary, BTMC fallback — the payload says which one answered, and
+  // the page must show it: two shops quote different boards, and an unlabelled
+  // swap looks like the market moved. Prices are thousand VND per chỉ.
+  goldProvider:         { name: "PNJ + BTMC", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/gold" },
   // FX. Two upstreams behind one prefix, and they are NOT the same rate:
   // /rates is Vietcombank's retail board (buy/sell spread), /history is the
   // interbank mid price. ~0.8% apart, permanently. The page labels both.

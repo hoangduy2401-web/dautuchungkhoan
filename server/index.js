@@ -977,6 +977,140 @@ app.get("/api/fx/history", async (req, res) => {
 });
 
 // ============================================================
+// GOLD — PNJ primary, BTMC fallback, merged into one shape.
+//
+// UNIT, verified 06/08/2026 against three independent sources (this was task
+// 2.1 of the plan, and the same class of bug as SSI's raw-VND prices):
+//   PNJ   giaban 14270  -> THOUSAND VND per CHỈ  (14,27 triệu/chỉ)
+//   BTMC  @ps    14330000 -> RAW VND per CHỈ
+//   Press (06/08/2026): SJC 138,8 - 141,8 triệu/LƯỢNG
+// 1 lượng = 10 chỉ, so PNJ ×10 = 139,7 / 142,7 triệu/lượng and BTMC ×10 =
+// 140,3 / 143,3 — both land on the published board, a few tenths of a percent
+// apart as two different shops should be. So: this route speaks THOUSAND VND
+// PER CHỈ, and BTMC is divided by 1000 to match. Don't "fix" either.
+// ============================================================
+const PNJ_GOLD_URL =
+  process.env.PNJ_GOLD_URL || "https://edge-api.pnj.io/ecom-frontend/v1/get-gold-price";
+// Key is public (it ships in BTMC's own web page) and may be rotated by them at
+// any time — that is exactly why BTMC is the fallback and not the primary.
+const BTMC_GOLD_URL =
+  process.env.BTMC_GOLD_URL ||
+  "http://api.btmc.vn/api/BTMCAPI/getpricebtmc?key=3kd8ub1llcg9t45hnoh8hmn7t5kc2v";
+const GOLD_TTL_MS = 5 * 60_000; // board changes a few times a day, not per second
+
+// "" means the shop does not quote that side (PNJ only BUYS raw gold: RAW_9999
+// and RAW_9900 have giaban ""). null, never 0 — golden rule, CLAUDE.md §3.
+function goldAmount(v) {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(String(v).replace(/[,\s]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// PNJ: "06/08/2026 13:18:11", Vietnam local time with no offset in the string.
+function parseVnDateTime(s) {
+  const m = String(s || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = m;
+  const p2 = (n) => String(n).padStart(2, "0");
+  return `${yyyy}-${p2(mm)}-${p2(dd)}T${p2(hh)}:${mi}:${p2(ss)}+07:00`;
+}
+
+async function computeGoldFromPnj() {
+  const res = await fetchWithTimeout(PNJ_GOLD_URL, { headers: { Accept: "application/json" } }, 8000);
+  if (!res.ok) throw new Error(`PNJ HTTP ${res.status}`);
+  const json = await res.json();
+  const rows = Array.isArray(json.data) ? json.data : [];
+
+  const items = rows
+    .map((r) => ({
+      code: String(r.masp || "").trim(),
+      name: String(r.tensp || "").trim(),
+      buy: goldAmount(r.giamua),
+      sell: goldAmount(r.giaban),
+    }))
+    .filter((r) => r.code && (r.buy !== null || r.sell !== null));
+  if (!items.length) throw new Error("PNJ returned no rows");
+
+  return {
+    updatedAt: parseVnDateTime(json.updateDate),
+    source: "PNJ",
+    branch: json.chinhanh || null, // the board is per branch; HCM by default
+    unit: "nghìn đồng/chỉ",
+    items,
+  };
+}
+
+// BTMC ships one flat array where EVERY field name carries the row number as a
+// suffix (@n_7, @pb_7, @ps_7, @d_7), so fields must be read via the row index,
+// not by fixed names. Each product also appears twice with different @d_
+// timestamps — keep the newest.
+function btmcField(row, prefix) {
+  return row[`@${prefix}_${row["@row"]}`];
+}
+
+async function computeGoldFromBtmc() {
+  const res = await fetchWithTimeout(BTMC_GOLD_URL, { headers: { Accept: "application/json" } }, 8000);
+  if (!res.ok) throw new Error(`BTMC HTTP ${res.status}`);
+  const json = await res.json();
+  const rows = json?.DataList?.Data;
+  if (!Array.isArray(rows)) throw new Error("BTMC: unexpected shape");
+
+  const byName = new Map();
+  let latest = null;
+  for (const row of rows) {
+    const name = String(btmcField(row, "n") || "").trim();
+    // Silver lives in the same feed (BẠC = silver). This route is gold only.
+    if (!name || name.toUpperCase().includes("BẠC")) continue;
+
+    const stamp = parseVnDateTime(btmcField(row, "d"));
+    const prev = byName.get(name);
+    if (prev && prev.stamp && stamp && prev.stamp >= stamp) continue;
+
+    // BTMC quotes raw VND per chỉ; this route speaks thousand VND per chỉ.
+    const buy = goldAmount(btmcField(row, "pb"));
+    const sell = goldAmount(btmcField(row, "ps"));
+    byName.set(name, {
+      stamp,
+      item: {
+        code: name,
+        name,
+        buy: buy === null ? null : buy / 1000,
+        sell: sell === null ? null : sell / 1000,
+        karat: String(btmcField(row, "k") || "").trim() || null,
+      },
+    });
+    if (stamp && (!latest || stamp > latest)) latest = stamp;
+  }
+
+  const items = [...byName.values()].map((v) => v.item);
+  if (!items.length) throw new Error("BTMC returned no gold rows");
+  return { updatedAt: latest, source: "BTMC", branch: null, unit: "nghìn đồng/chỉ", items };
+}
+
+// PNJ first; BTMC only if PNJ fails. The payload always says which one answered
+// so the page can label the number — two shops quote different prices, and an
+// unlabelled swap would look like the market moved.
+async function computeGoldPrices() {
+  try {
+    return await computeGoldFromPnj();
+  } catch (err) {
+    console.warn("[gold] PNJ lỗi, thử BTMC:", err.message);
+    const data = await computeGoldFromBtmc();
+    return { ...data, note: `PNJ lỗi (${err.message}), đang dùng nguồn dự phòng BTMC` };
+  }
+}
+
+// GET /api/gold/prices
+app.get("/api/gold/prices", async (req, res) => {
+  try {
+    res.json(await withCache("gold:prices", GOLD_TTL_MS, computeGoldPrices));
+  } catch (err) {
+    console.error("[/api/gold/prices]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
 // SSI FastConnect TRADING — READ ONLY (phase 1).
 // Separate host and separate credentials from FCData. Nothing here can
 // place, modify or cancel an order: those need an RSA-SHA256 signature

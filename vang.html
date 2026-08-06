@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vàng — Quản lý gia sản</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/base.css?v=20260806b" />
+<link rel="stylesheet" href="assets/css/vang.css?v=20260806b" />
+</head>
+<body>
+
+  <!-- Shared nav across all 6 pages; rendered by assets/js/core/nav.js -->
+  <div id="appNav"></div>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-top">
+        <div class="mark">Vàng <span>trong nước</span></div>
+      </div>
+      <div class="sub">Giá vàng miếng, nhẫn trơn &amp; danh mục vàng cá nhân</div>
+      <div class="clock" id="clock"></div>
+    </div>
+    <div class="header-right">
+      <span class="backend-status" id="backendStatus"></span>
+      <div class="controls">
+        <div class="segmented">
+          <button type="button" id="tLight">Sáng</button>
+          <button type="button" id="tDark">Tối</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-grid-gold">
+
+    <!-- Bảng giá -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Bảng giá vàng</h2>
+        <span class="src-badge" id="goldSource">—</span>
+      </div>
+      <div class="gold-fallback" id="goldFallback" hidden></div>
+
+      <div class="gold-toolbar">
+        <div class="segmented unit-tabs" id="unitTabs">
+          <button type="button" data-unit="luong">Lượng</button>
+          <button type="button" data-unit="chi">Chỉ</button>
+          <button type="button" data-unit="gram">Gram</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="chkAllTypes" /> Hiện cả vàng tuổi thấp</label>
+      </div>
+
+      <div class="asset-table-wrap">
+        <table class="asset-table gold-table">
+          <thead>
+            <tr>
+              <th>Loại</th>
+              <th class="num">Mua vào</th>
+              <th class="num">Bán ra</th>
+              <th class="num">Chênh lệch</th>
+            </tr>
+          </thead>
+          <tbody id="goldTableBody">
+            <tr><td colspan="4" class="empty-state">Đang chờ máy chủ…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="gold-note" id="spreadNote"></p>
+    </div>
+
+    <!-- Quy đổi khối lượng + thành tiền -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Quy đổi</h2>
+        <span class="src-badge">1 lượng = 10 chỉ = 37,5 g</span>
+      </div>
+      <div class="panel-body gold-conv">
+        <div class="conv-row">
+          <input type="text" inputmode="decimal" id="convQty" class="conv-input" placeholder="1" />
+          <select id="convUnit" class="conv-select">
+            <option value="luong">lượng</option>
+            <option value="chi">chỉ</option>
+            <option value="gram">gram</option>
+          </select>
+        </div>
+        <div class="conv-out" id="convOut"></div>
+
+        <div class="conv-money">
+          <label class="conv-label" for="convType">Thành tiền theo loại</label>
+          <select id="convType" class="conv-select wide"></select>
+          <div class="conv-money-out" id="convMoneyOut"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Danh mục vàng nhập tay -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Danh mục cá nhân</h2>
+        <span class="src-badge">Định giá theo giá tiệm MUA VÀO</span>
+      </div>
+
+      <form id="holdForm" class="hold-form gold-hold-form">
+        <select id="holdType" class="hold-input" aria-label="Loại vàng"></select>
+        <input id="holdQty" class="hold-input" inputmode="decimal" placeholder="Số lượng, vd: 2" aria-label="Số lượng" />
+        <select id="holdUnit" class="hold-input" aria-label="Đơn vị">
+          <option value="luong">lượng</option>
+          <option value="chi">chỉ</option>
+          <option value="gram">gram</option>
+        </select>
+        <input id="holdCost" class="hold-input" inputmode="decimal" placeholder="Giá vốn (triệu ₫/lượng, không bắt buộc)" aria-label="Giá vốn" />
+        <input id="holdDate" class="hold-input" type="date" aria-label="Ngày mua" />
+        <button type="submit" class="btn">+ Thêm</button>
+      </form>
+      <div class="hold-error" id="holdError" hidden></div>
+
+      <div class="hold-summary" id="holdSummary"></div>
+
+      <div class="asset-table-wrap">
+        <table class="asset-table hold-table">
+          <thead>
+            <tr>
+              <th>Loại</th>
+              <th class="num">Số lượng</th>
+              <th class="num">Giá vốn</th>
+              <th class="num col-rate">Giá mua vào</th>
+              <th class="num">Giá trị (₫)</th>
+              <th class="num">Lãi/lỗ</th>
+              <th class="col-date">Ngày mua</th>
+              <th class="th-act"></th>
+            </tr>
+          </thead>
+          <tbody id="holdTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="app-footer">
+    Dữ liệu chỉ mang tính tham khảo, không phải khuyến nghị đầu tư.
+    Giá vàng: PNJ (dự phòng: Bảo Tín Minh Châu).
+  </footer>
+
+  <script src="assets/js/core/config.js?v=20260806b"></script>
+  <script src="assets/js/core/store.js?v=20260806b"></script>
+  <script src="assets/js/core/theme.js?v=20260806b"></script>
+  <script src="assets/js/core/nav.js?v=20260806b"></script>
+  <script src="assets/js/core/mockData.js?v=20260806b"></script>
+  <script src="assets/js/core/dataService.js?v=20260806b"></script>
+  <script src="assets/js/pages/vang.js?v=20260806b"></script>
+</body>
+</html>

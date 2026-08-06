@@ -221,7 +221,7 @@ function renderTable() {
     .join("");
 
   // Cột nào đang sắp: đánh dấu ở tiêu đề.
-  document.querySelectorAll(".fx-table th.sortable").forEach((th) => {
+  document.querySelectorAll(".asset-table th.sortable").forEach((th) => {
     const on = th.dataset.sort === fxState.sortKey;
     th.classList.toggle("sorted", on);
     th.dataset.dir = on ? (fxState.sortDir === 1 ? "asc" : "desc") : "";
@@ -235,7 +235,7 @@ function wireTable() {
     renderTable();
   });
 
-  document.querySelectorAll(".fx-table th.sortable").forEach((th) => {
+  document.querySelectorAll(".asset-table th.sortable").forEach((th) => {
     th.addEventListener("click", () => {
       const key = th.dataset.sort;
       // Bấm lại cùng cột = đảo chiều; cột số mặc định giảm dần (số lớn trước).
