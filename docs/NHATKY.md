@@ -5,6 +5,49 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**06/08/2026 (phiên 5) — GĐ 2 trang Vàng: XONG CẢ 6 ĐẦU VIỆC.**
+Bump `?v=20260806a` → **`?v=20260806b`** (37 chỗ trong 4 file HTML). **Có đụng
+`server/`** → Render đã deploy lại, đã kiểm live.
+
+**Việc 2.1 — đơn vị giá, đo bằng ba nguồn độc lập, không suy đoán:**
+
+| Nguồn | SJC mua / bán | Quy ra lượng |
+|---|---|---|
+| PNJ `giamua/giaban` | 13.970 / 14.270 | 139,7 / 142,7 triệu |
+| BTMC `@pb/@ps` | 14.030.000 / 14.330.000 | 140,3 / 143,3 triệu |
+| Báo chí cùng ngày | — | 138,8 / 141,8 triệu |
+
+→ **PNJ trả nghìn đồng/CHỈ, BTMC trả đồng thô/CHỈ.** Route thống nhất về
+**nghìn đồng/chỉ**, BTMC chia 1000. Đừng đổi hệ số mà không đo lại.
+
+- `/api/gold/prices`: PNJ chính, BTMC dự phòng, TTL 5 phút. Payload luôn ghi
+  `source`, và thêm `note` khi bản dự phòng trả lời — hai tiệm báo giá khác
+  nhau, đổi nguồn mà không ghi nhãn thì trông như thị trường biến động.
+- Hai cạm bẫy của nguồn: PNJ để `giaban: ""` cho 2 mã vàng nguyên liệu (chỉ
+  mua, không bán) → `null` chứ không phải 0. BTMC đánh số hậu tố **theo dòng**
+  (`@n_7`, `@pb_7`) nên phải đọc qua `@row`; mỗi sản phẩm xuất hiện 2 lần, giữ
+  bản `@d_` mới nhất; feed có cả **bạc**, phải lọc bỏ.
+- Trang: bảng đổi đơn vị lượng/chỉ/gram, quy đổi khối lượng + thành tiền 2
+  chiều, danh mục `holdings_gold` (cùng khuôn `holdings_fx`).
+- **Bảng mặc định chỉ hiện 7 loại chính.** 13 loại vàng tuổi thấp (18K trở
+  xuống) có chênh lệch mua-bán 9–21%, trộn vào sẽ kéo lệch mọi so sánh — nằm
+  sau checkbox.
+- **Ngưỡng cảnh báo chênh lệch 5% là MỐC TẠM.** Đo 06/08 nhóm 999.9 nằm trong
+  2,10–3,54%; chưa có chuỗi lịch sử để chốt ngưỡng thật. Soát lại khi có dữ
+  liệu nhiều ngày.
+
+**Tái cấu trúc kèm theo:** `.src-badge` / `.asset-table` / `.hold-*` /
+`.row-btn` / `.edit-input` chuyển từ `ngoai-te.css` sang `base.css` (khối
+"TRANG TAI SAN") để 5 trang tài sản dùng chung; `.fx-table` đổi tên thành
+`.asset-table`. Đã kiểm lại trang ngoại tệ sau khi đổi: 20 dòng, padding/font/
+nhãn nguồn/biểu đồ nguyên vẹn.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live): SJC 139.700.000 /
+13.970.000 / 3.725.333 theo lượng/chỉ/gram; 2 lượng = 20 chỉ = 75 g =
+279.400.000 ₫ bán cho tiệm; danh mục 3,5 lượng giá vốn 141,5 tr → −6.300.000 ₫
+(−1,27%); số âm báo lỗi; xoá 2 nhịp; nút con mắt che 8 ô `.money`. Ép PNJ lỗi →
+BTMC trả 9 dòng kèm dải cảnh báo nguồn dự phòng.
+
 **05–06/08/2026 (phiên 4) — GĐ 1 trang Ngoại tệ: XONG CẢ 8 ĐẦU VIỆC.**
 Bump `?v=20260804a` → `?v=20260805a` → **`?v=20260806a`** (28 chỗ trong 3 file
 HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.

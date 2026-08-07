@@ -175,14 +175,11 @@ nhất cho cả năm. Giao diện bắt buộc ghi "VND quy đổi".
 - Binance định danh theo **ticker**, CoinGecko theo **slug** — cần bảng ánh xạ
   (`CRYPTO_SYMBOLS`, ~40 coin). Coin ngoài bảng không định giá được ở đường này.
 
-### 2.11 Coin — CoinMarketCap (TÙY CHỌN, cần API key)
+### 2.11 Coin — CoinMarketCap (**KHÔNG DÙNG**)
 
-Mọi endpoint đòi key (`error_code 1002 "API key missing"`, HTTP 401 — đo
-07/08/2026), nên không có cách dùng thử. Code đã sẵn sàng và **tự bật khi có
-biến môi trường `CMC_API_KEY`** trên Render; khi đó CMC được ưu tiên.
-
-**Chưa kiểm chứng:** gói free (Basic) có convert sang VND hay không. Code xin
-`convert=USD,VND`, nếu bị từ chối thì thử lại `USD` và để `vnd: null`.
+Mọi endpoint đòi API key (`error_code 1002 "API key missing"`, HTTP 401 — đo
+07/08/2026) và gói có key là **gói trả phí**. User chốt không dùng ngày
+07/08/2026; code đã gỡ khỏi `server/index.js`. **Đừng dựng lại.**
 
 ### 2.7 Lãi suất tiết kiệm — CafeF CDN (CHẠY)
 

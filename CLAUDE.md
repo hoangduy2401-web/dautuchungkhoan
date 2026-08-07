@@ -22,7 +22,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260807b`** (đã kiểm: 47 chỗ trong 5 file HTML, bản live
+Cache busting hiện **`?v=20260807c`** (đã kiểm: 47 chỗ trong 5 file HTML, bản live
 cũng đang phục vụ đúng chuỗi này).
 
 ---
@@ -192,9 +192,10 @@ GET /api/price/index-history?code=VNINDEX&days=N
 
 GET /api/price/indices
 → [{ code, value, changePct,
-     totalVol, totalVal, advances, declines, noChanges }, ...]
+     totalVol, totalVal, advances, declines, noChanges, ceilings, floors }, ...]
    value: điểm (KHÔNG chia 1000) · totalVol: cổ phiếu · totalVal: VND (thô)
    advances/declines/noChanges: SỐ MÃ, hoặc null khi SSI không có (xem mục 7)
+   ceilings/floors: số mã trần/sàn — ĐI THEO BỘ với advances, null cùng lúc
 
 GET /api/price/quote?symbol=X
 → { price, changePct, volume, netForeignVal }
@@ -641,7 +642,7 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260807b`. Nhánh `main` sạch, đã push, backend đã deploy bản
+Cache busting `?v=20260807c`. Nhánh `main` sạch, đã push, backend đã deploy bản
 mới nhất (đã kiểm 07/08 trên Render: `/api/fx/*`, `/api/gold/prices` 20 loại từ
 PNJ, `/api/crypto/*` trả từ Binance kèm tỷ giá quy đổi).
 
@@ -670,11 +671,50 @@ Website hiện có **5 trang**: `/` (tổng gia sản, mới là khung),
 | **Danh mục vàng** | `Store` (`holdings_gold`) | cùng khuôn `holdings_fx`; giá vốn nhập theo **triệu ₫/lượng**; định giá theo giá tiệm **mua vào** |
 | **Giá coin** | Binance + tỷ giá dự án | CoinGecko **chặn IP Render** — xem mục 7. VND là số **quy đổi**, trang ghi nhãn |
 | **Danh mục coin** | `Store` (`holdings_crypto`) | cùng khuôn hai trang kia; giá vốn nhập theo **₫/1 coin** |
+| **Tổng quan thị trường** | `/indices` + `/index-history` | tab đầu của trang chứng khoán: KL phiên/tuần/mã chọn + độ rộng; **0 endpoint mới** |
 | **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
 | Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
+
+**07/08/2026 (phiên 7) — tab "Tổng quan thị trường" + logo coin + gỡ CoinMarketCap.**
+Bump `?v=20260807b` → **`?v=20260807c`**. **Có đụng `server/`** (thêm 2 trường),
+Render đã deploy lại, đã kiểm live.
+
+**Gộp một tab, không tách hai** (user yêu cầu đánh giá trước): hai biểu đồ cùng
+trả lời một câu hỏi — "hôm nay so với kỳ trước thế nào" — cùng nguồn dữ liệu,
+cùng nhịp làm mới. Tách đôi thành nút tab **thứ bảy** sẽ tràn hàng trên màn hình
+hẹp và bắt user bấm qua lại giữa hai thứ phải đọc cùng lúc.
+
+**KHÔNG thêm endpoint nào.** Khối lượng + độ rộng phiên hôm nay đã nằm trong
+`/api/price/indices` (số LIVE trong phiên); khối lượng các phiên trước lấy từ
+`/api/price/index-history` vốn đã trả `volume`. Chuỗi lịch sử **nạp lười một lần
+mỗi sàn rồi cache cả phiên** — nó chỉ đổi sau khi đóng cửa. Khối lượng mã đang
+chọn dùng lại `state.selectedBars` (chuỗi nến biểu đồ vừa tải), 0 request thêm.
+Thanh so sánh vẽ bằng **CSS**, không dùng Lightweight Charts: chỉ có hai cặp số,
+và tránh luôn hai lỗi vẽ ở mục 7.
+
+Backend thêm `ceilings`/`floors` vào `/api/price/indices` — cùng row `DailyIndex`,
+0 call thêm. **Đi theo bộ với `advances`**: VN30 trả breadth 0/0/0 (đã gom thành
+null) nhưng vẫn có Ceilings 2 / Floors 0, tức hai trường này không cùng phạm vi
+rổ; không rõ đếm trên rổ hay trên sàn nên breadth null thì để null luôn.
+
+**Lỗi đã sửa khi kiểm:** chuỗi lịch sử của **HNX có lẫn dòng HÔM NAY** (khác
+VNINDEX), khiến "phiên trước" hoá ra chính là hôm nay — bảng hiện +0,0% với hai
+con số y hệt. Lọc bỏ dòng của ngày hiện tại, và tính ngày theo **giờ Việt Nam**
+(`toISOString()` trả ngày UTC, lệch một ngày trong khoảng 00:00–07:00 giờ VN).
+
+**Logo coin:** Binance không trả ảnh nên bảng coin toàn ô trống. Lấy từ CDN icon
+theo ticker, **ảnh tải thẳng từ trình duyệt** nên không dính vụ chặn IP. Hai CDN
+vì không cái nào phủ đủ: jsDelivr `cryptocurrency-icons@0.18.1` thiếu mọi coin
+sau 2021 (SUI/APT/ARB/PEPE đều 404), CoinCap phủ những coin đó. Thử lần lượt,
+hết nguồn thì hiện vòng tròn chữ cái đầu.
+**Lỗi đã sửa:** `loading="lazy"` khiến MỌI logo đứng mãi ở trạng thái đang tải —
+trong bảng này ảnh không bao giờ được coi là lọt vào tầm nhìn.
+
+**CoinMarketCap đã gỡ hết** khỏi `server/index.js` và nhãn ở trang coin: gói có
+API key là gói trả phí. Đừng dựng lại.
 
 **07/08/2026 (phiên 6) — GĐ 3 trang Coin: XONG CẢ 4 ĐẦU VIỆC.**
 Bump `?v=20260806b` → `?v=20260807a` → **`?v=20260807b`** (47 chỗ trong 5 file
@@ -723,49 +763,6 @@ sách; đổi coin và đổi khung; danh mục 0,05 BTC giá vốn 1.500.000.00
 84.234.733 ₫, lãi 9.234.733 ₫ (+12,31%), sửa thành 0,1 → nhân đôi đúng; số âm
 báo lỗi; xoá 2 nhịp; nút con mắt che 7 ô `.money`.
 
-**06/08/2026 (phiên 5) — GĐ 2 trang Vàng: XONG CẢ 6 ĐẦU VIỆC.**
-Bump `?v=20260806a` → **`?v=20260806b`** (37 chỗ trong 4 file HTML). **Có đụng
-`server/`** → Render đã deploy lại, đã kiểm live.
-
-**Việc 2.1 — đơn vị giá, đo bằng ba nguồn độc lập, không suy đoán:**
-
-| Nguồn | SJC mua / bán | Quy ra lượng |
-|---|---|---|
-| PNJ `giamua/giaban` | 13.970 / 14.270 | 139,7 / 142,7 triệu |
-| BTMC `@pb/@ps` | 14.030.000 / 14.330.000 | 140,3 / 143,3 triệu |
-| Báo chí cùng ngày | — | 138,8 / 141,8 triệu |
-
-→ **PNJ trả nghìn đồng/CHỈ, BTMC trả đồng thô/CHỈ.** Route thống nhất về
-**nghìn đồng/chỉ**, BTMC chia 1000. Đừng đổi hệ số mà không đo lại.
-
-- `/api/gold/prices`: PNJ chính, BTMC dự phòng, TTL 5 phút. Payload luôn ghi
-  `source`, và thêm `note` khi bản dự phòng trả lời — hai tiệm báo giá khác
-  nhau, đổi nguồn mà không ghi nhãn thì trông như thị trường biến động.
-- Hai cạm bẫy của nguồn: PNJ để `giaban: ""` cho 2 mã vàng nguyên liệu (chỉ
-  mua, không bán) → `null` chứ không phải 0. BTMC đánh số hậu tố **theo dòng**
-  (`@n_7`, `@pb_7`) nên phải đọc qua `@row`; mỗi sản phẩm xuất hiện 2 lần, giữ
-  bản `@d_` mới nhất; feed có cả **bạc**, phải lọc bỏ.
-- Trang: bảng đổi đơn vị lượng/chỉ/gram, quy đổi khối lượng + thành tiền 2
-  chiều, danh mục `holdings_gold` (cùng khuôn `holdings_fx`).
-- **Bảng mặc định chỉ hiện 7 loại chính.** 13 loại vàng tuổi thấp (18K trở
-  xuống) có chênh lệch mua-bán 9–21%, trộn vào sẽ kéo lệch mọi so sánh — nằm
-  sau checkbox.
-- **Ngưỡng cảnh báo chênh lệch 5% là MỐC TẠM.** Đo 06/08 nhóm 999.9 nằm trong
-  2,10–3,54%; chưa có chuỗi lịch sử để chốt ngưỡng thật. Soát lại khi có dữ
-  liệu nhiều ngày.
-
-**Tái cấu trúc kèm theo:** `.src-badge` / `.asset-table` / `.hold-*` /
-`.row-btn` / `.edit-input` chuyển từ `ngoai-te.css` sang `base.css` (khối
-"TRANG TAI SAN") để 5 trang tài sản dùng chung; `.fx-table` đổi tên thành
-`.asset-table`. Đã kiểm lại trang ngoại tệ sau khi đổi: 20 dòng, padding/font/
-nhãn nguồn/biểu đồ nguyên vẹn.
-
-Đã kiểm trên trình duyệt thật (local rồi bản live): SJC 139.700.000 /
-13.970.000 / 3.725.333 theo lượng/chỉ/gram; 2 lượng = 20 chỉ = 75 g =
-279.400.000 ₫ bán cho tiệm; danh mục 3,5 lượng giá vốn 141,5 tr → −6.300.000 ₫
-(−1,27%); số âm báo lỗi; xoá 2 nhịp; nút con mắt che 8 ô `.money`. Ép PNJ lỗi →
-BTMC trả 9 dòng kèm dải cảnh báo nguồn dự phòng.
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
@@ -789,10 +786,8 @@ phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`, `.row-btn`,
 `base.css` — **đừng chép lại vào CSS trang mới**. Đừng dựng từ trang chứng khoán:
 trang đó còn mang theo ticker/heatmap/tín hiệu không liên quan.
 
-**Việc user tự làm (không chặn gì):** muốn bật CoinMarketCap thì tạo API key
-free ở `coinmarketcap.com/api` rồi thêm biến môi trường **`CMC_API_KEY`** trên
-Render (Dashboard → service → Environment). Code đã sẵn sàng, không cần sửa gì.
-Key chỉ nằm ở env, không bao giờ vào `config.js`.
+**CoinMarketCap đã bị gỡ 07/08** — gói có API key là gói trả phí, user chốt
+không dùng. Đừng dựng lại.
 
 **Việc còn nợ khi làm GĐ 6 (trang tổng):** giá trị danh mục ngoại tệ và vàng
 hiện chỉ tính trong trang của chúng. Trang tổng phải đọc `holdings_fx` +
