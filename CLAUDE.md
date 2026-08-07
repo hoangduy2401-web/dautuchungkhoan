@@ -22,7 +22,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260806b`** (đã kiểm: 37 chỗ trong 4 file HTML, bản live
+Cache busting hiện **`?v=20260807b`** (đã kiểm: 47 chỗ trong 5 file HTML, bản live
 cũng đang phục vụ đúng chuỗi này).
 
 ---
@@ -226,6 +226,23 @@ GET /api/gold/prices                    (PNJ chính, BTMC dự phòng)
    `note` chỉ xuất hiện khi BTMC (nguồn dự phòng) trả lời — UI phải hiện nó.
 ```
 
+```
+GET /api/crypto/prices?ids=bitcoin,ethereum   (Binance ở production, xem mục 7)
+→ { updatedAt, source:"CoinGecko"|"Binance"|"CoinMarketCap", note?,
+    vndFrom?: { rate, rateDate, source },
+    items:[{ id, symbol, name, image, vnd, usd, change24h, marketCap }] }
+   `id` là SLUG CoinGecko ("matic-network"), không phải ticker.
+   `vndFrom` có mặt = giá VND là số QUY ĐỔI từ USD, không phải giá báo trực
+   tiếp — trang BẮT BUỘC ghi nhãn (đang ghi "VND quy đổi").
+
+GET /api/crypto/history?id=bitcoin&days=90
+→ { source, currency:"VND", id, note?, items:[{ date, price }] }
+   days > 365 → 400 `range_too_long`.
+
+GET /api/crypto/search?q=sol
+→ [{ id, symbol, name, rank }]   CoinGecko, lùi về bảng nội bộ ~40 coin.
+```
+
 **`/api/fx/rates` và `/api/fx/history` là HAI LOẠI tỷ giá khác nhau, lệch ~0,8%
 vĩnh viễn** (đo 05/08: liên ngân hàng 26.259 vs VCB mua 26.050 / bán 26.460).
 Mọi chỗ hiển thị phải ghi nhãn nguồn — xem mục 7.
@@ -313,6 +330,43 @@ bấm tab thị trường **trước** khi mở accordion nên chưa lộ.
 
 **Cách sửa.** Quét `[data-pane]` thay cho `.mtab-pane`. Luật chung: **chọn theo
 thuộc tính dữ liệu, đừng chọn theo class trình bày** khi class đó cố ý dùng chung.
+
+### Lightweight Charts — hai cách làm biểu đồ không vẽ được (07/08/2026)
+
+Cả hai đều **im lặng tuyệt đối**: trục, thang giá và nhãn giá cuối đều đúng, chỉ
+thiếu ĐƯỜNG, không có lỗi console nào. Rất dễ tưởng là lỗi dữ liệu.
+
+**1. Giá trị quá lớn.** Chuỗi BTC theo VND (~1,68e9) không vẽ; chia cùng chuỗi
+đó cho 1000 là hiện lại ngay. **Đổi `priceFormat.minMove` KHÔNG cứu được** (đã
+thử `minMove: 1000`) — giới hạn nằm ở độ lớn giá trị, không phải số bước giá.
+→ Trang nào có giá lớn phải **tự chia bậc** trước khi gọi `setData` rồi ghi đơn
+vị lên nhãn. `pages/coin.js` có `chartScaleFor()`: đưa mọi chuỗi về dưới 1e5 với
+bậc đẹp (1 / nghìn / triệu) và in "trục biểu đồ: triệu ₫" cạnh tiêu đề.
+
+**2. Lần vẽ ĐẦU TIÊN sau khi tải trang.** Ngay cả khi đã chia bậc, lần
+`setData` đầu vẫn không hiện đường; gọi lại **đúng hàm vẽ đó** khi trang đã ổn
+định thì bình thường. **Đã thử và KHÔNG phải nguyên nhân** (đừng thử lại):
+`priceFormat.minMove`; nạp bảng giá trước rồi mới vẽ (tuần tự thay `Promise.all`);
+chờ 2 khung hình (`requestAnimationFrame` lồng nhau); dựng chart lười ngay trước
+lần vẽ đầu. **Căn nguyên vẫn chưa rõ.** Cách duy nhất đã kiểm chứng là chạy: vẽ
+lại một lần sau 400ms — `coin.js` có khối `firstDrawDone` kèm ghi chú
+"đừng xoá".
+
+Trang chứng khoán và ngoại tệ không dính lỗi 2 (đã kiểm lại 07/08), nên đừng
+thêm cách vá đó vào chúng khi chưa thấy triệu chứng.
+
+### CoinGecko chặn IP Render — nguồn chạy ở máy local không có nghĩa là chạy ở production (07/08/2026)
+
+`/api/crypto/*` trên Render trả **`CoinGecko HTTP 429` ba lần liên tiếp**, trong
+khi cùng request đó từ máy local trả 200. Đây là lần thứ **hai** dính đúng kiểu
+này (lần đầu: Yahoo Finance ở GĐ 1, xem trên).
+
+→ **Luật rút ra: dò nguồn mới thì phải đo TỪ RENDER trước khi xây trang quanh
+nó.** Đo ở máy local chỉ chứng minh nguồn còn sống, không chứng minh nó phục vụ
+được IP datacenter.
+
+Cách xoay ở trang coin: Binance cho giá USD, nhân tỷ giá USD/VND của chính dự án
+(`fxTimeseries`, liên ngân hàng) — chi tiết ở mục 9.
 
 ### Yahoo Finance chặn theo IP — kể cả IP của Render (05/08/2026)
 
@@ -587,13 +641,13 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260806b`. Nhánh `main` sạch, đã push, backend đã deploy bản
-mới nhất (đã kiểm 06/08 trên Render: `/api/fx/rates` 20 mã, `/api/fx/history`
-30/90/365 điểm, `/api/gold/prices` 20 loại từ PNJ).
+Cache busting `?v=20260807b`. Nhánh `main` sạch, đã push, backend đã deploy bản
+mới nhất (đã kiểm 07/08 trên Render: `/api/fx/*`, `/api/gold/prices` 20 loại từ
+PNJ, `/api/crypto/*` trả từ Binance kèm tỷ giá quy đổi).
 
-Website hiện có **4 trang**: `/` (tổng gia sản, mới là khung),
-`/chung-khoan.html`, `/ngoai-te.html` và `/vang.html` (ba trang sau đầy đủ).
-2 trang còn lại chưa làm — xem mục 10.
+Website hiện có **5 trang**: `/` (tổng gia sản, mới là khung),
+`/chung-khoan.html`, `/ngoai-te.html`, `/vang.html` và `/coin.html`
+(bốn trang sau đầy đủ). Còn `/tiet-kiem.html` — xem mục 10.
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
@@ -614,11 +668,60 @@ Website hiện có **4 trang**: `/` (tổng gia sản, mới là khung),
 | **Danh mục ngoại tệ** | `Store` (`holdings_fx`) | danh sách nắm giữ **sửa tại chỗ**, không phải sổ giao dịch; định giá theo giá mua chuyển khoản VCB |
 | **Bảng giá vàng** | PNJ (dự phòng BTMC) | 20 loại; đổi đơn vị lượng/chỉ/gram; cảnh báo chênh lệch mua-bán ≥5% |
 | **Danh mục vàng** | `Store` (`holdings_gold`) | cùng khuôn `holdings_fx`; giá vốn nhập theo **triệu ₫/lượng**; định giá theo giá tiệm **mua vào** |
+| **Giá coin** | Binance + tỷ giá dự án | CoinGecko **chặn IP Render** — xem mục 7. VND là số **quy đổi**, trang ghi nhãn |
+| **Danh mục coin** | `Store` (`holdings_crypto`) | cùng khuôn hai trang kia; giá vốn nhập theo **₫/1 coin** |
 | **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
 | Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
+
+**07/08/2026 (phiên 6) — GĐ 3 trang Coin: XONG CẢ 4 ĐẦU VIỆC.**
+Bump `?v=20260806b` → `?v=20260807a` → **`?v=20260807b`** (47 chỗ trong 5 file
+HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.
+
+**Nguồn giá phải đổi giữa chừng: CoinGecko chặn IP của Render.** Đo 07/08:
+`/api/crypto/*` trên Render trả `CoinGecko HTTP 429` ba lần liên tiếp, trong khi
+cùng request đó từ máy local trả 200. Y hệt vụ Yahoo ở GĐ 1 — **thử nguồn ở máy
+local KHÔNG chứng minh được nó chạy ở production.**
+
+User chốt hướng: **Binance + tỷ giá của chính dự án.**
+- Giá USD từ Binance `/ticker/24hr`; VND = USD × tỷ giá USD/VND lấy từ
+  `fxTimeseries` (**liên ngân hàng**, không phải giá bán lẻ VCB có biên mua-bán).
+- Payload có `vndFrom {rate, rateDate, source}`; trang ghi **"VND quy đổi"** cạnh
+  tên nguồn và hiện dải giải thích. Số quy đổi là số **khác loại** với giá báo
+  trực tiếp — nhãn nguồn của biểu đồ cũng đọc từ payload, không viết cứng.
+- Lịch sử: Binance `/klines` × tỷ giá **của chính ngày đó**. Dùng một tỷ giá duy
+  nhất cho cả năm sẽ biến biến động tỷ giá thành biến động giá coin. Cuối tuần
+  thị trường ngoại hối đóng nên lấy tỷ giá gần nhất trước đó (coin chạy 24/7).
+- Tìm kiếm: bảng nội bộ ~40 coin khi CoinGecko không trả lời.
+
+**CoinMarketCap đã thêm nhưng TẮT** cho tới khi có `CMC_API_KEY` (mọi endpoint
+CMC trả 401 `error_code 1002 "API key missing"` — không có đường dùng thử). Khi
+có key thì CMC được ưu tiên. Hai điều chưa chắc: gói free có convert VND hay
+không (chưa có key để đo), và CMC định danh theo **ticker** nên chỉ trả lời được
+coin nằm trong `CRYPTO_SYMBOLS` — thiếu một mã là bỏ qua cả lượt, vì bảng thiếu
+coin của user thì tệ hơn.
+
+**Ba lỗi Binance đã sửa:** `symbols` phải là mảng JSON **URL-encode toàn bộ** (kể
+cả dấu ngoặc vuông) nếu không trả 400; **USDT không có cặp `USDTUSDT`** nên để
+nó lọt vào lô là Binance trả 400 cho **cả lô**, mất giá của mọi coin khác (xử lý
+riêng: `usd = 1` theo định nghĩa cặp); và dòng note dự phòng cũ ghi "chỉ có giá
+USD" nay không còn đúng.
+
+**Hai lỗi của biểu đồ, xem mục 7.**
+
+**Tái cấu trúc kèm theo:** CSS khung biểu đồ (`.chart-stack` / `.chart-wrap` /
+`.trend-overlay` / `.chart-wrap-rsi`) chuyển từ `chung-khoan.css` sang
+`base.css`. Để riêng ở đó thì trang ngoại tệ và coin **mất
+`.trend-overlay { position: absolute }`**, lớp canvas phủ rơi xuống dưới và đẩy
+`.chart-stack` từ 260px thành 524px. Đã kiểm lại cả ba trang có biểu đồ.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live): 5 coin mặc định ra đủ giá
+VND/USD/24h; tìm "cardano" → thêm vào danh sách, lưu qua `Store`; xoá khỏi danh
+sách; đổi coin và đổi khung; danh mục 0,05 BTC giá vốn 1.500.000.000 →
+84.234.733 ₫, lãi 9.234.733 ₫ (+12,31%), sửa thành 0,1 → nhân đôi đúng; số âm
+báo lỗi; xoá 2 nhịp; nút con mắt che 7 ô `.money`.
 
 **06/08/2026 (phiên 5) — GĐ 2 trang Vàng: XONG CẢ 6 ĐẦU VIỆC.**
 Bump `?v=20260806a` → **`?v=20260806b`** (37 chỗ trong 4 file HTML). **Có đụng
@@ -663,49 +766,6 @@ nhãn nguồn/biểu đồ nguyên vẹn.
 (−1,27%); số âm báo lỗi; xoá 2 nhịp; nút con mắt che 8 ô `.money`. Ép PNJ lỗi →
 BTMC trả 9 dòng kèm dải cảnh báo nguồn dự phòng.
 
-**05–06/08/2026 (phiên 4) — GĐ 1 trang Ngoại tệ: XONG CẢ 8 ĐẦU VIỆC.**
-Bump `?v=20260804a` → `?v=20260805a` → **`?v=20260806a`** (28 chỗ trong 3 file
-HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.
-
-Làm xong toàn bộ bảng GĐ 1 của `docs/QUYHOACH.md`.
-
-**Danh mục cá nhân (mục 1.7)** — collection `holdings_fx`, row
-`{code, amount, cost|null, updatedAt}`:
-- **Là danh sách nắm giữ sửa trực tiếp, KHÔNG phải sổ giao dịch** như
-  `portfolio.js`. User cầm một số dư ngoại tệ, khi nó đổi thì sửa thẳng con số
-  đó chứ không ghi thêm lệnh mua/bán. Nên **giá vốn là một ô nhập**, không phải
-  kết quả bình quân gia quyền. Đừng "sửa lại cho giống trang chứng khoán".
-- Cho phép **nhiều dòng cùng một mã** (nhiều lô giá vốn khác nhau); tổng cộng
-  dồn, không gộp dòng.
-- Giá vốn để trống → không hiện lãi/lỗ (`—`), không suy ra 0. Thiếu tỷ giá →
-  giá trị `—` và tổng ghi rõ "thiếu tỷ giá N mã".
-- Xoá phải bấm **hai nhịp** ("Xoá" → "Chắc chứ?", tự huỷ sau 4s): nút xoá nằm
-  ngay cạnh nút Sửa và thao tác không hoàn tác được.
-- Số tiền + số lượng nắm giữ đã bọc `.money`; giá vốn / giá quy đổi / % lãi lỗ
-  cố ý **không** che (mục 3b). Lúc đang sửa tại chỗ thì ô input hiện số thật —
-  chấp nhận, đó là thao tác chủ động của chủ nhân.
-
-- Backend: `/api/fx/rates` (parse XML Vietcombank bằng regex, không thêm
-  dependency, TTL 10 phút vì nguồn ghi "1 request/5 phút") và `/api/fx/history`.
-- **Nguồn lịch sử đổi khỏi quy hoạch: Yahoo Finance → FXRatesAPI.** Yahoo chặn
-  theo IP, kể cả IP của Render — chi tiết + số đo ở mục 7. `docs/QUYHOACH.md`
-  mục 2.10 đã sửa lại cho khớp.
-- Frontend: `ngoai-te.html`, `assets/css/ngoai-te.css`,
-  `assets/js/pages/ngoai-te.js`; `dataService.getFxRates/getFxHistory`;
-  `config.fxProvider`; `nav.js` bỏ nhãn "sắp có" ở mục Ngoại tệ.
-- `.chk` / `.sw` (chip bật/tắt đường vẽ) chuyển từ `chung-khoan.css` sang
-  `base.css` để hai trang dùng chung → **đã kiểm lại trang chứng khoán**, chip
-  vẫn đúng (`border-radius 999px`, nền `rgba(240,169,78,0.14)` khi bật).
-- **Khung 5Y bỏ có chủ đích** (user chốt trong phiên): gói free của FXRatesAPI
-  chỉ có 366 ngày. Backend trả 400 `range_too_long` thay vì lặng lẽ cắt còn 1
-  năm — chuỗi thật dưới nhãn sai cũng đánh lừa y như số bịa. Trang ghi rõ lý do.
-
-Đã kiểm trên trình duyệt thật (local rồi bản live) — không phải chỉ đọc code:
-bảng 20 mã khớp số VCB; ô trống DKK/INR/… hiện `—`; sắp xếp theo `buyCash` đẩy
-mã trống xuống cuối; ghim ★ lưu qua `Store` và nổi lên đầu sau reload; tìm kiếm
-theo tên tiếng Việt ("yen" → JPY); chart USD 3M/1Y và JPY 3M ra đủ điểm; quy đổi
-2 chiều đúng cả `1.000.000`, `1,000,000`, `1.234,5`; theme Sáng/Tối; nút con mắt.
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
@@ -715,20 +775,24 @@ Các phiên trước đó: **`docs/NHATKY.md`**.
 Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy, bản
 live đã kiểm. **GĐ 1 xong toàn bộ 8 đầu việc.**
 
-Việc kế tiếp: **GĐ 3 — trang Coin** (2 phiên). Đọc `docs/QUYHOACH.md` mục
-2.5–2.6 và bảng GĐ 3. Tóm tắt: `/api/crypto/prices` CoinGecko chính (trả thẳng
-giá VND, khỏi tự nhân tỷ giá) + Binance public dự phòng, cache 60s; danh sách
-theo dõi; danh mục nhập tay; biểu đồ dùng lại `chartModule`.
-Cân nhắc gộp luôn **USDT/VND** vào trang ngoại tệ — user hỏi 06/08 về cách theo
-dõi biến động cuối tuần, và đó là thị trường duy nhất chạy 24/7.
+Việc kế tiếp: **GĐ 4 — trang Gửi tiết kiệm** (3 phiên). Đọc `docs/QUYHOACH.md`
+mục 2.7 và bảng GĐ 4. Nguồn là **file JSON tĩnh trên CDN của CafeF** (28 ngân
+hàng × 8 kỳ hạn, có sẵn logo) — trang gốc là Blazor WebAssembly, không cào HTML
+được. **Đo endpoint đó TỪ RENDER trước khi xây trang quanh nó** (bài học ở mục 7,
+đã dính hai lần).
 
-Khuôn mẫu để nhân bản: **trang Vàng** (mới nhất, sạch nhất). `vang.html` +
-`vang.css` + `pages/vang.js` là bộ ba đầy đủ cho một trang tài sản: bảng giá có
-nhãn nguồn + nguồn dự phòng có cảnh báo + danh mục nhập tay qua `Store` +
-`.money`. Thành phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`,
-`.row-btn`, `.edit-input`) đã nằm ở `base.css` khối "TRANG TAI SAN" — **đừng
-chép lại vào CSS trang mới**. Đừng dựng từ trang chứng khoán: trang đó còn mang
-theo ticker/heatmap/tín hiệu không liên quan.
+Khuôn mẫu để nhân bản: **trang Coin hoặc trang Vàng**. `coin.html` + `coin.css` +
+`pages/coin.js` là bộ ba đầy đủ nhất: bảng có nhãn nguồn đọc từ payload + danh
+sách theo dõi lưu qua `Store` + biểu đồ + danh mục nhập tay + `.money`. Thành
+phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`, `.row-btn`,
+`.edit-input`, `.chart-stack`, `.chart-wrap`, `.trend-overlay`) đã nằm ở
+`base.css` — **đừng chép lại vào CSS trang mới**. Đừng dựng từ trang chứng khoán:
+trang đó còn mang theo ticker/heatmap/tín hiệu không liên quan.
+
+**Việc user tự làm (không chặn gì):** muốn bật CoinMarketCap thì tạo API key
+free ở `coinmarketcap.com/api` rồi thêm biến môi trường **`CMC_API_KEY`** trên
+Render (Dashboard → service → Environment). Code đã sẵn sàng, không cần sửa gì.
+Key chỉ nằm ở env, không bao giờ vào `config.js`.
 
 **Việc còn nợ khi làm GĐ 6 (trang tổng):** giá trị danh mục ngoại tệ và vàng
 hiện chỉ tính trong trang của chúng. Trang tổng phải đọc `holdings_fx` +
@@ -739,6 +803,11 @@ hiện chỉ tính trong trang của chúng. Trang tổng phải đọc `holding
 
 **Cần soát lại khi có dữ liệu nhiều ngày:** ngưỡng cảnh báo chênh lệch mua-bán
 vàng đang để 5%, dựa trên đúng một lần đo (mục 9).
+
+**Còn nợ ở trang Coin:** căn nguyên lỗi "lần vẽ đầu không hiện đường" chưa tìm
+ra, đang vá bằng cách vẽ lại sau 400ms (mục 7). Và bảng ticker nội bộ chỉ ~40
+coin — coin ngoài bảng vẫn thêm được khi CoinGecko trả lời, nhưng ở production
+thì không.
 
 **Đừng "sửa lại cho đúng quy hoạch" ba chỗ sau của trang Ngoại tệ:**
 1. Nguồn lịch sử là **FXRatesAPI, không phải Yahoo** — Yahoo chặn IP Render

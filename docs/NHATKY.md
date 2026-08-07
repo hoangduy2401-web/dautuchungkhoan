@@ -5,6 +5,49 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**05–06/08/2026 (phiên 4) — GĐ 1 trang Ngoại tệ: XONG CẢ 8 ĐẦU VIỆC.**
+Bump `?v=20260804a` → `?v=20260805a` → **`?v=20260806a`** (28 chỗ trong 3 file
+HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.
+
+Làm xong toàn bộ bảng GĐ 1 của `docs/QUYHOACH.md`.
+
+**Danh mục cá nhân (mục 1.7)** — collection `holdings_fx`, row
+`{code, amount, cost|null, updatedAt}`:
+- **Là danh sách nắm giữ sửa trực tiếp, KHÔNG phải sổ giao dịch** như
+  `portfolio.js`. User cầm một số dư ngoại tệ, khi nó đổi thì sửa thẳng con số
+  đó chứ không ghi thêm lệnh mua/bán. Nên **giá vốn là một ô nhập**, không phải
+  kết quả bình quân gia quyền. Đừng "sửa lại cho giống trang chứng khoán".
+- Cho phép **nhiều dòng cùng một mã** (nhiều lô giá vốn khác nhau); tổng cộng
+  dồn, không gộp dòng.
+- Giá vốn để trống → không hiện lãi/lỗ (`—`), không suy ra 0. Thiếu tỷ giá →
+  giá trị `—` và tổng ghi rõ "thiếu tỷ giá N mã".
+- Xoá phải bấm **hai nhịp** ("Xoá" → "Chắc chứ?", tự huỷ sau 4s): nút xoá nằm
+  ngay cạnh nút Sửa và thao tác không hoàn tác được.
+- Số tiền + số lượng nắm giữ đã bọc `.money`; giá vốn / giá quy đổi / % lãi lỗ
+  cố ý **không** che (mục 3b). Lúc đang sửa tại chỗ thì ô input hiện số thật —
+  chấp nhận, đó là thao tác chủ động của chủ nhân.
+
+- Backend: `/api/fx/rates` (parse XML Vietcombank bằng regex, không thêm
+  dependency, TTL 10 phút vì nguồn ghi "1 request/5 phút") và `/api/fx/history`.
+- **Nguồn lịch sử đổi khỏi quy hoạch: Yahoo Finance → FXRatesAPI.** Yahoo chặn
+  theo IP, kể cả IP của Render — chi tiết + số đo ở mục 7. `docs/QUYHOACH.md`
+  mục 2.10 đã sửa lại cho khớp.
+- Frontend: `ngoai-te.html`, `assets/css/ngoai-te.css`,
+  `assets/js/pages/ngoai-te.js`; `dataService.getFxRates/getFxHistory`;
+  `config.fxProvider`; `nav.js` bỏ nhãn "sắp có" ở mục Ngoại tệ.
+- `.chk` / `.sw` (chip bật/tắt đường vẽ) chuyển từ `chung-khoan.css` sang
+  `base.css` để hai trang dùng chung → **đã kiểm lại trang chứng khoán**, chip
+  vẫn đúng (`border-radius 999px`, nền `rgba(240,169,78,0.14)` khi bật).
+- **Khung 5Y bỏ có chủ đích** (user chốt trong phiên): gói free của FXRatesAPI
+  chỉ có 366 ngày. Backend trả 400 `range_too_long` thay vì lặng lẽ cắt còn 1
+  năm — chuỗi thật dưới nhãn sai cũng đánh lừa y như số bịa. Trang ghi rõ lý do.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live) — không phải chỉ đọc code:
+bảng 20 mã khớp số VCB; ô trống DKK/INR/… hiện `—`; sắp xếp theo `buyCash` đẩy
+mã trống xuống cuối; ghim ★ lưu qua `Store` và nổi lên đầu sau reload; tìm kiếm
+theo tên tiếng Việt ("yen" → JPY); chart USD 3M/1Y và JPY 3M ra đủ điểm; quy đổi
+2 chiều đúng cả `1.000.000`, `1,000,000`, `1.234,5`; theme Sáng/Tối; nút con mắt.
+
 **04/08/2026 (phiên 3) — chỉ soát tài liệu, KHÔNG đụng code.**
 Không sửa file `.js/.css/.html` nào → **không bump `?v=`**, vẫn `20260804a`.
 Không đụng `server/`. Đã đối chiếu tài liệu với thực tế và sửa 4 chỗ lệch:

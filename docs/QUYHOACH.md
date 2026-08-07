@@ -140,22 +140,49 @@ moment...`) khi gọi server-to-server. Giống hệt trường hợp TCBS đã 
 **Đừng thử lại bằng header giả trình duyệt** — đây là JS challenge, không phải
 lọc User-Agent.
 
-### 2.5 Coin — CoinGecko (CHẠY, nguồn chính)
+### 2.5 Coin — CoinGecko (CHẠY Ở MÁY LOCAL, **CHẶN Ở RENDER**)
 
 ```
 GET https://api.coingecko.com/api/v3/simple/price
       ?ids=bitcoin,ethereum&vs_currencies=usd,vnd&include_24hr_change=true
 ```
-Free, không key. **Trả thẳng giá VND** — không phải tự nhân tỷ giá, đỡ một
-nguồn sai số. Giới hạn free tier ~10-30 call/phút → cache 60s là quá đủ.
+Free, không key, **trả thẳng giá VND**. Nhưng **đo 07/08/2026: từ Render trả
+`HTTP 429` ba lần liên tiếp**, trong khi cùng request từ máy local trả 200 —
+chặn theo IP, đúng kiểu Yahoo Finance ở 2.10. Lịch sử `/market_chart` cũng giới
+hạn **365 ngày** ở gói free (401 code 10012 khi vượt).
 
-### 2.6 Coin — Binance public (CHẠY, dự phòng giá)
+→ Ở production **nguồn thật là Binance + tỷ giá USD/VND của chính dự án**, xem
+2.6. CoinGecko vẫn để làm đường ưu tiên vì nó chạy khi phát triển ở máy local.
+
+**Luật rút ra cho mọi nguồn mới: đo TỪ RENDER trước khi xây trang quanh nó.**
+
+### 2.6 Coin — Binance public (CHẠY, **nguồn thật ở production**)
 
 ```
-GET https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT
+GET https://api.binance.com/api/v3/ticker/24hr?symbols=<mảng JSON URL-encode>
+GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=N
 ```
-Free, không key, cho giá USD + biến động 24h. Dùng khi CoinGecko lỗi hoặc cần
-mã CoinGecko không có.
+Free, không key, chạy từ Render. Chỉ có **cặp USDT**, nên giá VND là số **quy
+đổi**: `VND = USD × tỷ giá USD/VND` lấy từ chuỗi liên ngân hàng của chính dự án
+(2.10). Lịch sử nhân tỷ giá **của chính ngày đó**, không dùng một tỷ giá duy
+nhất cho cả năm. Giao diện bắt buộc ghi "VND quy đổi".
+
+**Ba cạm bẫy đã dính (07/08/2026):**
+- `symbols` phải là mảng JSON **URL-encode toàn bộ**, kể cả dấu ngoặc vuông —
+  encode từng phần bên trong thì trả HTTP 400.
+- **`USDT` không có cặp `USDTUSDT`.** Để nó lọt vào lô là Binance trả 400 cho
+  **cả lô**, mất giá của mọi coin khác. Xử lý riêng: `usd = 1`.
+- Binance định danh theo **ticker**, CoinGecko theo **slug** — cần bảng ánh xạ
+  (`CRYPTO_SYMBOLS`, ~40 coin). Coin ngoài bảng không định giá được ở đường này.
+
+### 2.11 Coin — CoinMarketCap (TÙY CHỌN, cần API key)
+
+Mọi endpoint đòi key (`error_code 1002 "API key missing"`, HTTP 401 — đo
+07/08/2026), nên không có cách dùng thử. Code đã sẵn sàng và **tự bật khi có
+biến môi trường `CMC_API_KEY`** trên Render; khi đó CMC được ưu tiên.
+
+**Chưa kiểm chứng:** gói free (Basic) có convert sang VND hay không. Code xin
+`convert=USD,VND`, nếu bị từ chối thì thử lại `USD` và để `vnd: null`.
 
 ### 2.7 Lãi suất tiết kiệm — CafeF CDN (CHẠY)
 
@@ -418,17 +445,17 @@ Chi tiết nguồn, đơn vị và các quyết định: **`docs/VANG.md`**.
 
 ---
 
-### GĐ 3 — Trang Coin (giá + danh mục tay) · ĐỘ KHÓ: TRUNG BÌNH · 2 phiên · Tuần 3-4
+### GĐ 3 — Trang Coin (giá + danh mục tay) · ĐỘ KHÓ: TRUNG BÌNH · 2 phiên · Tuần 3-4 — **XONG 07/08/2026**
 
 Cố ý **tách phần đồng bộ sàn ra GĐ 7**: phần giá dễ và có giá trị ngay, phần
 đồng bộ khó và có rủi ro bảo mật.
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 3.1 | Route `/api/crypto/prices` — CoinGecko chính, Binance dự phòng | Cache 60s |
-| 3.2 | Danh sách theo dõi coin + giá VND/USD + biến động 24h | Dùng lại khuôn watchlist chứng khoán |
-| 3.3 | Danh mục coin nhập tay + lãi/lỗ | Tạm thời, GĐ 7 thay bằng đồng bộ sàn |
-| 3.4 | Biểu đồ giá coin | Dùng lại `chartModule.js` — cùng thư viện, cùng khuôn |
+| 3.1 | ~~Route `/api/crypto/prices`~~ | **XONG 07/08** — nhưng **CoinGecko chặn IP Render**, nguồn thật ở production là **Binance + tỷ giá của dự án**. Xem 2.5 |
+| 3.2 | ~~Danh sách theo dõi + giá VND/USD + 24h~~ | **XONG 07/08** — thêm coin qua `/api/crypto/search`, lưu setting `coinWatch` |
+| 3.3 | ~~Danh mục coin nhập tay + lãi/lỗ~~ | **XONG 07/08** — `holdings_crypto`, giá vốn theo ₫/1 coin |
+| 3.4 | ~~Biểu đồ giá coin~~ | **XONG 07/08** — 1M/3M/6M/1Y; phải chia bậc giá trước khi vẽ, xem `CLAUDE.md` mục 7 |
 
 ---
 
