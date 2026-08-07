@@ -72,10 +72,9 @@ const APP_CONFIG = {
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;
   // never mocked — an empty account panel is better than fake holdings.
   accountProvider:      { name: "SSI FCTrading", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/account" },
-  // Crypto. CoinGecko primary because it quotes VND DIRECTLY — deriving VND from
-  // a USD price times an exchange rate would stack a second source's error onto
-  // every number. Binance fallback only knows USDT, so it returns usd and leaves
-  // vnd null rather than inventing it.
+  // Crypto. CoinGecko chạy khi phát triển ở máy local nhưng CHẶN IP Render (429),
+  // nên ở production nguồn thật là Binance + tỷ giá USD/VND của chính dự án.
+  // Payload có `vndFrom` khi giá VND là số quy đổi — trang phải ghi nhãn.
   cryptoProvider:       { name: "CoinGecko + Binance", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/crypto" },
   // Gold. PNJ primary, BTMC fallback — the payload says which one answered, and
   // the page must show it: two shops quote different boards, and an unlabelled

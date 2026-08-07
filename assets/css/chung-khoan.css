@@ -398,3 +398,59 @@
   #holdingsTable, #txTable { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   #holdingsTable table, #txTable table { min-width: 460px; }
 }
+
+/* ---- Tab Tổng quan thị trường ----
+   Thanh so sánh vẽ bằng CSS, không dùng thư viện chart: chỉ có hai cặp số. */
+.ov-ex { display: flex; gap: 2px; }
+.ov-ex button {
+  background: transparent; border: none; color: var(--text-secondary); font-family: inherit;
+  padding: 5px 10px; border-radius: var(--radius-sm);
+  font-size: var(--text-2xs); font-weight: 600; cursor: pointer;
+}
+.ov-ex button:hover { color: var(--text-primary); background: var(--surface-hover); }
+.ov-ex button.active { background: var(--surface-pill-active); color: var(--text-on-accent); }
+
+.ov-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px; margin-top: 12px;
+}
+.ov-card {
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.ov-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ov-label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.ov-pct { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+.ov-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.ov-row-lbl { flex: 0 0 52px; font-size: var(--text-2xs); color: var(--text-tertiary); }
+.ov-track { flex: 1 1 auto; height: 8px; background: var(--surface-hover); border-radius: 999px; overflow: hidden; }
+.ov-fill { display: block; height: 100%; border-radius: 999px; }
+.ov-fill.now { background: var(--accent-orange); }
+.ov-fill.prev { background: var(--gray-600); }
+.ov-val {
+  flex: 0 0 74px; text-align: right;
+  font-size: var(--text-2xs); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.ov-unit { margin-top: 7px; font-size: var(--text-2xs); color: var(--text-tertiary); }
+.ov-sub { margin-top: 5px; font-size: var(--text-2xs); color: var(--accent-orange); }
+
+.ov-breadth { margin-top: 10px; }
+.ov-breadth-bar {
+  display: flex; height: 14px; border-radius: 999px; overflow: hidden; margin-top: 9px;
+  background: var(--surface-hover);
+}
+.ov-breadth-bar .bp { display: block; height: 100%; }
+.ov-breadth-bar .bp.up { background: var(--positive); }
+.ov-breadth-bar .bp.flat { background: var(--gray-600); }
+.ov-breadth-bar .bp.down { background: var(--negative); }
+.ov-breadth-legend {
+  display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px;
+  font-size: var(--text-2xs); color: var(--text-secondary);
+}
+.ov-breadth-legend i.sw { width: 8px; height: 8px; border-radius: 999px; display: inline-block; margin-right: 5px; }
+.ov-breadth-legend i.sw.up { background: var(--positive); }
+.ov-breadth-legend i.sw.flat { background: var(--gray-600); }
+.ov-breadth-legend i.sw.down { background: var(--negative); }
+.ov-breadth-legend .ceil { color: var(--accent-orange); font-weight: 600; }
+.ov-breadth-legend .floor { color: var(--accent-purple); font-weight: 600; }
+.ov-note { margin-top: 10px; font-size: var(--text-2xs); color: var(--text-tertiary); line-height: 1.6; }

@@ -37,8 +37,11 @@ const state = {
   quotes: {}, // symbol -> {price, changePct, volume}
   sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
-  marketTab: "heatmap", // heatmap | sector | rank | foreign | signal
+  marketTab: "overview", // overview | heatmap | sector | rank | foreign | signal
   rankExchange: "VNINDEX", // VNINDEX | HNXINDEX | UPCOM — rankings tab exchange
+  ovExchange: "VNINDEX", // sàn đang xem ở tab Tổng quan thị trường
+  ovVolHistory: {}, // mã chỉ số -> [{date, volume}] — nạp lười, cache cả phiên
+  selectedBars: null, // {symbol, bars} — nến của mã đang chọn, chart vừa tải xong
   chart: null,
 
   // --- Signals tab (FiinTrade Tier 1) ---
@@ -112,6 +115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   renderRangeTabs();
   wireMarketTabs();
+  wireOverviewExchanges();
   wireRankExchanges();
   wireSignalTab();
   wireForms();
@@ -237,6 +241,7 @@ async function refreshAll() {
   try {
     await Promise.all([loadIndices(), loadTapeQuotes()]);
     renderTickerTape();
+    renderOverview();
     renderHeatmap();
     renderSectors();
     renderRankings();
@@ -791,6 +796,208 @@ function wireSignalTab() {
 
 // Tab switcher: toggle active button + which pane is visible. Data for all panes
 // is pre-rendered on refresh, so switching is just show/hide.
+/* ============================================================
+   TỔNG QUAN THỊ TRƯỜNG (tab "overview")
+
+   Gộp hai biểu đồ vào MỘT tab vì chúng cùng một câu hỏi — "hôm nay so với kỳ
+   trước thế nào" — cùng nguồn dữ liệu và cùng nhịp làm mới. Tách đôi sẽ thành
+   nút tab thứ bảy (tràn hàng trên màn hình hẹp) và bắt user bấm qua lại giữa
+   hai thứ vốn phải đọc cùng lúc.
+
+   KHÔNG có endpoint mới: khối lượng + độ rộng của phiên hôm nay đã nằm trong
+   `/api/price/indices` (số LIVE trong phiên, xem CLAUDE.md mục 7), còn khối
+   lượng các phiên trước lấy từ `/api/price/index-history` vốn đã trả `volume`.
+   Chuỗi lịch sử nạp LƯỜI một lần cho mỗi sàn rồi cache cả phiên — nó chỉ đổi
+   sau khi đóng cửa, không việc gì phải nạp lại mỗi 45 giây.
+
+   Thanh so sánh vẽ bằng CSS, không dùng Lightweight Charts: hai cặp số thì một
+   thư viện chart là thừa, và tránh luôn hai lỗi vẽ đã gặp ở mục 7.
+   ============================================================ */
+
+// Chuỗi khối lượng theo phiên của một sàn. `/index-history` bỏ dòng đang hình
+// thành (IndexValue=0) nên chuỗi này dừng ở phiên GẦN NHẤT ĐÃ ĐÓNG — khối lượng
+// hôm nay lấy riêng từ /indices.
+async function ensureOvHistory(code) {
+  if (state.ovVolHistory[code]) return state.ovVolHistory[code];
+  const rows = await DataService.getIndexHistory(code, 30);
+  const today = vnToday();
+  state.ovVolHistory[code] = (rows || []).filter(
+    // Bỏ dòng CỦA HÔM NAY. `/index-history` thường bỏ sẵn dòng đang hình thành
+    // (IndexValue=0), nhưng không phải sàn nào cũng vậy: HNX trả dòng hôm nay
+    // kèm giá trị thật ngay trong phiên, và khi đó "phiên trước" hoá ra chính
+    // là hôm nay — bảng hiện +0,0% với hai con số y hệt (đo 07/08/2026).
+    (r) => r.date !== today && Number.isFinite(r.volume) && r.volume > 0
+  );
+  return state.ovVolHistory[code];
+}
+
+// Ngày hiện tại theo giờ Việt Nam. `toISOString()` trả ngày UTC, lệch một ngày
+// trong khoảng 00:00–07:00 giờ VN.
+function vnToday() {
+  return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// Tổng khối lượng của tuần chứa `date` (tuần bắt đầu THỨ HAI), chỉ tính các
+// phiên có trong chuỗi.
+function weekKey(dateStr) {
+  const d = new Date(dateStr + "T00:00:00Z");
+  const dow = (d.getUTCDay() + 6) % 7; // 0 = thứ Hai
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+function wireOverviewExchanges() {
+  const host = document.getElementById("ovExchanges");
+  if (!host) return;
+  host.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-ovex]");
+    if (!btn) return;
+    state.ovExchange = btn.dataset.ovex;
+    host.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+    renderOverview();
+  });
+}
+
+// Một thanh so sánh: nhãn, hai giá trị, phần trăm chênh lệch.
+function ovBar(label, now, prev, unit, sub) {
+  const has = Number.isFinite(now) && Number.isFinite(prev) && prev > 0;
+  const pct = has ? ((now - prev) / prev) * 100 : null;
+  const cls = pct === null ? "flat" : pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+  // Hai thanh cùng thang: cái lớn hơn chiếm 100%, cái kia theo tỷ lệ. Nhìn ra
+  // ngay ai hơn ai mà không phải đọc số.
+  const max = Math.max(now || 0, prev || 0) || 1;
+  const w = (v) => `${Math.max(2, Math.min(100, ((v || 0) / max) * 100)).toFixed(1)}%`;
+
+  return `<div class="ov-card">
+    <div class="ov-card-head">
+      <span class="ov-label">${escapeHtml(label)}</span>
+      <span class="ov-pct ${cls}">${pct === null ? "—" : (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%"}</span>
+    </div>
+    <div class="ov-row">
+      <span class="ov-row-lbl">Kỳ này</span>
+      <span class="ov-track"><span class="ov-fill now" style="width:${w(now)}"></span></span>
+      <span class="ov-val">${Number.isFinite(now) ? fmtVol(now) : "—"}</span>
+    </div>
+    <div class="ov-row">
+      <span class="ov-row-lbl">Kỳ trước</span>
+      <span class="ov-track"><span class="ov-fill prev" style="width:${w(prev)}"></span></span>
+      <span class="ov-val">${Number.isFinite(prev) ? fmtVol(prev) : "—"}</span>
+    </div>
+    ${sub ? `<div class="ov-sub">${escapeHtml(sub)}</div>` : ""}
+    <div class="ov-unit">${escapeHtml(unit)}</div>
+  </div>`;
+}
+
+// Khối lượng cổ phiếu tính bằng đơn vị cổ phiếu — hàng trăm triệu thì số nguyên
+// đầy đủ không đọc được.
+function fmtVol(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + " tỷ";
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + " triệu";
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + " nghìn";
+  return String(Math.round(v));
+}
+
+async function renderOverview() {
+  const volHost = document.getElementById("ovVolume");
+  const breadthHost = document.getElementById("ovBreadth");
+  if (!volHost || !breadthHost) return;
+
+  const code = state.ovExchange;
+  const idx = state.indices.find((i) => i.code === code) || null;
+
+  // Chuỗi lịch sử nạp lười; trong lúc chờ vẫn vẽ được phần của phiên hôm nay.
+  let hist = state.ovVolHistory[code] || null;
+  if (!hist) {
+    ensureOvHistory(code)
+      .then(() => {
+        if (state.ovExchange === code) renderOverview();
+      })
+      .catch((err) => console.warn("[overview] lịch sử KL lỗi:", err.message));
+  }
+
+  const todayVol = idx && Number.isFinite(idx.totalVol) ? idx.totalVol : null;
+  const prevVol = hist && hist.length ? hist[hist.length - 1].volume : null;
+
+  // Tuần này = các phiên ĐÃ ĐÓNG của tuần hiện tại + phiên hôm nay đang chạy.
+  // Tuần trước = trọn tuần liền trước. So "tới thời điểm này" với "cả tuần" là
+  // so lệch, nhưng đó đúng là câu hỏi user đặt ra: tuần này đang đi nhanh hay
+  // chậm hơn tuần trước.
+  let weekVol = null;
+  let prevWeekVol = null;
+  if (hist && hist.length) {
+    const todayKey = weekKey(vnToday());
+    const groups = new Map();
+    for (const r of hist) {
+      const k = weekKey(r.date);
+      groups.set(k, (groups.get(k) || 0) + r.volume);
+    }
+    weekVol = (groups.get(todayKey) || 0) + (todayVol || 0);
+    const keys = [...groups.keys()].filter((k) => k < todayKey).sort();
+    prevWeekVol = keys.length ? groups.get(keys[keys.length - 1]) : null;
+    if (!weekVol) weekVol = null;
+  }
+
+  // Cổ phiếu đang chọn: khối lượng hôm nay từ quote, phiên trước từ chuỗi nến
+  // mà chart đã tải sẵn — không gọi thêm gì.
+  const sym = state.selected;
+  let symToday = null;
+  let symPrev = null;
+  if (sym && !isIndexCode(sym)) {
+    const q = state.quotes[sym];
+    symToday = q && Number.isFinite(q.volume) ? q.volume : null;
+    // Ưu tiên chuỗi nến mà biểu đồ vừa tải cho chính mã này; rổ tín hiệu chỉ là
+    // đường lùi, vì nó chỉ có dữ liệu sau khi user bấm "Tải dữ liệu".
+    const bars =
+      (state.selectedBars && state.selectedBars.symbol === sym && state.selectedBars.bars) ||
+      state.sigBars[sym] ||
+      null;
+    if (bars && bars.length >= 2) symPrev = bars[bars.length - 2].volume;
+  }
+
+  volHost.innerHTML =
+    ovBar("Khối lượng phiên", todayVol, prevVol, "cổ phiếu · hôm nay so với phiên trước") +
+    ovBar("Khối lượng tuần", weekVol, prevWeekVol, "cổ phiếu · tuần này tới hiện tại so với trọn tuần trước") +
+    (sym && !isIndexCode(sym)
+      ? ovBar(`Khối lượng ${sym}`, symToday, symPrev, "cổ phiếu · mã đang chọn", symPrev === null ? "Đang chờ dữ liệu phiên trước của mã này" : "")
+      : "");
+
+  // ---- Độ rộng thị trường ----
+  const adv = idx && Number.isFinite(idx.advances) ? idx.advances : null;
+  const dec = idx && Number.isFinite(idx.declines) ? idx.declines : null;
+  const flat = idx && Number.isFinite(idx.noChanges) ? idx.noChanges : null;
+  const total = (adv || 0) + (dec || 0) + (flat || 0);
+
+  if (!total) {
+    breadthHost.innerHTML = `<div class="empty-state">Chưa có số mã tăng/giảm cho ${escapeHtml(code)}.</div>`;
+  } else {
+    const p = (v) => ((v || 0) / total) * 100;
+    breadthHost.innerHTML = `<div class="ov-card">
+      <div class="ov-card-head">
+        <span class="ov-label">Độ rộng thị trường</span>
+        <span class="ov-pct ${adv >= dec ? "up" : "down"}">${adv} tăng / ${dec} giảm</span>
+      </div>
+      <div class="ov-breadth-bar">
+        <span class="bp up" style="width:${p(adv).toFixed(1)}%" title="${adv} mã tăng"></span>
+        <span class="bp flat" style="width:${p(flat).toFixed(1)}%" title="${flat} mã đứng giá"></span>
+        <span class="bp down" style="width:${p(dec).toFixed(1)}%" title="${dec} mã giảm"></span>
+      </div>
+      <div class="ov-breadth-legend">
+        <span><i class="sw up"></i>Tăng ${adv}</span>
+        <span><i class="sw flat"></i>Đứng ${flat}</span>
+        <span><i class="sw down"></i>Giảm ${dec}</span>
+        ${Number.isFinite(idx.ceilings) ? `<span class="ceil">Trần ${idx.ceilings}</span>` : ""}
+        ${Number.isFinite(idx.floors) ? `<span class="floor">Sàn ${idx.floors}</span>` : ""}
+      </div>
+    </div>`;
+  }
+
+  document.getElementById("ovNote").textContent = hist
+    ? "Khối lượng phiên hôm nay là số trong phiên, chốt lại khi đóng cửa. Các phiên trước lấy theo dữ liệu đã đóng cửa."
+    : "Đang nạp khối lượng các phiên trước…";
+}
+
 function wireMarketTabs() {
   const tabs = document.getElementById("marketTabs");
   if (!tabs) return;
@@ -808,6 +1015,7 @@ function wireMarketTabs() {
       // is already cached; the fetch itself stays behind the explicit button so
       // opening the tab never blocks the UI.
       if (state.marketTab === "signal") renderSignalPane();
+      if (state.marketTab === "overview") renderOverview();
     });
   });
 }
@@ -1070,6 +1278,12 @@ async function loadSelectedSymbol() {
   // Pass the dataset identity so the 45s refresh keeps any trendline/ruler the
   // user drew (same symbol + range = same anchors); switching either clears it.
   drawChartOrClear(history, `${sym}|${state.range}`);
+  // Giữ lại chuỗi nến của mã đang chọn cho tab Tổng quan dùng chung — nó cần
+  // khối lượng phiên trước, và đây là dữ liệu vừa tải xong cho biểu đồ.
+  if (Array.isArray(history) && history.length) {
+    state.selectedBars = { symbol: sym, bars: history };
+    if (state.marketTab === "overview") renderOverview();
+  }
   renderFundamentals(fundamentals);
   renderNews(news);
 

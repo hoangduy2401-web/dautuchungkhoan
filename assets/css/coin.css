@@ -51,7 +51,11 @@
 .coin-table tbody tr { cursor: pointer; }
 .coin-cell { display: flex; align-items: center; gap: 8px; }
 .coin-logo { width: 20px; height: 20px; border-radius: 999px; flex: 0 0 20px; }
-.coin-logo.ph { background: var(--surface-hover); display: inline-block; }
+.coin-logo.ph {
+  background: var(--surface-hover); display: inline-flex;
+  align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: var(--text-secondary);
+}
 .coin-names { display: flex; flex-direction: column; line-height: 1.25; }
 .coin-names small { color: var(--text-tertiary); font-size: var(--text-2xs); }
 

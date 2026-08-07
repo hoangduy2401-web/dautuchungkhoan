@@ -40,6 +40,50 @@ const escapeHtml = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const safeImg = (u) => (/^https:\/\//i.test(String(u || "")) ? String(u) : "");
 
+// Logo coin. Binance không trả ảnh (CoinGecko thì có), nên lấy từ CDN icon theo
+// ticker. Ảnh tải THẲNG TỪ TRÌNH DUYỆT của user, không qua backend, nên không
+// dính vụ chặn IP datacenter.
+//
+// Hai CDN vì không cái nào phủ đủ: jsDelivr (cryptocurrency-icons) đẹp và nhanh
+// nhưng bản 0.18.1 thiếu mọi coin sau 2021 (SUI/APT/ARB/PEPE… đều 404);
+// CoinCap phủ những coin đó nhưng đo 07/08/2026 thì chỉ BTC tải về, các ticker
+// khác treo. Thử lần lượt, hết nguồn thì hiện vòng tròn chữ cái đầu.
+const LOGO_SOURCES = [
+  (sym) => `https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color/${sym}.svg`,
+  (sym) => `https://assets.coincap.io/assets/icons/${sym}@2x.png`,
+];
+
+function coinLogoHtml(c) {
+  const sym = String(c.symbol || "").toLowerCase();
+  const direct = safeImg(c.image); // CoinGecko có sẵn ảnh thì dùng luôn
+  // KHÔNG `loading="lazy"`: trong bảng này ảnh không bao giờ được coi là lọt vào
+  // tầm nhìn nên trình duyệt hoãn vô hạn — đo 07/08/2026, mọi logo đứng ở trạng
+  // thái đang tải. Icon chỉ ~1KB và nhiều nhất vài chục cái, tải thẳng là xong.
+  return `<img class="coin-logo" alt=""
+    data-sym="${escapeHtml(sym)}" data-try="${direct ? -1 : 0}"
+    src="${escapeHtml(direct || LOGO_SOURCES[0](sym))}" />`;
+}
+
+// Gắn sau mỗi lần vẽ bảng: `onerror` inline sẽ phải escape nhiều lớp, còn ở đây
+// chỉ là một vòng qua các nguồn.
+function wireLogoFallback(root) {
+  root.querySelectorAll("img.coin-logo").forEach((img) => {
+    img.addEventListener("error", () => {
+      const sym = img.dataset.sym || "";
+      const next = Number(img.dataset.try) + 1;
+      if (next < LOGO_SOURCES.length) {
+        img.dataset.try = String(next);
+        img.src = LOGO_SOURCES[next](sym);
+        return;
+      }
+      const ph = document.createElement("span");
+      ph.className = "coin-logo ph";
+      ph.textContent = sym.slice(0, 1).toUpperCase();
+      img.replaceWith(ph);
+    });
+  });
+}
+
 // Giá coin trải từ vài đồng (SHIB) tới hơn tỷ đồng (BTC) — số chữ số thập phân
 // phải co theo độ lớn, để nguyên 0 chữ số thì mọi altcoin rẻ đều thành "0".
 function fmtVnd(n) {
@@ -192,10 +236,9 @@ function renderTable() {
     .map((c) => {
       const ch = c.change24h;
       const cls = !hasVal(ch) ? "" : ch > 0 ? "up" : ch < 0 ? "down" : "flat";
-      const img = safeImg(c.image);
       return `<tr data-id="${escapeHtml(c.id)}"${c.id === coinState.selected ? ' class="sel"' : ""}>
         <td class="coin-cell">
-          ${img ? `<img src="${escapeHtml(img)}" alt="" class="coin-logo" loading="lazy" />` : `<span class="coin-logo ph"></span>`}
+          ${coinLogoHtml(c)}
           <span class="coin-names"><strong>${escapeHtml(c.symbol)}</strong><small>${escapeHtml(c.name)}</small></span>
         </td>
         <td class="num">${fmtVnd(c.vnd)}</td>
@@ -206,6 +249,7 @@ function renderTable() {
       </tr>`;
     })
     .join("");
+  wireLogoFallback(document.getElementById("coinTableBody"));
 }
 
 function wireTable() {

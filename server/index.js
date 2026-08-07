@@ -436,6 +436,13 @@ async function computeIndices() {
       advances,
       declines,
       noChanges,
+      // Trần/sàn: cùng row, không tốn thêm call. Đi THEO BỘ với advances/
+      // declines — VN30 trả breadth 0/0/0 (đã gom thành null) nhưng vẫn có
+      // Ceilings 2 / Floors 0, tức hai trường này không cùng phạm vi rổ. Không
+      // rõ chúng đếm trên rổ hay trên sàn, nên khi breadth là null thì để null
+      // luôn thay vì hiện một con số không biết đếm cái gì (mục 3).
+      ceilings: advances === null ? null : stat(["Ceilings"]),
+      floors: advances === null ? null : stat(["Floors"]),
     });
   }
   return items;
@@ -1265,7 +1272,7 @@ async function computeCryptoFromBinance(ids, symbolById) {
   };
 }
 
-// CoinGecko ids are slugs; CoinMarketCap and Binance both speak tickers. This is
+// CoinGecko ids are slugs; Binance speaks tickers. This is
 // the bridge, and it only covers the coins the dashboard ships with — a
 // user-added coin that CoinGecko knows and this map does not simply falls back
 // to CoinGecko, which is better than guessing its ticker.
@@ -1310,101 +1317,6 @@ function searchLocalCoins(q) {
     .map(([id, sym]) => ({ id, symbol: sym, name: CRYPTO_NAMES[sym] || sym, rank: null }));
 }
 
-// ------------------------------------------------------------
-// CoinMarketCap — OPTIONAL, off unless CMC_API_KEY is set.
-//
-// Every CMC endpoint requires a key ("error_code": 1002, "API key missing",
-// HTTP 401 — measured 07/08/2026 without one), so this path stays dormant on a
-// fresh clone and CoinGecko keeps serving. The key lives ONLY in the Render
-// environment, never in config.js.
-//
-// Two limits worth knowing before trusting it:
-//   - CMC is keyed by TICKER, so it can only answer for coins in CRYPTO_SYMBOLS
-//     above. If any requested id is missing from that map this path is skipped
-//     entirely — a partial board would silently drop the user's own coins.
-//   - Whether the free (Basic) plan actually converts to VND is NOT verified —
-//     there is no key to test with. The code asks for USD,VND and, if CMC
-//     rejects the pair, retries with USD alone and leaves `vnd: null` so the UI
-//     prints "—". It never derives VND from an exchange rate off another
-//     endpoint (golden rule, CLAUDE.md §3).
-// ------------------------------------------------------------
-const CMC_BASE = process.env.CMC_BASE || "https://pro-api.coinmarketcap.com";
-const CMC_API_KEY = process.env.CMC_API_KEY || "";
-
-async function cmcQuotes(symbols, convert) {
-  const url =
-    `${CMC_BASE}/v1/cryptocurrency/quotes/latest` +
-    `?symbol=${encodeURIComponent(symbols.join(","))}&convert=${encodeURIComponent(convert)}`;
-  const res = await fetchWithTimeout(
-    url,
-    { headers: { Accept: "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY } },
-    12000
-  );
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = json?.status?.error_message || `HTTP ${res.status}`;
-    const err = new Error(`CoinMarketCap: ${msg}`);
-    err.status = res.status;
-    throw err;
-  }
-  return json.data || {};
-}
-
-async function computeCryptoFromCmc(ids) {
-  const symbols = ids.map((id) => CRYPTO_SYMBOLS[id]);
-  if (symbols.some((s) => !s)) {
-    // Refuse the whole call rather than answer for part of the watchlist.
-    throw new Error("CoinMarketCap: chưa có mã ticker cho một số coin đang xem");
-  }
-
-  let data;
-  let hasVnd = true;
-  try {
-    data = await cmcQuotes(symbols, "USD,VND");
-  } catch (err) {
-    // A plan that will not convert to VND answers 400; USD alone still works.
-    if (!(err.status >= 400 && err.status < 500)) throw err;
-    console.warn("[crypto] CMC không nhận convert=VND:", err.message);
-    data = await cmcQuotes(symbols, "USD");
-    hasVnd = false;
-  }
-
-  const items = ids
-    .map((id) => {
-      const sym = CRYPTO_SYMBOLS[id];
-      const row = data[sym];
-      if (!row) return null;
-      const q = row.quote || {};
-      const vnd = hasVnd && Number.isFinite(q.VND?.price) ? q.VND.price : null;
-      const usd = Number.isFinite(q.USD?.price) ? q.USD.price : null;
-      return {
-        id,
-        symbol: sym,
-        name: row.name || sym,
-        image: null, // CMC only ships logos on a higher plan
-        vnd,
-        usd,
-        change24h: Number.isFinite(q.USD?.percent_change_24h) ? q.USD.percent_change_24h : null,
-        marketCap: Number.isFinite(q.VND?.market_cap) ? q.VND.market_cap : null,
-      };
-    })
-    .filter(Boolean);
-  if (!items.length) throw new Error("CoinMarketCap returned no rows");
-
-  return {
-    updatedAt: new Date().toISOString(),
-    source: "CoinMarketCap",
-    items,
-    ...(hasVnd
-      ? {}
-      : { note: "CoinMarketCap không trả giá VND cho gói hiện tại — cột VND để trống" }),
-  };
-}
-
-// CoinMarketCap (only when a key is configured) -> CoinGecko -> Binance.
-// Whichever answers is named in `source`, and a fallback also sets `note`: three
-// sources quote slightly different prices, so an unlabelled swap would look like
-// the market moved.
 // Lịch sử giá theo VND, đường dự phòng khi CoinGecko không trả lời.
 // Binance /klines cho giá USDT theo ngày; nhân với tỷ giá USD/VND CỦA CHÍNH
 // NGÀY ĐÓ (không phải tỷ giá hôm nay) — dùng một tỷ giá duy nhất cho cả năm sẽ
@@ -1447,15 +1359,13 @@ async function computeCryptoHistoryFromBinance(id, days) {
   };
 }
 
+// CoinGecko -> Binance. Nguồn nào trả lời thì tên nằm ở `source`, và đường dự
+// phòng đặt thêm `note`: hai nguồn báo giá lệch nhau và chỉ một nguồn cho giá
+// VND trực tiếp, nên đổi nguồn mà không ghi nhãn sẽ trông như thị trường biến động.
+//
+// CoinMarketCap đã bị GỠ ngày 07/08/2026: mọi endpoint đòi API key và gói có key
+// là gói trả phí — không hợp với dự án. Đừng dựng lại.
 async function computeCryptoPrices(ids) {
-  if (CMC_API_KEY) {
-    try {
-      return await computeCryptoFromCmc(ids);
-    } catch (err) {
-      console.warn("[crypto] CMC lỗi, thử CoinGecko:", err.message);
-    }
-  }
-
   try {
     return await computeCryptoFromCoinGecko(ids);
   } catch (err) {
