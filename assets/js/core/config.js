@@ -19,6 +19,11 @@ const APP_CONFIG = {
 
   DEFAULT_WATCHLIST: ["VNM", "FPT", "SSI", "VCB", "HPG", "MWG"],
 
+  // Rổ coin seed cho lần mở trang đầu tiên; sau đó đọc/ghi qua `Store`
+  // (setting `coinWatch`), y như watchlist chứng khoán. Đây là id của
+  // CoinGecko — slug, KHÔNG phải mã ticker ("matic-network" chứ không "MATIC").
+  DEFAULT_COINS: ["bitcoin", "ethereum", "tether", "binancecoin", "solana"],
+
   // Ticker tape shows the full VN30 basket. Update if the basket changes
   // (VN30 is re-balanced ~twice a year). Backend warms these so the ticker
   // is served from cache instead of hammering SSI on every load.
@@ -67,6 +72,11 @@ const APP_CONFIG = {
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;
   // never mocked — an empty account panel is better than fake holdings.
   accountProvider:      { name: "SSI FCTrading", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/account" },
+  // Crypto. CoinGecko primary because it quotes VND DIRECTLY — deriving VND from
+  // a USD price times an exchange rate would stack a second source's error onto
+  // every number. Binance fallback only knows USDT, so it returns usd and leaves
+  // vnd null rather than inventing it.
+  cryptoProvider:       { name: "CoinGecko + Binance", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/crypto" },
   // Gold. PNJ primary, BTMC fallback — the payload says which one answered, and
   // the page must show it: two shops quote different boards, and an unlabelled
   // swap looks like the market moved. Prices are thousand VND per chỉ.

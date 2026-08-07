@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Coin — Quản lý gia sản</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/base.css?v=20260807a" />
+<link rel="stylesheet" href="assets/css/coin.css?v=20260807a" />
+</head>
+<body>
+
+  <!-- Shared nav across all 6 pages; rendered by assets/js/core/nav.js -->
+  <div id="appNav"></div>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-top">
+        <div class="mark">Coin <span>thị trường</span></div>
+      </div>
+      <div class="sub">Giá crypto theo VND &amp; danh mục coin cá nhân</div>
+      <div class="clock" id="clock"></div>
+    </div>
+    <div class="header-right">
+      <span class="backend-status" id="backendStatus"></span>
+      <div class="controls">
+        <div class="segmented">
+          <button type="button" id="tLight">Sáng</button>
+          <button type="button" id="tDark">Tối</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-grid-coin">
+
+    <!-- Danh sách theo dõi -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Danh sách theo dõi</h2>
+        <span class="src-badge" id="coinSource">—</span>
+      </div>
+      <div class="coin-fallback" id="coinFallback" hidden></div>
+
+      <form class="coin-add" id="coinAddForm">
+        <input id="coinSearch" class="hold-input" placeholder="Thêm coin — gõ tên hoặc mã, vd: sol" maxlength="30" autocomplete="off" />
+        <button type="submit" class="btn">Tìm</button>
+      </form>
+      <div class="coin-results" id="coinResults" hidden></div>
+
+      <div class="asset-table-wrap">
+        <table class="asset-table coin-table">
+          <thead>
+            <tr>
+              <th>Coin</th>
+              <th class="num">Giá (₫)</th>
+              <th class="num col-usd">Giá (USD)</th>
+              <th class="num">24 giờ</th>
+              <th class="num col-cap">Vốn hoá (₫)</th>
+              <th class="th-act"></th>
+            </tr>
+          </thead>
+          <tbody id="coinTableBody">
+            <tr><td colspan="6" class="empty-state">Đang chờ máy chủ…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Biểu đồ -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Biểu đồ giá</h2>
+        <span class="src-badge alt">CoinGecko · giá VND</span>
+      </div>
+      <div class="panel-body">
+        <div class="coin-chart-head">
+          <div class="coin-chart-title" id="coinChartTitle">—</div>
+          <span class="coin-chart-unit" id="coinChartUnit"></span>
+          <div class="coin-chart-tools">
+            <label class="chk"><input type="checkbox" id="chkMA10" checked/><span class="sw" style="background:var(--chart-ma10);"></span>MA10</label>
+            <label class="chk"><input type="checkbox" id="chkMA20" checked/><span class="sw" style="background:var(--chart-ma20);"></span>MA20</label>
+            <div class="range-tabs" id="coinRangeTabs"></div>
+          </div>
+        </div>
+        <div class="coin-chart-stats" id="coinChartStats"></div>
+        <div class="chart-stack">
+          <div class="chart-wrap" id="priceChartContainer"></div>
+          <canvas id="trendOverlay" class="trend-overlay"></canvas>
+        </div>
+        <!-- ChartModule always builds an RSI pane; hidden here like on the FX page. -->
+        <div class="chart-wrap-rsi" id="rsiChartContainer"></div>
+        <p class="coin-note">
+          Giá theo <strong>VND</strong> lấy thẳng từ nguồn, không nhân tỷ giá —
+          nhân thêm một tỷ giá là chồng thêm sai số của nguồn thứ hai lên mọi con số.
+          Gói miễn phí chỉ có 1 năm lịch sử nên không có khung 5 năm.
+        </p>
+      </div>
+    </div>
+
+    <!-- Danh mục coin nhập tay -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Danh mục cá nhân</h2>
+        <span class="src-badge">Định giá theo giá thị trường (VND)</span>
+      </div>
+
+      <form id="holdForm" class="hold-form coin-hold-form">
+        <select id="holdCoin" class="hold-input" aria-label="Coin"></select>
+        <input id="holdQty" class="hold-input" inputmode="decimal" placeholder="Số lượng, vd: 0,05" aria-label="Số lượng" />
+        <input id="holdCost" class="hold-input" inputmode="decimal" placeholder="Giá vốn ₫/1 coin (không bắt buộc)" aria-label="Giá vốn" />
+        <input id="holdDate" class="hold-input" type="date" aria-label="Ngày mua" />
+        <button type="submit" class="btn">+ Thêm</button>
+      </form>
+      <div class="hold-error" id="holdError" hidden></div>
+
+      <div class="hold-summary" id="holdSummary"></div>
+
+      <div class="asset-table-wrap">
+        <table class="asset-table hold-table">
+          <thead>
+            <tr>
+              <th>Coin</th>
+              <th class="num">Số lượng</th>
+              <th class="num">Giá vốn (₫)</th>
+              <th class="num col-rate">Giá hiện tại (₫)</th>
+              <th class="num">Giá trị (₫)</th>
+              <th class="num">Lãi/lỗ</th>
+              <th class="col-date">Ngày mua</th>
+              <th class="th-act"></th>
+            </tr>
+          </thead>
+          <tbody id="holdTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="app-footer">
+    Dữ liệu chỉ mang tính tham khảo, không phải khuyến nghị đầu tư.
+    Giá coin: CoinGecko (dự phòng: Binance · CoinMarketCap khi có API key).
+  </footer>
+
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="assets/js/core/config.js?v=20260807a"></script>
+  <script src="assets/js/core/store.js?v=20260807a"></script>
+  <script src="assets/js/core/theme.js?v=20260807a"></script>
+  <script src="assets/js/core/nav.js?v=20260807a"></script>
+  <script src="assets/js/core/mockData.js?v=20260807a"></script>
+  <script src="assets/js/core/dataService.js?v=20260807a"></script>
+  <script src="assets/js/core/chartModule.js?v=20260807a"></script>
+  <script src="assets/js/pages/coin.js?v=20260807a"></script>
+</body>
+</html>

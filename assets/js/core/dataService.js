@@ -208,6 +208,26 @@ const DataService = (function () {
     return fetchJson(`${cfg.goldProvider.baseUrl}/prices`, T_FAST);
   }
 
+  // ---- Crypto -----------------------------------------------------------
+  // getCryptoPrices  {updatedAt, source:"CoinGecko"|"Binance", note?, items:[
+  //                   {id, symbol, name, image, vnd, usd, change24h, marketCap}]}
+  //                  vnd = null khi Binance (dự phòng) trả lời — nó không có
+  //                  giá VND và không được suy ra từ tỷ giá nguồn khác.
+  // getCryptoHistory {source, currency:"VND", id, items:[{date, price}]}
+  //                  Tối đa 365 ngày; gói free của CoinGecko không cho hơn.
+  // searchCoins      [{id, symbol, name, rank}] — id là slug, không phải ticker.
+  function getCryptoPrices(ids) {
+    return fetchJson(`${cfg.cryptoProvider.baseUrl}/prices?ids=${encodeURIComponent((ids || []).join(","))}`, T_FAST);
+  }
+
+  function getCryptoHistory(id, days) {
+    return fetchJson(`${cfg.cryptoProvider.baseUrl}/history?id=${encodeURIComponent(id)}&days=${days}`, T_HISTORY);
+  }
+
+  function searchCoins(q) {
+    return fetchJson(`${cfg.cryptoProvider.baseUrl}/search?q=${encodeURIComponent(q)}`, T_FAST);
+  }
+
   // ---- SSI account (read-only) ----------------------------------------
   // Never falls back to mock: showing invented holdings would be worse than
   // showing nothing. Errors propagate so the UI can ask for a PIN/OTP.
@@ -248,6 +268,9 @@ const DataService = (function () {
     getFxRates,
     getFxHistory,
     getGoldPrices,
+    getCryptoPrices,
+    getCryptoHistory,
+    searchCoins,
     getAccountPortfolio,
     requestAccountOtp,
     loginAccount,

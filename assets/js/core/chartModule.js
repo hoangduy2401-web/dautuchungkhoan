@@ -222,6 +222,14 @@ const ChartModule = (function () {
    *              would wipe a trendline/ruler under the user every 45 seconds.
    *              Anchors stay valid as long as the key is unchanged.
    */
+  // CẢNH BÁO — Lightweight Charts KHÔNG VẼ series khi giá trị quá lớn.
+  // Đo 07/08/2026 với giá coin theo VND: 1,68e6 vẽ bình thường, 1,68e9 thì trục,
+  // thang giá và nhãn giá cuối đều đúng nhưng ĐƯỜNG KHÔNG XUẤT HIỆN, không có
+  // lỗi console nào. Chia cùng chuỗi đó cho 1000 là hiện lại ngay.
+  // Đổi `priceFormat.minMove` KHÔNG cứu được (đã thử minMove=1000) — giới hạn
+  // nằm ở độ lớn giá trị, không phải số bước giá.
+  // → Trang nào có giá lớn phải TỰ CHIA BẬC trước khi gọi setData và ghi đơn vị
+  //   lên nhãn (xem `pages/coin.js`, hàm chartScaleFor).
   function setData(ohlcv, key) {
     const sameDataset = key != null && key === dataKey;
     dataKey = key != null ? key : null;
@@ -230,6 +238,7 @@ const ChartModule = (function () {
     // No `open` on the first bar => index data (close only). Detected from the
     // payload rather than passed in, so every existing call site keeps working.
     const isLine = ohlcv.length > 0 && ohlcv[0].open == null;
+
     candleSeries.applyOptions({ visible: !isLine });
     lineSeries.applyOptions({ visible: isLine });
     if (isLine) {

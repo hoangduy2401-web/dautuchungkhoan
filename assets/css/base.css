@@ -586,6 +586,19 @@ tr:hover td { background: var(--surface-hover); }
   .hold-table .col-rate { display: none; }
 }
 
+/* Khung bieu do Lightweight Charts. Dung chung trang chung khoan / ngoai te /
+   coin — de rieng o chung-khoan.css thi trang khac mat .trend-overlay
+   position:absolute va lop canvas phu roi xuong duoi, day chart-stack cao
+   gap doi (do 07/08/2026: 524px thay vi 260px). */
+/* Chart nam thang tren mat the — khong khung, khong nen rieng */
+.chart-stack { position: relative; height: 260px; margin-top: 4px; }
+.chart-wrap { height: 260px; overflow: hidden; position: relative; }
+/* Transparent to the mouse unless a drawing tool is armed — otherwise the
+   overlay swallows every wheel/drag and the chart cannot be zoomed or panned.
+   chartModule flips pointer-events to `auto` while trendline/ruler is active. */
+.trend-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; cursor: default; }
+.chart-wrap-rsi { height: 90px; margin-top: 6px; overflow: hidden; }
+
 /* ============================================================
    TRANG TONG — layout mot cot (tam thoi, GD 0)
    ============================================================ */

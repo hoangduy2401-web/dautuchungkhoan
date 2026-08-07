@@ -1,0 +1,107 @@
+/* ============================================================
+   COIN — CSS riêng của trang. Bảng, nhãn nguồn, form danh mục và ô sửa tại chỗ
+   dùng chung ở base.css (khối "TRANG TAI SAN"); ở đây chỉ có layout và những
+   thứ chỉ trang này có.
+   ============================================================ */
+
+.main-grid-coin {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 16px 20px 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "watch chart"
+    "port  port";
+  align-items: start;
+  gap: 16px;
+}
+.main-grid-coin > .panel:nth-child(1) { grid-area: watch; }
+.main-grid-coin > .panel:nth-child(2) { grid-area: chart; }
+.main-grid-coin > .panel:nth-child(3) { grid-area: port; }
+
+/* Nguồn dự phòng đang trả lời = giá của sàn khác VÀ thiếu cột VND. Phải nói ra,
+   nên dải này cố ý nổi. */
+.coin-fallback {
+  margin: 12px 0 0; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-orange);
+  font-size: var(--text-2xs); font-weight: 600;
+}
+.coin-fallback[hidden] { display: none; }
+
+/* ---- Thêm coin ---- */
+.coin-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 12px 0 8px; }
+.coin-results {
+  display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px;
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 6px;
+}
+.coin-results[hidden] { display: none; }
+.coin-result {
+  text-align: left; background: none; border: none; cursor: pointer;
+  color: var(--text-secondary); font-family: inherit; font-size: var(--text-xs);
+  padding: 6px 8px; border-radius: var(--radius-sm);
+}
+.coin-result:hover { background: var(--surface-hover); color: var(--text-primary); }
+.coin-result strong { color: var(--text-primary); margin-right: 6px; }
+.coin-result .rank { color: var(--text-tertiary); font-size: var(--text-2xs); margin-left: 6px; }
+.coin-result-msg { font-size: var(--text-2xs); color: var(--text-tertiary); padding: 6px 8px; }
+
+/* ---- Bảng theo dõi ---- */
+.coin-table tbody tr { cursor: pointer; }
+.coin-cell { display: flex; align-items: center; gap: 8px; }
+.coin-logo { width: 20px; height: 20px; border-radius: 999px; flex: 0 0 20px; }
+.coin-logo.ph { background: var(--surface-hover); display: inline-block; }
+.coin-names { display: flex; flex-direction: column; line-height: 1.25; }
+.coin-names small { color: var(--text-tertiary); font-size: var(--text-2xs); }
+
+/* ---- Biểu đồ ---- */
+.coin-chart-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin: 12px 0 6px;
+}
+.coin-chart-title { font-size: var(--text-md); font-weight: 700; }
+.coin-chart-unit { font-size: var(--text-2xs); color: var(--accent-orange); font-weight: 600; }
+.coin-chart-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.coin-chart-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px; margin-bottom: 8px;
+}
+.coin-chart-stats .stat {
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.coin-chart-stats .label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.coin-chart-stats .val { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+.coin-chart-stats .muted { color: var(--text-tertiary); font-size: var(--text-2xs); }
+
+.coin-note {
+  margin: 12px 0 0; font-size: var(--text-2xs); line-height: 1.6; color: var(--text-secondary);
+}
+.coin-note strong { color: var(--text-primary); }
+
+/* ---- Danh mục ---- */
+.coin-hold-form {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 1.3fr) 150px auto;
+}
+
+@media (max-width: 1040px) {
+  .main-grid-coin {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "chart" "watch" "port";
+  }
+}
+@media (max-width: 860px) {
+  /* Nhồi 5 ô vào một hàng thì mọi ô đều hẹp tới mức nuốt placeholder. */
+  .coin-hold-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .coin-hold-form > :nth-child(1),
+  .coin-hold-form > :nth-child(3),
+  .coin-hold-form > button { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .main-grid-coin { padding-left: 14px; padding-right: 14px; }
+  /* Giá USD và vốn hoá là thông tin phụ; giá VND và 24h mới là thứ phải thấy ngay. */
+  .coin-table .col-usd, .coin-table .col-cap { display: none; }
+  .hold-table .col-date { display: none; }
+}

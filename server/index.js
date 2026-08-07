@@ -1111,6 +1111,297 @@ app.get("/api/gold/prices", async (req, res) => {
 });
 
 // ============================================================
+// CRYPTO — CoinGecko primary, Binance fallback.
+//
+// CoinGecko quotes VND directly, which is the whole reason it is the primary:
+// deriving VND by multiplying a USD price with an exchange rate would stack a
+// second source's error onto every number and leave it unlabelled.
+//
+// Binance only knows USDT pairs. So when the fallback answers, VND comes back
+// as null and the UI prints "—" — it does NOT get invented from a rate picked
+// off another endpoint (golden rule, CLAUDE.md §3).
+//
+// LIMIT: /market_chart on the free tier serves at most 365 days ("Your request
+// exceeds the allowed time range", HTTP 401 code 10012), so the coin chart has
+// the same 1M/3M/6M/1Y buttons as the FX page and no 5Y.
+// ============================================================
+const CG_BASE = process.env.COINGECKO_BASE || "https://api.coingecko.com/api/v3";
+const BINANCE_BASE = process.env.BINANCE_BASE || "https://api.binance.com/api/v3";
+const CRYPTO_TTL_MS = 60_000; // free tier is ~10-30 calls/min; 60s is plenty
+const CRYPTO_MAX_DAYS = 365;
+
+async function cgJson(path) {
+  const res = await fetchWithTimeout(`${CG_BASE}${path}`, { headers: { Accept: "application/json" } }, 12000);
+  if (!res.ok) {
+    // CoinGecko puts the useful part in a nested error_message (e.g. the
+    // 365-day limit); the HTTP status alone says nothing.
+    let detail = "";
+    try {
+      detail = String((await res.json())?.error?.status?.error_message || "").trim();
+    } catch {}
+    throw new Error(`CoinGecko HTTP ${res.status}${detail ? ` — ${detail}` : ""}`);
+  }
+  return res.json();
+}
+
+// /coins/markets carries name, symbol, logo, VND price, 24h change and market
+// cap in one call; /simple/price adds the USD leg. Two calls, both cached
+// together, rather than one call per currency per coin.
+async function computeCryptoFromCoinGecko(ids) {
+  const q = encodeURIComponent(ids.join(","));
+  const [markets, usd] = await Promise.all([
+    cgJson(`/coins/markets?vs_currency=vnd&ids=${q}&price_change_percentage=24h`),
+    cgJson(`/simple/price?ids=${q}&vs_currencies=usd`),
+  ]);
+  if (!Array.isArray(markets) || !markets.length) throw new Error("CoinGecko returned no rows");
+
+  const items = markets.map((c) => ({
+    id: c.id,
+    symbol: String(c.symbol || "").toUpperCase(),
+    name: c.name,
+    image: c.image || null,
+    vnd: Number.isFinite(c.current_price) ? c.current_price : null,
+    usd: Number.isFinite(usd?.[c.id]?.usd) ? usd[c.id].usd : null,
+    change24h: Number.isFinite(c.price_change_percentage_24h) ? c.price_change_percentage_24h : null,
+    marketCap: Number.isFinite(c.market_cap) ? c.market_cap : null,
+  }));
+  // Keep the caller's order: CoinGecko sorts by market cap, the user sorted by
+  // their own watchlist.
+  items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  return { updatedAt: new Date().toISOString(), source: "CoinGecko", items };
+}
+
+// Fallback. Binance speaks USDT pairs keyed by symbol, not by CoinGecko id, so
+// the mapping is symbol-based and anything it cannot resolve is simply absent.
+async function computeCryptoFromBinance(ids, symbolById) {
+  const symbols = ids.map((id) => symbolById[id]).filter(Boolean);
+  if (!symbols.length) throw new Error("Binance: no known symbol for these ids");
+
+  const pairs = symbols.map((s) => `"${s}USDT"`).join(",");
+  const res = await fetchWithTimeout(
+    `${BINANCE_BASE}/ticker/24hr?symbols=[${encodeURIComponent(pairs)}]`,
+    { headers: { Accept: "application/json" } },
+    10000
+  );
+  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+  const rows = await res.json();
+  if (!Array.isArray(rows) || !rows.length) throw new Error("Binance returned no rows");
+
+  const bySymbol = new Map(rows.map((r) => [String(r.symbol).replace(/USDT$/, ""), r]));
+  const items = ids
+    .map((id) => {
+      const sym = symbolById[id];
+      const r = sym && bySymbol.get(sym);
+      if (!r) return null;
+      return {
+        id,
+        symbol: sym,
+        name: sym,
+        image: null,
+        vnd: null, // Binance has no VND. Do NOT multiply by a rate from elsewhere.
+        usd: num(r.lastPrice) || null,
+        change24h: Number(r.priceChangePercent) || null,
+        marketCap: null,
+      };
+    })
+    .filter(Boolean);
+  if (!items.length) throw new Error("Binance: nothing matched");
+  return { updatedAt: new Date().toISOString(), source: "Binance", items };
+}
+
+// CoinGecko ids are slugs; CoinMarketCap and Binance both speak tickers. This is
+// the bridge, and it only covers the coins the dashboard ships with — a
+// user-added coin that CoinGecko knows and this map does not simply falls back
+// to CoinGecko, which is better than guessing its ticker.
+const CRYPTO_SYMBOLS = {
+  bitcoin: "BTC", ethereum: "ETH", tether: "USDT", binancecoin: "BNB",
+  solana: "SOL", ripple: "XRP", cardano: "ADA", dogecoin: "DOGE",
+  polkadot: "DOT", "matic-network": "MATIC", "avalanche-2": "AVAX",
+  chainlink: "LINK", tron: "TRX", litecoin: "LTC", "usd-coin": "USDC",
+};
+
+// ------------------------------------------------------------
+// CoinMarketCap — OPTIONAL, off unless CMC_API_KEY is set.
+//
+// Every CMC endpoint requires a key ("error_code": 1002, "API key missing",
+// HTTP 401 — measured 07/08/2026 without one), so this path stays dormant on a
+// fresh clone and CoinGecko keeps serving. The key lives ONLY in the Render
+// environment, never in config.js.
+//
+// Two limits worth knowing before trusting it:
+//   - CMC is keyed by TICKER, so it can only answer for coins in CRYPTO_SYMBOLS
+//     above. If any requested id is missing from that map this path is skipped
+//     entirely — a partial board would silently drop the user's own coins.
+//   - Whether the free (Basic) plan actually converts to VND is NOT verified —
+//     there is no key to test with. The code asks for USD,VND and, if CMC
+//     rejects the pair, retries with USD alone and leaves `vnd: null` so the UI
+//     prints "—". It never derives VND from an exchange rate off another
+//     endpoint (golden rule, CLAUDE.md §3).
+// ------------------------------------------------------------
+const CMC_BASE = process.env.CMC_BASE || "https://pro-api.coinmarketcap.com";
+const CMC_API_KEY = process.env.CMC_API_KEY || "";
+
+async function cmcQuotes(symbols, convert) {
+  const url =
+    `${CMC_BASE}/v1/cryptocurrency/quotes/latest` +
+    `?symbol=${encodeURIComponent(symbols.join(","))}&convert=${encodeURIComponent(convert)}`;
+  const res = await fetchWithTimeout(
+    url,
+    { headers: { Accept: "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY } },
+    12000
+  );
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.status?.error_message || `HTTP ${res.status}`;
+    const err = new Error(`CoinMarketCap: ${msg}`);
+    err.status = res.status;
+    throw err;
+  }
+  return json.data || {};
+}
+
+async function computeCryptoFromCmc(ids) {
+  const symbols = ids.map((id) => CRYPTO_SYMBOLS[id]);
+  if (symbols.some((s) => !s)) {
+    // Refuse the whole call rather than answer for part of the watchlist.
+    throw new Error("CoinMarketCap: chưa có mã ticker cho một số coin đang xem");
+  }
+
+  let data;
+  let hasVnd = true;
+  try {
+    data = await cmcQuotes(symbols, "USD,VND");
+  } catch (err) {
+    // A plan that will not convert to VND answers 400; USD alone still works.
+    if (!(err.status >= 400 && err.status < 500)) throw err;
+    console.warn("[crypto] CMC không nhận convert=VND:", err.message);
+    data = await cmcQuotes(symbols, "USD");
+    hasVnd = false;
+  }
+
+  const items = ids
+    .map((id) => {
+      const sym = CRYPTO_SYMBOLS[id];
+      const row = data[sym];
+      if (!row) return null;
+      const q = row.quote || {};
+      const vnd = hasVnd && Number.isFinite(q.VND?.price) ? q.VND.price : null;
+      const usd = Number.isFinite(q.USD?.price) ? q.USD.price : null;
+      return {
+        id,
+        symbol: sym,
+        name: row.name || sym,
+        image: null, // CMC only ships logos on a higher plan
+        vnd,
+        usd,
+        change24h: Number.isFinite(q.USD?.percent_change_24h) ? q.USD.percent_change_24h : null,
+        marketCap: Number.isFinite(q.VND?.market_cap) ? q.VND.market_cap : null,
+      };
+    })
+    .filter(Boolean);
+  if (!items.length) throw new Error("CoinMarketCap returned no rows");
+
+  return {
+    updatedAt: new Date().toISOString(),
+    source: "CoinMarketCap",
+    items,
+    ...(hasVnd
+      ? {}
+      : { note: "CoinMarketCap không trả giá VND cho gói hiện tại — cột VND để trống" }),
+  };
+}
+
+// CoinMarketCap (only when a key is configured) -> CoinGecko -> Binance.
+// Whichever answers is named in `source`, and a fallback also sets `note`: three
+// sources quote slightly different prices, so an unlabelled swap would look like
+// the market moved.
+async function computeCryptoPrices(ids) {
+  if (CMC_API_KEY) {
+    try {
+      return await computeCryptoFromCmc(ids);
+    } catch (err) {
+      console.warn("[crypto] CMC lỗi, thử CoinGecko:", err.message);
+    }
+  }
+
+  try {
+    return await computeCryptoFromCoinGecko(ids);
+  } catch (err) {
+    console.warn("[crypto] CoinGecko lỗi, thử Binance:", err.message);
+    const data = await computeCryptoFromBinance(ids, CRYPTO_SYMBOLS);
+    return {
+      ...data,
+      note: `CoinGecko lỗi (${err.message}), đang dùng Binance — chỉ có giá USD, không có giá VND`,
+    };
+  }
+}
+
+// GET /api/crypto/prices?ids=bitcoin,ethereum
+app.get("/api/crypto/prices", async (req, res) => {
+  const ids = String(req.query.ids || "bitcoin,ethereum")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 50); // one CoinGecko call has to stay one call
+  if (!ids.length) return res.status(400).json({ error: "missing_ids" });
+
+  try {
+    res.json(await withCache(`crypto:prices:${ids.join(",")}`, CRYPTO_TTL_MS, () => computeCryptoPrices(ids)));
+  } catch (err) {
+    console.error("[/api/crypto/prices]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// GET /api/crypto/history?id=bitcoin&days=90 — VND series, one point per day.
+app.get("/api/crypto/history", async (req, res) => {
+  const id = String(req.query.id || "").trim().toLowerCase();
+  const days = Number(req.query.days) || 90;
+  if (!id) return res.status(400).json({ error: "missing_id" });
+  // Refuse rather than silently shorten — same rule as /api/fx/history.
+  if (days > CRYPTO_MAX_DAYS) {
+    return res.status(400).json({ error: "range_too_long", maxDays: CRYPTO_MAX_DAYS });
+  }
+
+  try {
+    const data = await withCache(`crypto:history:${id}:${days}`, 30 * 60_000, async () => {
+      const raw = await cgJson(
+        `/coins/${encodeURIComponent(id)}/market_chart?vs_currency=vnd&days=${days}&interval=daily`
+      );
+      const items = (raw.prices || [])
+        .map(([ts, price]) => ({ date: new Date(ts).toISOString().slice(0, 10), price }))
+        .filter((p) => Number.isFinite(p.price));
+      if (!items.length) throw new Error(`no data for ${id}`);
+      return { source: "CoinGecko", currency: "VND", id, items };
+    });
+    res.json(data);
+  } catch (err) {
+    console.error("[/api/crypto/history]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// GET /api/crypto/search?q=sol — resolve a ticker the user typed into a
+// CoinGecko id. Needed because ids are slugs ("matic-network"), not tickers.
+app.get("/api/crypto/search", async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (q.length < 2) return res.status(400).json({ error: "query_too_short" });
+
+  try {
+    const data = await withCache(`crypto:search:${q.toLowerCase()}`, 10 * 60_000, async () => {
+      const raw = await cgJson(`/search?query=${encodeURIComponent(q)}`);
+      return (raw.coins || [])
+        .slice(0, 10)
+        .map((c) => ({ id: c.id, symbol: String(c.symbol || "").toUpperCase(), name: c.name, rank: c.market_cap_rank ?? null }));
+    });
+    res.json(data);
+  } catch (err) {
+    console.error("[/api/crypto/search]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
 // SSI FastConnect TRADING — READ ONLY (phase 1).
 // Separate host and separate credentials from FCData. Nothing here can
 // place, modify or cancel an order: those need an RSA-SHA256 signature
