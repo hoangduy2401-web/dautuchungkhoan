@@ -392,6 +392,14 @@ async function loadChart() {
     const items = Array.isArray(d.items) ? d.items : [];
     if (!items.length) throw new Error("chuỗi rỗng");
 
+    // Nhãn nguồn của biểu đồ đổi theo đường nào trả lời: CoinGecko báo giá VND
+    // trực tiếp, còn Binance là giá USD đã quy đổi — hai loại số khác nhau.
+    document.getElementById("coinChartSource").textContent = d.source || "—";
+    document.getElementById("coinNote").innerHTML = d.note
+      ? `${escapeHtml(d.note)}. Gói miễn phí chỉ có 1 năm lịch sử nên không có khung 5 năm.`
+      : "Giá theo <strong>VND</strong> lấy thẳng từ nguồn, không nhân tỷ giá. " +
+        "Gói miễn phí chỉ có 1 năm lịch sử nên không có khung 5 năm.";
+
     const scale = chartScaleFor(items.map((p) => p.price));
     // Không có OHLC — ChartModule tự nhận ra và vẽ đường khi thiếu `open`.
     const bars = items.map((p) => ({ date: p.date, close: p.price / scale.div, volume: 0 }));

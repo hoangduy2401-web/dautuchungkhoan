@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260807a" />
-<link rel="stylesheet" href="assets/css/coin.css?v=20260807a" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260807b" />
+<link rel="stylesheet" href="assets/css/coin.css?v=20260807b" />
 </head>
 <body>
 
@@ -73,7 +73,7 @@
     <div class="panel">
       <div class="panel-head">
         <h2>Biểu đồ giá</h2>
-        <span class="src-badge alt">CoinGecko · giá VND</span>
+        <span class="src-badge alt" id="coinChartSource">—</span>
       </div>
       <div class="panel-body">
         <div class="coin-chart-head">
@@ -92,9 +92,7 @@
         </div>
         <!-- ChartModule always builds an RSI pane; hidden here like on the FX page. -->
         <div class="chart-wrap-rsi" id="rsiChartContainer"></div>
-        <p class="coin-note">
-          Giá theo <strong>VND</strong> lấy thẳng từ nguồn, không nhân tỷ giá —
-          nhân thêm một tỷ giá là chồng thêm sai số của nguồn thứ hai lên mọi con số.
+        <p class="coin-note" id="coinNote">
           Gói miễn phí chỉ có 1 năm lịch sử nên không có khung 5 năm.
         </p>
       </div>
@@ -145,13 +143,13 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="assets/js/core/config.js?v=20260807a"></script>
-  <script src="assets/js/core/store.js?v=20260807a"></script>
-  <script src="assets/js/core/theme.js?v=20260807a"></script>
-  <script src="assets/js/core/nav.js?v=20260807a"></script>
-  <script src="assets/js/core/mockData.js?v=20260807a"></script>
-  <script src="assets/js/core/dataService.js?v=20260807a"></script>
-  <script src="assets/js/core/chartModule.js?v=20260807a"></script>
-  <script src="assets/js/pages/coin.js?v=20260807a"></script>
+  <script src="assets/js/core/config.js?v=20260807b"></script>
+  <script src="assets/js/core/store.js?v=20260807b"></script>
+  <script src="assets/js/core/theme.js?v=20260807b"></script>
+  <script src="assets/js/core/nav.js?v=20260807b"></script>
+  <script src="assets/js/core/mockData.js?v=20260807b"></script>
+  <script src="assets/js/core/dataService.js?v=20260807b"></script>
+  <script src="assets/js/core/chartModule.js?v=20260807b"></script>
+  <script src="assets/js/pages/coin.js?v=20260807b"></script>
 </body>
 </html>
