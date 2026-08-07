@@ -1171,42 +1171,98 @@ async function computeCryptoFromCoinGecko(ids) {
   return { updatedAt: new Date().toISOString(), source: "CoinGecko", items };
 }
 
-// Fallback. Binance speaks USDT pairs keyed by symbol, not by CoinGecko id, so
-// the mapping is symbol-based and anything it cannot resolve is simply absent.
+// USD/VND used to price coins in đồng. The interbank mid rate, NOT Vietcombank's
+// retail board: a coin price is a market price, so pairing it with a retail rate
+// that carries a buy/sell spread would mix two different kinds of number.
+// Reuses the FX timeseries this server already caches — no extra upstream.
+async function usdVndSeries() {
+  const byDate = await fxTimeseries(365);
+  const out = new Map();
+  for (const [date, vals] of byDate) {
+    if (Number.isFinite(vals.VND)) out.set(date, vals.VND);
+  }
+  if (!out.size) throw new Error("không lấy được tỷ giá USD/VND");
+  return out;
+}
+
+// Latest available rate. The series ends yesterday (the FX source closes daily),
+// so today's coin prices are converted at yesterday's rate — the payload says so
+// and the page prints it.
+async function latestUsdVnd() {
+  const series = await usdVndSeries();
+  const lastDate = [...series.keys()].sort().pop();
+  return { rate: series.get(lastDate), rateDate: lastDate };
+}
+
+// Binance speaks USDT pairs keyed by ticker, not by CoinGecko id, so the mapping
+// is symbol-based and anything it cannot resolve is simply absent.
 async function computeCryptoFromBinance(ids, symbolById) {
   const symbols = ids.map((id) => symbolById[id]).filter(Boolean);
   if (!symbols.length) throw new Error("Binance: no known symbol for these ids");
 
-  const pairs = symbols.map((s) => `"${s}USDT"`).join(",");
-  const res = await fetchWithTimeout(
-    `${BINANCE_BASE}/ticker/24hr?symbols=[${encodeURIComponent(pairs)}]`,
-    { headers: { Accept: "application/json" } },
-    10000
-  );
-  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-  const rows = await res.json();
-  if (!Array.isArray(rows) || !rows.length) throw new Error("Binance returned no rows");
+  // USDT là chính vế báo giá nên KHÔNG có cặp "USDTUSDT". Để nó lọt vào danh
+  // sách thì Binance trả HTTP 400 cho CẢ LÔ, mất luôn giá của mọi coin khác.
+  // Giá USD của nó lấy bằng 1 theo định nghĩa của cặp.
+  const quotable = symbols.filter((s) => s !== "USDT");
+  let rows = [];
+  if (quotable.length) {
+    // Binance muốn một mảng JSON và toàn bộ giá trị phải được URL-encode, kể cả
+    // hai dấu ngoặc vuông — encode mỗi phần bên trong thì nó trả HTTP 400.
+    const pairs = JSON.stringify(quotable.map((s) => `${s}USDT`));
+    const res = await fetchWithTimeout(
+      `${BINANCE_BASE}/ticker/24hr?symbols=${encodeURIComponent(pairs)}`,
+      { headers: { Accept: "application/json" } },
+      10000
+    );
+    if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+    rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error("Binance returned no rows");
+  }
+
+  // Binance quotes USDT only. VND comes from this server's own FX rate, and the
+  // payload carries the rate + its date so the page can label it — a converted
+  // number under no label reads as a directly quoted one.
+  let rate = null;
+  let rateDate = null;
+  try {
+    ({ rate, rateDate } = await latestUsdVnd());
+  } catch (err) {
+    console.warn("[crypto] không có tỷ giá USD/VND:", err.message);
+  }
 
   const bySymbol = new Map(rows.map((r) => [String(r.symbol).replace(/USDT$/, ""), r]));
   const items = ids
     .map((id) => {
       const sym = symbolById[id];
+      if (sym === "USDT") {
+        return {
+          id, symbol: sym, name: CRYPTO_NAMES.USDT, image: null,
+          vnd: rate || null, usd: 1, change24h: null, marketCap: null,
+        };
+      }
       const r = sym && bySymbol.get(sym);
       if (!r) return null;
+      const usd = num(r.lastPrice) || null;
       return {
         id,
         symbol: sym,
-        name: sym,
+        name: CRYPTO_NAMES[sym] || sym,
         image: null,
-        vnd: null, // Binance has no VND. Do NOT multiply by a rate from elsewhere.
-        usd: num(r.lastPrice) || null,
+        // null, không phải 0, khi thiếu tỷ giá — UI hiện "—".
+        vnd: usd !== null && rate ? usd * rate : null,
+        usd,
         change24h: Number(r.priceChangePercent) || null,
         marketCap: null,
       };
     })
     .filter(Boolean);
   if (!items.length) throw new Error("Binance: nothing matched");
-  return { updatedAt: new Date().toISOString(), source: "Binance", items };
+  return {
+    updatedAt: new Date().toISOString(),
+    source: "Binance",
+    vndFrom: rate ? { rate, rateDate, source: "FXRatesAPI (liên ngân hàng)" } : null,
+    items,
+  };
 }
 
 // CoinGecko ids are slugs; CoinMarketCap and Binance both speak tickers. This is
@@ -1218,7 +1274,41 @@ const CRYPTO_SYMBOLS = {
   solana: "SOL", ripple: "XRP", cardano: "ADA", dogecoin: "DOGE",
   polkadot: "DOT", "matic-network": "MATIC", "avalanche-2": "AVAX",
   chainlink: "LINK", tron: "TRX", litecoin: "LTC", "usd-coin": "USDC",
+  "shiba-inu": "SHIB", uniswap: "UNI", "cosmos": "ATOM", stellar: "XLM",
+  "near": "NEAR", aptos: "APT", arbitrum: "ARB", optimism: "OP",
+  "internet-computer": "ICP", filecoin: "FIL", "hedera-hashgraph": "HBAR",
+  vechain: "VET", "the-graph": "GRT", algorand: "ALGO", aave: "AAVE",
+  "injective-protocol": "INJ", sui: "SUI", sei: "SEI", "pepe": "PEPE",
+  "bitcoin-cash": "BCH", "ethereum-classic": "ETC", monero: "XMR",
+  "render-token": "RNDR", "immutable-x": "IMX", "lido-dao": "LDO",
 };
+
+// Tên tiếng Anh để hiện trong ô tìm kiếm khi CoinGecko không trả lời.
+const CRYPTO_NAMES = {
+  BTC: "Bitcoin", ETH: "Ethereum", USDT: "Tether", BNB: "BNB", SOL: "Solana",
+  XRP: "XRP", ADA: "Cardano", DOGE: "Dogecoin", DOT: "Polkadot",
+  MATIC: "Polygon", AVAX: "Avalanche", LINK: "Chainlink", TRX: "TRON",
+  LTC: "Litecoin", USDC: "USD Coin", SHIB: "Shiba Inu", UNI: "Uniswap",
+  ATOM: "Cosmos", XLM: "Stellar", NEAR: "NEAR Protocol", APT: "Aptos",
+  ARB: "Arbitrum", OP: "Optimism", ICP: "Internet Computer", FIL: "Filecoin",
+  HBAR: "Hedera", VET: "VeChain", GRT: "The Graph", ALGO: "Algorand",
+  AAVE: "Aave", INJ: "Injective", SUI: "Sui", SEI: "Sei", PEPE: "Pepe",
+  BCH: "Bitcoin Cash", ETC: "Ethereum Classic", XMR: "Monero",
+  RNDR: "Render", IMX: "Immutable", LDO: "Lido DAO",
+};
+
+// Tìm trong bảng trên, không gọi mạng. Dùng khi CoinGecko không trả lời — mà ở
+// Render thì đó là mọi lúc (429 theo IP, xem đầu mục này).
+function searchLocalCoins(q) {
+  const needle = q.trim().toLowerCase();
+  return Object.entries(CRYPTO_SYMBOLS)
+    .filter(([id, sym]) => {
+      const name = CRYPTO_NAMES[sym] || sym;
+      return id.includes(needle) || sym.toLowerCase().includes(needle) || name.toLowerCase().includes(needle);
+    })
+    .slice(0, 10)
+    .map(([id, sym]) => ({ id, symbol: sym, name: CRYPTO_NAMES[sym] || sym, rank: null }));
+}
 
 // ------------------------------------------------------------
 // CoinMarketCap — OPTIONAL, off unless CMC_API_KEY is set.
@@ -1315,6 +1405,48 @@ async function computeCryptoFromCmc(ids) {
 // Whichever answers is named in `source`, and a fallback also sets `note`: three
 // sources quote slightly different prices, so an unlabelled swap would look like
 // the market moved.
+// Lịch sử giá theo VND, đường dự phòng khi CoinGecko không trả lời.
+// Binance /klines cho giá USDT theo ngày; nhân với tỷ giá USD/VND CỦA CHÍNH
+// NGÀY ĐÓ (không phải tỷ giá hôm nay) — dùng một tỷ giá duy nhất cho cả năm sẽ
+// bóp méo hình dạng đường, biến biến động tỷ giá thành biến động giá coin.
+async function computeCryptoHistoryFromBinance(id, days) {
+  const sym = CRYPTO_SYMBOLS[id];
+  if (!sym) throw new Error(`Binance: chưa có mã ticker cho ${id}`);
+
+  const url = `${BINANCE_BASE}/klines?symbol=${encodeURIComponent(sym)}USDT&interval=1d&limit=${Math.min(days + 1, 1000)}`;
+  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 12000);
+  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+  const rows = await res.json();
+  if (!Array.isArray(rows) || !rows.length) throw new Error(`Binance: không có dữ liệu cho ${sym}`);
+
+  const rates = await usdVndSeries();
+  const dates = [...rates.keys()].sort();
+  const items = [];
+  for (const k of rows) {
+    // [openTime, open, high, low, close, ...] — lấy giá đóng cửa.
+    const date = new Date(Number(k[0])).toISOString().slice(0, 10);
+    const usd = Number(k[4]);
+    if (!Number.isFinite(usd)) continue;
+    // Cuối tuần thị trường ngoại hối đóng nên không có tỷ giá của đúng ngày đó;
+    // lấy tỷ giá gần nhất TRƯỚC đó thay vì bỏ điểm — coin giao dịch 24/7.
+    let rate = rates.get(date);
+    if (!rate) {
+      const prev = dates.filter((d) => d <= date).pop();
+      rate = prev ? rates.get(prev) : null;
+    }
+    if (!rate) continue;
+    items.push({ date, price: usd * rate });
+  }
+  if (!items.length) throw new Error(`Binance: không ghép được tỷ giá cho ${sym}`);
+  return {
+    source: "Binance × tỷ giá liên ngân hàng",
+    currency: "VND",
+    id,
+    note: "Giá USD của Binance nhân tỷ giá USD/VND cùng ngày",
+    items,
+  };
+}
+
 async function computeCryptoPrices(ids) {
   if (CMC_API_KEY) {
     try {
@@ -1331,7 +1463,9 @@ async function computeCryptoPrices(ids) {
     const data = await computeCryptoFromBinance(ids, CRYPTO_SYMBOLS);
     return {
       ...data,
-      note: `CoinGecko lỗi (${err.message}), đang dùng Binance — chỉ có giá USD, không có giá VND`,
+      note: data.vndFrom
+        ? `Giá USD từ Binance, quy đổi VND theo tỷ giá liên ngân hàng ngày ${data.vndFrom.rateDate}`
+        : `CoinGecko lỗi (${err.message}), đang dùng Binance — chưa có tỷ giá nên cột VND để trống`,
     };
   }
 }
@@ -1365,14 +1499,19 @@ app.get("/api/crypto/history", async (req, res) => {
 
   try {
     const data = await withCache(`crypto:history:${id}:${days}`, 30 * 60_000, async () => {
-      const raw = await cgJson(
-        `/coins/${encodeURIComponent(id)}/market_chart?vs_currency=vnd&days=${days}&interval=daily`
-      );
-      const items = (raw.prices || [])
-        .map(([ts, price]) => ({ date: new Date(ts).toISOString().slice(0, 10), price }))
-        .filter((p) => Number.isFinite(p.price));
-      if (!items.length) throw new Error(`no data for ${id}`);
-      return { source: "CoinGecko", currency: "VND", id, items };
+      try {
+        const raw = await cgJson(
+          `/coins/${encodeURIComponent(id)}/market_chart?vs_currency=vnd&days=${days}&interval=daily`
+        );
+        const items = (raw.prices || [])
+          .map(([ts, price]) => ({ date: new Date(ts).toISOString().slice(0, 10), price }))
+          .filter((p) => Number.isFinite(p.price));
+        if (!items.length) throw new Error(`no data for ${id}`);
+        return { source: "CoinGecko", currency: "VND", id, items };
+      } catch (err) {
+        console.warn("[crypto] CoinGecko history lỗi, thử Binance:", err.message);
+        return computeCryptoHistoryFromBinance(id, days);
+      }
     });
     res.json(data);
   } catch (err) {
@@ -1389,10 +1528,18 @@ app.get("/api/crypto/search", async (req, res) => {
 
   try {
     const data = await withCache(`crypto:search:${q.toLowerCase()}`, 10 * 60_000, async () => {
-      const raw = await cgJson(`/search?query=${encodeURIComponent(q)}`);
-      return (raw.coins || [])
-        .slice(0, 10)
-        .map((c) => ({ id: c.id, symbol: String(c.symbol || "").toUpperCase(), name: c.name, rank: c.market_cap_rank ?? null }));
+      try {
+        const raw = await cgJson(`/search?query=${encodeURIComponent(q)}`);
+        const rows = (raw.coins || [])
+          .slice(0, 10)
+          .map((c) => ({ id: c.id, symbol: String(c.symbol || "").toUpperCase(), name: c.name, rank: c.market_cap_rank ?? null }));
+        if (rows.length) return rows;
+      } catch (err) {
+        console.warn("[crypto] CoinGecko search lỗi, tìm trong bảng nội bộ:", err.message);
+      }
+      // Bảng nội bộ chỉ có ~40 coin. Ít hơn CoinGecko rất nhiều, nhưng mọi mã
+      // trong đó chắc chắn định giá được ở cả hai đường nguồn.
+      return searchLocalCoins(q);
     });
     res.json(data);
   } catch (err) {

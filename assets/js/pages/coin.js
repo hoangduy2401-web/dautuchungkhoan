@@ -15,6 +15,7 @@ const coinState = {
   items: [], // [{id, symbol, name, image, vnd, usd, change24h, marketCap}]
   source: null,
   note: null,
+  vndFrom: null, // có khi giá VND là QUY ĐỔI từ USD chứ không phải giá gốc
   selected: null,
   range: 90,
   holdings: [],
@@ -148,6 +149,7 @@ async function loadPrices() {
     coinState.items = Array.isArray(d.items) ? d.items : [];
     coinState.source = d.source || null;
     coinState.note = d.note || null;
+    coinState.vndFrom = d.vndFrom || null;
     renderSource();
     renderTable();
     fillHoldCoins();
@@ -161,7 +163,10 @@ async function loadPrices() {
 }
 
 function renderSource() {
-  document.getElementById("coinSource").textContent = coinState.source || "—";
+  // Giá VND quy đổi từ USD là con số khác loại với giá VND báo trực tiếp — nhãn
+  // phải nói ra, nếu không user so với sàn khác rồi tưởng hệ thống lệch.
+  const via = coinState.vndFrom ? " · VND quy đổi" : "";
+  document.getElementById("coinSource").textContent = (coinState.source || "—") + via;
   // Nguồn dự phòng = giá của sàn khác và thiếu cột VND. Phải nói ra.
   const fb = document.getElementById("coinFallback");
   fb.textContent = coinState.note || "";
