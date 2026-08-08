@@ -22,7 +22,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260808a`** (đã kiểm: 56 chỗ trong 6 file HTML, bản live
+Cache busting hiện **`?v=20260808b`** (đã kiểm: 56 chỗ trong 6 file HTML, bản live
 cũng đang phục vụ đúng chuỗi này).
 
 ---
@@ -82,7 +82,10 @@ danh mục SSI thật (chỉ đọc), lịch sử giao dịch cá nhân tính l�
   đọc/ghi qua `Store`. Danh sách rỗng: tôn trọng, không tự nạp lại seed.
 - **Ngôn ngữ thiết kế: Fey design system** (từ 03/08/2026, xem mục 9). Bề mặt
   PHẲNG ĐỤC, font Roboto, accent cam `#f0a94e` (tối) / `#b9740a` (sáng), radius
-  16, viền hairline. Theme Sáng/Tối qua `[data-theme]`, **mặc định TỐI**.
+  16, viền hairline. Theme Sáng/Tối qua `[data-theme]`, **mặc định SÁNG** (đổi
+  từ TỐI ngày 08/08/2026 theo yêu cầu user). Mặc định nằm ở `data-theme` của
+  thẻ `<html>` **trong từng trang** — sửa một chỗ không đủ, phải sửa cả 6 file
+  HTML, nếu không mỗi trang mở ra một màu. `theme.js` chỉ là lưới an toàn.
   **Đừng phục hồi Liquid Glass**: aurora blob, `backdrop-filter`, slider
   Trong/Đục và biến `--glass-a` đã bỏ có chủ đích — design nguồn quy định bề mặt
   đục hoàn toàn. Bản mock kính cũ vẫn xem được ở `/mock-liquid-glass.html`.
@@ -196,6 +199,8 @@ GET /api/price/indices
    value: điểm (KHÔNG chia 1000) · totalVol: cổ phiếu · totalVal: VND (thô)
    advances/declines/noChanges: SỐ MÃ, hoặc null khi SSI không có (xem mục 7)
    ceilings/floors: số mã trần/sàn — ĐI THEO BỘ với advances, null cùng lúc
+   tradingDate: NGÀY CỦA PHIÊN đang báo cáo. Cuối tuần/ngày nghỉ SSI vẫn trả
+     phiên gần nhất đã đóng — đừng coi nó là hôm nay (xem mục 7)
 
 GET /api/price/quote?symbol=X
 → { price, changePct, volume, netForeignVal }
@@ -341,6 +346,26 @@ bấm tab thị trường **trước** khi mở accordion nên chưa lộ.
 
 **Cách sửa.** Quét `[data-pane]` thay cho `.mtab-pane`. Luật chung: **chọn theo
 thuộc tính dữ liệu, đừng chọn theo class trình bày** khi class đó cố ý dùng chung.
+
+### Cuối tuần, SSI vẫn trả phiên gần nhất — đừng coi đó là hôm nay (08/08/2026)
+
+**Triệu chứng.** Tab Tổng quan thị trường hiện "Khối lượng phiên **+0,0%**", kỳ
+này và kỳ trước là hai con số y hệt (647,7 triệu).
+
+**Nguyên nhân.** Hôm đó là **thứ Bảy**. `/api/price/indices` vẫn trả dòng của
+phiên thứ Sáu — SSI không trả rỗng ngày nghỉ. Client lấy "hôm nay" làm mốc, lọc
+lịch sử theo `date !== hôm nay`, nên phiên thứ Sáu **vẫn nằm trong lịch sử** và
+trở thành "phiên trước" của chính nó.
+
+**Cách sửa.** `/api/price/indices` trả thêm **`tradingDate`** (ngày của dòng
+đang báo cáo). Client so theo `tradingDate` chứ không theo lịch máy: lọc
+`date < tradingDate`, và nhãn ghi rõ "phiên 07-08 so với 06-08" thay vì "hôm
+nay so với phiên trước". Ngày nghỉ thì ghi chú đổi thành "Thị trường đang nghỉ
+— số liệu là của phiên …".
+
+**Lưu ý:** đây là lỗi THỨ HAI cùng họ. Lần trước (07/08) là HNX trả dòng hôm
+nay ngay trong phiên. Luật chung: **mốc thời gian phải lấy từ payload, đừng lấy
+từ đồng hồ máy.**
 
 ### Lightweight Charts — hai cách làm biểu đồ không vẽ được (07/08/2026)
 
@@ -652,7 +677,7 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260808a`. Nhánh `main` sạch, đã push, backend đã deploy bản
+Cache busting `?v=20260808b`. Nhánh `main` sạch, đã push, backend đã deploy bản
 mới nhất (đã kiểm 08/08 trên Render: `/api/fx/*`, `/api/gold/prices`,
 `/api/crypto/*` từ Binance kèm tỷ giá quy đổi, `/api/savings/rates` 29 ngân hàng).
 

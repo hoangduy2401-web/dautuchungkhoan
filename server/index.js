@@ -426,6 +426,11 @@ async function computeIndices() {
 
     items.push({
       code: uiCode,
+      // Ngày của phiên đang được báo cáo. Cuối tuần và ngày nghỉ, SSI vẫn trả
+      // dòng của phiên GẦN NHẤT ĐÃ ĐÓNG chứ không trả rỗng — không có trường
+      // này thì client tưởng đó là phiên hôm nay và đem so với chính nó (đo
+      // 08/08/2026, thứ Bảy: bảng hiện +0,0% với hai con số y hệt).
+      tradingDate: newest.date || null,
       // Index values are already in points, do NOT divide by 1000.
       value: Math.round(value * 100) / 100,
       changePct,

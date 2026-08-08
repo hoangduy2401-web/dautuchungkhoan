@@ -820,15 +820,17 @@ function wireSignalTab() {
 async function ensureOvHistory(code) {
   if (state.ovVolHistory[code]) return state.ovVolHistory[code];
   const rows = await DataService.getIndexHistory(code, 30);
-  const today = vnToday();
-  state.ovVolHistory[code] = (rows || []).filter(
-    // Bỏ dòng CỦA HÔM NAY. `/index-history` thường bỏ sẵn dòng đang hình thành
-    // (IndexValue=0), nhưng không phải sàn nào cũng vậy: HNX trả dòng hôm nay
-    // kèm giá trị thật ngay trong phiên, và khi đó "phiên trước" hoá ra chính
-    // là hôm nay — bảng hiện +0,0% với hai con số y hệt (đo 07/08/2026).
-    (r) => r.date !== today && Number.isFinite(r.volume) && r.volume > 0
-  );
+  state.ovVolHistory[code] = (rows || []).filter((r) => Number.isFinite(r.volume) && r.volume > 0);
   return state.ovVolHistory[code];
+}
+
+// Mốc "phiên hiện tại" là NGÀY CỦA PHIÊN đang báo cáo, không phải hôm nay.
+// Cuối tuần và ngày nghỉ, SSI vẫn trả dòng của phiên gần nhất đã đóng: lấy hôm
+// nay làm mốc thì "phiên trước" hoá ra chính phiên đó và bảng hiện +0,0% với
+// hai con số y hệt (đo 08/08/2026, thứ Bảy). Cùng lỗi từng gặp với HNX trong
+// phiên, nhưng nguyên nhân khác nên phải chặn bằng ngày của chính payload.
+function ovSessionDate(idx) {
+  return (idx && idx.tradingDate) || vnToday();
 }
 
 // Ngày hiện tại theo giờ Việt Nam. `toISOString()` trả ngày UTC, lệch một ngày
@@ -917,8 +919,12 @@ async function renderOverview() {
       .catch((err) => console.warn("[overview] lịch sử KL lỗi:", err.message));
   }
 
+  const sessionDate = ovSessionDate(idx);
   const todayVol = idx && Number.isFinite(idx.totalVol) ? idx.totalVol : null;
-  const prevVol = hist && hist.length ? hist[hist.length - 1].volume : null;
+  // Chỉ giữ các phiên TRƯỚC phiên đang báo cáo.
+  const past = hist ? hist.filter((r) => r.date < sessionDate) : null;
+  const prevVol = past && past.length ? past[past.length - 1].volume : null;
+  const prevDate = past && past.length ? past[past.length - 1].date : null;
 
   // Tuần này = các phiên ĐÃ ĐÓNG của tuần hiện tại + phiên hôm nay đang chạy.
   // Tuần trước = trọn tuần liền trước. So "tới thời điểm này" với "cả tuần" là
@@ -926,10 +932,10 @@ async function renderOverview() {
   // chậm hơn tuần trước.
   let weekVol = null;
   let prevWeekVol = null;
-  if (hist && hist.length) {
-    const todayKey = weekKey(vnToday());
+  if (past && past.length) {
+    const todayKey = weekKey(sessionDate);
     const groups = new Map();
-    for (const r of hist) {
+    for (const r of past) {
       const k = weekKey(r.date);
       groups.set(k, (groups.get(k) || 0) + r.volume);
     }
@@ -956,8 +962,14 @@ async function renderOverview() {
     if (bars && bars.length >= 2) symPrev = bars[bars.length - 2].volume;
   }
 
+  const dayLabel = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }) : "—");
   volHost.innerHTML =
-    ovBar("Khối lượng phiên", todayVol, prevVol, "cổ phiếu · hôm nay so với phiên trước") +
+    ovBar(
+      "Khối lượng phiên",
+      todayVol,
+      prevVol,
+      `cổ phiếu · phiên ${dayLabel(sessionDate)} so với ${dayLabel(prevDate)}`
+    ) +
     ovBar("Khối lượng tuần", weekVol, prevWeekVol, "cổ phiếu · tuần này tới hiện tại so với trọn tuần trước") +
     (sym && !isIndexCode(sym)
       ? ovBar(`Khối lượng ${sym}`, symToday, symPrev, "cổ phiếu · mã đang chọn", symPrev === null ? "Đang chờ dữ liệu phiên trước của mã này" : "")
@@ -993,9 +1005,12 @@ async function renderOverview() {
     </div>`;
   }
 
-  document.getElementById("ovNote").textContent = hist
+  const isToday = sessionDate === vnToday();
+  document.getElementById("ovNote").textContent = !hist
+    ? "Đang nạp khối lượng các phiên trước…"
+    : isToday
     ? "Khối lượng phiên hôm nay là số trong phiên, chốt lại khi đóng cửa. Các phiên trước lấy theo dữ liệu đã đóng cửa."
-    : "Đang nạp khối lượng các phiên trước…";
+    : `Thị trường đang nghỉ — số liệu là của phiên ${dayLabel(sessionDate)}, phiên gần nhất đã đóng cửa.`;
 }
 
 function wireMarketTabs() {

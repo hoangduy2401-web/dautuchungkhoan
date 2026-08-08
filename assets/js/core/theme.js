@@ -3,10 +3,14 @@
 // Shared by every page; moved out of the stock page in phase 0 so the other
 // five pages get identical chrome without copying code.
 // Reskin Fey 03/08/2026: bề mặt phẳng đục, không còn kính -> slider Trong/Đục
-// (và biến --glass-a) đã bỏ hẳn. Mặc định giờ là TỐI, theo design.
+// (và biến --glass-a) đã bỏ hẳn.
+// Mặc định đổi TỐI -> SÁNG ngày 08/08/2026 theo yêu cầu của user. Mặc định nằm
+// ở thuộc tính `data-theme` của thẻ <html> trong TỪNG trang; giá trị dưới đây
+// chỉ là lưới an toàn khi thẻ đó thiếu — sửa một chỗ không đủ, phải sửa cả 6
+// file HTML, nếu không mỗi trang mở ra một màu.
 // ============================================================
 
-let currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+let currentTheme = document.documentElement.getAttribute("data-theme") || "light";
 
 function setTheme(t) {
   currentTheme = t;
