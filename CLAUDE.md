@@ -715,6 +715,23 @@ Website hiện có **đủ 6 trang**. Năm trang kênh đầu tư đã đầy đ
 
 ### Nhật ký theo phiên
 
+**08/08/2026 (phiên 9) — đổi theme mặc định + sửa lỗi so sánh khối lượng ngày nghỉ.**
+Bump `?v=20260808a` → **`?v=20260808b`**. **Có đụng `server/`** (thêm 1 trường),
+Render đã deploy lại, đã kiểm live.
+
+- **Theme mặc định đổi TỐI → SÁNG** theo yêu cầu user. Mặc định nằm ở
+  `data-theme` của thẻ `<html>` **trong từng trang** nên phải sửa cả 6 file HTML;
+  `theme.js` chỉ là lưới an toàn khi thẻ đó thiếu. Sửa mỗi `theme.js` thì mỗi
+  trang mở ra một màu. Nút Sáng/Tối vẫn đổi được như cũ.
+- **Lỗi số liệu phát hiện khi kiểm theme:** tab Tổng quan hiện "Khối lượng phiên
+  +0,0%" với hai con số y hệt — chi tiết ở mục 7. Đã sửa: `/api/price/indices`
+  trả thêm `tradingDate`, client so theo ngày đó thay vì theo đồng hồ máy.
+  Đo lại: VNINDEX 647,7 triệu vs 578,9 triệu = **+11,9%**, nhãn "phiên 07-08 so
+  với 06-08", ghi chú đổi thành "Thị trường đang nghỉ".
+
+Đã kiểm mắt cả trang chứng khoán, tiết kiệm và coin ở nền sáng: bảng, biểu đồ,
+logo, thanh độ rộng thị trường đều đọc được; bản live cũng đã kiểm.
+
 **08/08/2026 (phiên 8) — GĐ 4 trang Gửi tiết kiệm: XONG CẢ 8 ĐẦU VIỆC.**
 Bump `?v=20260807c` → **`?v=20260808a`** (56 chỗ trong 6 file HTML). **Có đụng
 `server/`** → Render đã deploy lại, đã kiểm live. **Website giờ đủ 6 trang.**
@@ -752,44 +769,6 @@ cảnh báo đỏ hiện trên cùng; sửa thành 600tr @6,1% → +36.600.000 �
 suất 0 báo lỗi; nút con mắt che 16 ô `.money` kể cả trong dải cảnh báo; mobile
 375px không tràn ngang.
 
-**07/08/2026 (phiên 7) — tab "Tổng quan thị trường" + logo coin + gỡ CoinMarketCap.**
-Bump `?v=20260807b` → **`?v=20260807c`**. **Có đụng `server/`** (thêm 2 trường),
-Render đã deploy lại, đã kiểm live.
-
-**Gộp một tab, không tách hai** (user yêu cầu đánh giá trước): hai biểu đồ cùng
-trả lời một câu hỏi — "hôm nay so với kỳ trước thế nào" — cùng nguồn dữ liệu,
-cùng nhịp làm mới. Tách đôi thành nút tab **thứ bảy** sẽ tràn hàng trên màn hình
-hẹp và bắt user bấm qua lại giữa hai thứ phải đọc cùng lúc.
-
-**KHÔNG thêm endpoint nào.** Khối lượng + độ rộng phiên hôm nay đã nằm trong
-`/api/price/indices` (số LIVE trong phiên); khối lượng các phiên trước lấy từ
-`/api/price/index-history` vốn đã trả `volume`. Chuỗi lịch sử **nạp lười một lần
-mỗi sàn rồi cache cả phiên** — nó chỉ đổi sau khi đóng cửa. Khối lượng mã đang
-chọn dùng lại `state.selectedBars` (chuỗi nến biểu đồ vừa tải), 0 request thêm.
-Thanh so sánh vẽ bằng **CSS**, không dùng Lightweight Charts: chỉ có hai cặp số,
-và tránh luôn hai lỗi vẽ ở mục 7.
-
-Backend thêm `ceilings`/`floors` vào `/api/price/indices` — cùng row `DailyIndex`,
-0 call thêm. **Đi theo bộ với `advances`**: VN30 trả breadth 0/0/0 (đã gom thành
-null) nhưng vẫn có Ceilings 2 / Floors 0, tức hai trường này không cùng phạm vi
-rổ; không rõ đếm trên rổ hay trên sàn nên breadth null thì để null luôn.
-
-**Lỗi đã sửa khi kiểm:** chuỗi lịch sử của **HNX có lẫn dòng HÔM NAY** (khác
-VNINDEX), khiến "phiên trước" hoá ra chính là hôm nay — bảng hiện +0,0% với hai
-con số y hệt. Lọc bỏ dòng của ngày hiện tại, và tính ngày theo **giờ Việt Nam**
-(`toISOString()` trả ngày UTC, lệch một ngày trong khoảng 00:00–07:00 giờ VN).
-
-**Logo coin:** Binance không trả ảnh nên bảng coin toàn ô trống. Lấy từ CDN icon
-theo ticker, **ảnh tải thẳng từ trình duyệt** nên không dính vụ chặn IP. Hai CDN
-vì không cái nào phủ đủ: jsDelivr `cryptocurrency-icons@0.18.1` thiếu mọi coin
-sau 2021 (SUI/APT/ARB/PEPE đều 404), CoinCap phủ những coin đó. Thử lần lượt,
-hết nguồn thì hiện vòng tròn chữ cái đầu.
-**Lỗi đã sửa:** `loading="lazy"` khiến MỌI logo đứng mãi ở trạng thái đang tải —
-trong bảng này ảnh không bao giờ được coi là lọt vào tầm nhìn.
-
-**CoinMarketCap đã gỡ hết** khỏi `server/index.js` và nhãn ở trang coin: gói có
-API key là gói trả phí. Đừng dựng lại.
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
@@ -797,7 +776,8 @@ Các phiên trước đó: **`docs/NHATKY.md`**.
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
 Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy, bản
-live đã kiểm. **GĐ 1 xong toàn bộ 8 đầu việc.**
+live đã kiểm. **GĐ 0–4 xong hết; website đủ 6 trang.** Chỉ còn `/` (tổng gia
+sản) là khung, chờ GĐ 5+6.
 
 Việc kế tiếp: **GĐ 5 — Supabase + đăng nhập** (5 phiên, **khó nhất cả kế
 hoạch**). Đọc `docs/QUYHOACH.md` mục 3.4 + bảng GĐ 5. Tóm tắt: tạo project
@@ -807,14 +787,24 @@ diện, đổi driver — mọi hàm `Store` đã trả Promise sẵn từ GĐ 0
 lúc này), màn hình nhập dữ liệu cũ từ localStorage, nút xuất JSON, job snapshot
 giá hàng ngày.
 
-**Rủi ro phải nói thẳng trước khi bắt đầu:** đây là lúc dữ liệu tài sản thật có
-thể mất. Bắt buộc xuất JSON sao lưu trước khi chạy bước nhập dữ liệu, và **giữ
-nguyên localStorage** (không xoá) cho tới khi xác nhận DB đúng. Việc nhập dữ
-liệu **phải do user bấm**, không tự động.
+**⚠ USER TỰ LÀM TRƯỚC KHI BẮT ĐẦU GĐ 5** (không có cái này thì không code được
+gì):
+1. Tạo project ở `supabase.com` (gói free), chọn region gần VN (Singapore).
+2. Lấy **Project URL** và **anon public key** ở Settings → API, đưa cho phiên
+   sau. Hai giá trị này công khai được (RLS mới là lớp chặn thật) nên để trong
+   `config.js`; **`service_role` key thì KHÔNG BAO GIỜ** — nó bỏ qua RLS.
+3. Xác nhận email dùng để đăng nhập magic link.
 
-Bốn collection đang có dữ liệu thật cần chuyển: `tx_stock` (legacy key riêng),
-`watchlist` (legacy), `holdings_fx`, `holdings_gold`, `holdings_crypto`,
-`savings_accounts`, và `settings` (privacyMode, fxPinned, coinWatch).
+**Rủi ro phải nói thẳng trước khi bắt đầu:** đây là lúc dữ liệu tài sản thật có
+thể mất. Thứ tự bắt buộc: **làm nút xuất JSON TRƯỚC**, xuất một bản sao lưu,
+rồi mới nhập lên DB; **giữ nguyên localStorage** (không xoá) cho tới khi xác
+nhận DB đúng trên cả máy tính lẫn điện thoại. Việc nhập dữ liệu **phải do user
+bấm**, không tự động, và phải xem trước được nội dung sẽ nhập.
+
+Bảy khoá đang có dữ liệu thật cần chuyển (đọc bằng `Store.exportAll()`):
+`tx_stock` và `watchlist` (hai khoá LEGACY, tên khác tiền tố `vn_gs_` — xem
+`store.js`), `holdings_fx`, `holdings_gold`, `holdings_crypto`,
+`savings_accounts`, `settings` (privacyMode · fxPinned · coinWatch).
 
 Khuôn mẫu nếu cần thêm trang tài sản: **trang Tiết kiệm hoặc Coin** (mới nhất).
 Thành phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`, `.row-btn`,
@@ -851,10 +841,21 @@ thì không.
 Ba việc chen ngang đã làm xong ngoài quy hoạch (03–04/08): reskin Fey, bước A và
 bước B của chart chỉ số. Không ảnh hưởng thứ tự GĐ 1–7.
 
-### Ưu tiên — quy hoạch mới
-Website quản lý gia sản đa kênh: `docs/QUYHOACH.md`. 8 giai đoạn, ~23 phiên,
-~11 tuần. **GĐ 0 đã xong hết ngày 31/07** (mục 0.1–0.9: tách `style.css`, dời JS
-vào `assets/`, `nav.js`, `store.js` — xem nhật ký mục 9).
+### Tiến độ quy hoạch (chi tiết ở `docs/QUYHOACH.md`)
+
+| GĐ | Nội dung | Trạng thái |
+|---|---|---|
+| 0 | Tái cấu trúc nền: tách CSS/JS, `nav.js`, `store.js`, `portfolio.js` | ✅ 31/07 |
+| 1 | **Ngoại tệ** — bảng VCB, biểu đồ liên ngân hàng, quy đổi, danh mục | ✅ 06/08 (8/8) |
+| 2 | **Vàng** — PNJ/BTMC, quy đổi lượng-chỉ-gram, danh mục, cảnh báo chênh lệch | ✅ 06/08 (6/6) |
+| 3 | **Coin** — giá VND, danh sách theo dõi, biểu đồ, danh mục | ✅ 07/08 (4/4) |
+| 4 | **Gửi tiết kiệm** — bảng lãi suất, so sánh, sổ + cảnh báo đáo hạn | ✅ 08/08 (8/8) |
+| **5** | **Supabase + đăng nhập** — 5 phiên, khó nhất | ▶ kế tiếp |
+| 6 | **Tổng gia sản** — gom 5 kênh về VND, biểu đồ tròn, dòng tiền | chờ GĐ 5 |
+| 7 | **Đồng bộ số dư Binance** — key chỉ-đọc, ký HMAC, tránh đếm trùng | chờ |
+
+Việc chen ngang đã làm ngoài quy hoạch: reskin Fey (03/08), chart chỉ số
+(04/08), tab Tổng quan thị trường (07/08), theme mặc định Sáng (08/08).
 
 ### Chart cho chỉ số — XONG 04/08 (giữ lại phần cần biết)
 

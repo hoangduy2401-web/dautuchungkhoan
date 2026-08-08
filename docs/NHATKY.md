@@ -5,6 +5,44 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**07/08/2026 (phiên 7) — tab "Tổng quan thị trường" + logo coin + gỡ CoinMarketCap.**
+Bump `?v=20260807b` → **`?v=20260807c`**. **Có đụng `server/`** (thêm 2 trường),
+Render đã deploy lại, đã kiểm live.
+
+**Gộp một tab, không tách hai** (user yêu cầu đánh giá trước): hai biểu đồ cùng
+trả lời một câu hỏi — "hôm nay so với kỳ trước thế nào" — cùng nguồn dữ liệu,
+cùng nhịp làm mới. Tách đôi thành nút tab **thứ bảy** sẽ tràn hàng trên màn hình
+hẹp và bắt user bấm qua lại giữa hai thứ phải đọc cùng lúc.
+
+**KHÔNG thêm endpoint nào.** Khối lượng + độ rộng phiên hôm nay đã nằm trong
+`/api/price/indices` (số LIVE trong phiên); khối lượng các phiên trước lấy từ
+`/api/price/index-history` vốn đã trả `volume`. Chuỗi lịch sử **nạp lười một lần
+mỗi sàn rồi cache cả phiên** — nó chỉ đổi sau khi đóng cửa. Khối lượng mã đang
+chọn dùng lại `state.selectedBars` (chuỗi nến biểu đồ vừa tải), 0 request thêm.
+Thanh so sánh vẽ bằng **CSS**, không dùng Lightweight Charts: chỉ có hai cặp số,
+và tránh luôn hai lỗi vẽ ở mục 7.
+
+Backend thêm `ceilings`/`floors` vào `/api/price/indices` — cùng row `DailyIndex`,
+0 call thêm. **Đi theo bộ với `advances`**: VN30 trả breadth 0/0/0 (đã gom thành
+null) nhưng vẫn có Ceilings 2 / Floors 0, tức hai trường này không cùng phạm vi
+rổ; không rõ đếm trên rổ hay trên sàn nên breadth null thì để null luôn.
+
+**Lỗi đã sửa khi kiểm:** chuỗi lịch sử của **HNX có lẫn dòng HÔM NAY** (khác
+VNINDEX), khiến "phiên trước" hoá ra chính là hôm nay — bảng hiện +0,0% với hai
+con số y hệt. Lọc bỏ dòng của ngày hiện tại, và tính ngày theo **giờ Việt Nam**
+(`toISOString()` trả ngày UTC, lệch một ngày trong khoảng 00:00–07:00 giờ VN).
+
+**Logo coin:** Binance không trả ảnh nên bảng coin toàn ô trống. Lấy từ CDN icon
+theo ticker, **ảnh tải thẳng từ trình duyệt** nên không dính vụ chặn IP. Hai CDN
+vì không cái nào phủ đủ: jsDelivr `cryptocurrency-icons@0.18.1` thiếu mọi coin
+sau 2021 (SUI/APT/ARB/PEPE đều 404), CoinCap phủ những coin đó. Thử lần lượt,
+hết nguồn thì hiện vòng tròn chữ cái đầu.
+**Lỗi đã sửa:** `loading="lazy"` khiến MỌI logo đứng mãi ở trạng thái đang tải —
+trong bảng này ảnh không bao giờ được coi là lọt vào tầm nhìn.
+
+**CoinMarketCap đã gỡ hết** khỏi `server/index.js` và nhãn ở trang coin: gói có
+API key là gói trả phí. Đừng dựng lại.
+
 **07/08/2026 (phiên 6) — GĐ 3 trang Coin: XONG CẢ 4 ĐẦU VIỆC.**
 Bump `?v=20260806b` → `?v=20260807a` → **`?v=20260807b`** (47 chỗ trong 5 file
 HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.
