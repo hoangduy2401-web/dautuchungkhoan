@@ -1118,6 +1118,103 @@ app.get("/api/gold/prices", async (req, res) => {
 });
 
 // ============================================================
+// SAVINGS — bảng lãi suất tiết kiệm, proxy file JSON tĩnh của CafeF.
+//
+// Trang gốc `cafef.vn/du-lieu/lai-suat-ngan-hang.chn` là ứng dụng Blazor
+// WebAssembly (~90 file .dll) nên KHÔNG cào HTML được; nhưng nó nạp dữ liệu từ
+// một file JSON tĩnh trên CDN, gọi thẳng được, không key, không challenge.
+//
+// Nguồn KHÔNG cam kết gì: URL nội bộ của CafeF, có thể đổi bất cứ lúc nào, và
+// bản thân file KHÔNG mang thời điểm cập nhật. Nên:
+//   - `fetchedAt` là thời điểm SERVER NÀY lấy được, không phải lúc ngân hàng
+//     đổi lãi suất. Trang phải ghi "lấy lúc", đừng ghi "cập nhật lúc".
+//   - Giữ bản chụp gần nhất trong bộ nhớ; nguồn chết thì trả bản cũ kèm
+//     `stale: true` + `snapshotAt` để trang nói rõ số này cũ tới đâu. Thà dữ
+//     liệu cũ có ghi ngày còn hơn bảng trống (bài học 30/07, mục 3).
+// ============================================================
+const CAFEF_SAVINGS_URL =
+  process.env.CAFEF_SAVINGS_URL ||
+  "https://cafefnew.mediacdn.vn/Images/Uploaded/DuLieuDownload/Liveboard/all_banks_interest_rates.json";
+// 6 giờ: lãi suất huy động đổi theo tuần chứ không theo phút.
+const SAVINGS_TTL_MS = 6 * 60 * 60_000;
+
+// Thứ tự kỳ hạn phải theo SỐ THÁNG. Sắp theo chuỗi thì "12T" đứng trước "1T"
+// và bảng đọc thành vô nghĩa.
+function termMonths(t) {
+  const m = String(t || "").match(/(\d+)/);
+  return m ? Number(m[1]) : -1;
+}
+
+// Bản chụp gần nhất, sống theo tiến trình. Render Free khởi động lại là mất —
+// chấp nhận: mất bản chụp chỉ có nghĩa là lần gọi sau phải chờ nguồn thật.
+let savingsSnapshot = null;
+
+async function fetchSavings() {
+  const res = await fetchWithTimeout(
+    CAFEF_SAVINGS_URL,
+    { headers: { Accept: "application/json" } },
+    10000
+  );
+  if (!res.ok) throw new Error(`CafeF HTTP ${res.status}`);
+  const json = await res.json();
+  const rows = json?.Data || json?.data;
+  if (!Array.isArray(rows) || !rows.length) throw new Error("CafeF: không có dòng nào");
+
+  const termSet = new Set();
+  const banks = rows
+    .map((b) => {
+      const rates = {};
+      for (const r of b.interestRates || []) {
+        const t = String(r.time || "").trim();
+        if (!t) continue;
+        termSet.add(t);
+        // null (không phải 0) khi ngân hàng không niêm yết kỳ hạn đó — 0%/năm
+        // và "không nhận kỳ hạn này" là hai chuyện khác nhau.
+        rates[t] = Number.isFinite(r.value) && r.value > 0 ? r.value : null;
+      }
+      return {
+        name: String(b.name || "").trim(),
+        symbol: String(b.symbol || "").trim(),
+        icon: typeof b.icon === "string" && /^https?:\/\//.test(b.icon) ? b.icon : null,
+        rates,
+      };
+    })
+    .filter((b) => b.name);
+
+  const terms = [...termSet].sort((a, b) => termMonths(a) - termMonths(b));
+  return {
+    fetchedAt: new Date().toISOString(),
+    source: "CafeF",
+    terms,
+    banks: banks.sort((a, b) => a.name.localeCompare(b.name, "vi")),
+  };
+}
+
+async function computeSavings() {
+  try {
+    const data = await fetchSavings();
+    savingsSnapshot = data;
+    return data;
+  } catch (err) {
+    if (savingsSnapshot) {
+      console.warn("[savings] CafeF lỗi, trả bản chụp cũ:", err.message);
+      return { ...savingsSnapshot, stale: true, snapshotAt: savingsSnapshot.fetchedAt };
+    }
+    throw err;
+  }
+}
+
+// GET /api/savings/rates
+app.get("/api/savings/rates", async (req, res) => {
+  try {
+    res.json(await withCache("savings:rates", SAVINGS_TTL_MS, computeSavings));
+  } catch (err) {
+    console.error("[/api/savings/rates]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
 // CRYPTO — CoinGecko primary, Binance fallback.
 //
 // CoinGecko quotes VND directly, which is the whole reason it is the primary:
