@@ -5,6 +5,53 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**07/08/2026 (phiên 6) — GĐ 3 trang Coin: XONG CẢ 4 ĐẦU VIỆC.**
+Bump `?v=20260806b` → `?v=20260807a` → **`?v=20260807b`** (47 chỗ trong 5 file
+HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.
+
+**Nguồn giá phải đổi giữa chừng: CoinGecko chặn IP của Render.** Đo 07/08:
+`/api/crypto/*` trên Render trả `CoinGecko HTTP 429` ba lần liên tiếp, trong khi
+cùng request đó từ máy local trả 200. Y hệt vụ Yahoo ở GĐ 1 — **thử nguồn ở máy
+local KHÔNG chứng minh được nó chạy ở production.**
+
+User chốt hướng: **Binance + tỷ giá của chính dự án.**
+- Giá USD từ Binance `/ticker/24hr`; VND = USD × tỷ giá USD/VND lấy từ
+  `fxTimeseries` (**liên ngân hàng**, không phải giá bán lẻ VCB có biên mua-bán).
+- Payload có `vndFrom {rate, rateDate, source}`; trang ghi **"VND quy đổi"** cạnh
+  tên nguồn và hiện dải giải thích. Số quy đổi là số **khác loại** với giá báo
+  trực tiếp — nhãn nguồn của biểu đồ cũng đọc từ payload, không viết cứng.
+- Lịch sử: Binance `/klines` × tỷ giá **của chính ngày đó**. Dùng một tỷ giá duy
+  nhất cho cả năm sẽ biến biến động tỷ giá thành biến động giá coin. Cuối tuần
+  thị trường ngoại hối đóng nên lấy tỷ giá gần nhất trước đó (coin chạy 24/7).
+- Tìm kiếm: bảng nội bộ ~40 coin khi CoinGecko không trả lời.
+
+**CoinMarketCap đã thêm nhưng TẮT** cho tới khi có `CMC_API_KEY` (mọi endpoint
+CMC trả 401 `error_code 1002 "API key missing"` — không có đường dùng thử). Khi
+có key thì CMC được ưu tiên. Hai điều chưa chắc: gói free có convert VND hay
+không (chưa có key để đo), và CMC định danh theo **ticker** nên chỉ trả lời được
+coin nằm trong `CRYPTO_SYMBOLS` — thiếu một mã là bỏ qua cả lượt, vì bảng thiếu
+coin của user thì tệ hơn.
+
+**Ba lỗi Binance đã sửa:** `symbols` phải là mảng JSON **URL-encode toàn bộ** (kể
+cả dấu ngoặc vuông) nếu không trả 400; **USDT không có cặp `USDTUSDT`** nên để
+nó lọt vào lô là Binance trả 400 cho **cả lô**, mất giá của mọi coin khác (xử lý
+riêng: `usd = 1` theo định nghĩa cặp); và dòng note dự phòng cũ ghi "chỉ có giá
+USD" nay không còn đúng.
+
+**Hai lỗi của biểu đồ, xem mục 7.**
+
+**Tái cấu trúc kèm theo:** CSS khung biểu đồ (`.chart-stack` / `.chart-wrap` /
+`.trend-overlay` / `.chart-wrap-rsi`) chuyển từ `chung-khoan.css` sang
+`base.css`. Để riêng ở đó thì trang ngoại tệ và coin **mất
+`.trend-overlay { position: absolute }`**, lớp canvas phủ rơi xuống dưới và đẩy
+`.chart-stack` từ 260px thành 524px. Đã kiểm lại cả ba trang có biểu đồ.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live): 5 coin mặc định ra đủ giá
+VND/USD/24h; tìm "cardano" → thêm vào danh sách, lưu qua `Store`; xoá khỏi danh
+sách; đổi coin và đổi khung; danh mục 0,05 BTC giá vốn 1.500.000.000 →
+84.234.733 ₫, lãi 9.234.733 ₫ (+12,31%), sửa thành 0,1 → nhân đôi đúng; số âm
+báo lỗi; xoá 2 nhịp; nút con mắt che 7 ô `.money`.
+
 **06/08/2026 (phiên 5) — GĐ 2 trang Vàng: XONG CẢ 6 ĐẦU VIỆC.**
 Bump `?v=20260806a` → **`?v=20260806b`** (37 chỗ trong 4 file HTML). **Có đụng
 `server/`** → Render đã deploy lại, đã kiểm live.

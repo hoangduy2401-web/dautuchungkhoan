@@ -198,7 +198,7 @@ Cấu trúc:
               "icon": "https://cafef1.mediacdn.vn/Images/mbb.jpg",
               "interestRates": [ {"time":"6T","deposit":6,"value":4.6}, ... ] } ] }
 ```
-**28 ngân hàng × 8 kỳ hạn** (0T/1T/3T/6T/9T/12T/18T/24T), có sẵn logo.
+**29 ngân hàng × 8 kỳ hạn** (đo 08/08/2026) (0T/1T/3T/6T/9T/12T/18T/24T), có sẵn logo.
 Đối chiếu ngày 30/07/2026: Bac A Bank 6T=7,05%, Shinhan 12T=7,5%.
 
 **Rủi ro:** đây là URL nội bộ của CafeF, không phải API công bố. Có thể đổi
@@ -456,20 +456,20 @@ Cố ý **tách phần đồng bộ sàn ra GĐ 7**: phần giá dễ và có gi
 
 ---
 
-### GĐ 4 — Trang Gửi tiết kiệm · ĐỘ KHÓ: TRUNG BÌNH · 3 phiên · Tuần 4-5
+### GĐ 4 — Trang Gửi tiết kiệm · ĐỘ KHÓ: TRUNG BÌNH · 3 phiên · Tuần 4-5 — **XONG 08/08/2026**
 
 Trang có nhiều logic tính toán nhất trong nhóm "dễ".
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 4.1 | Route `/api/savings/rates` — proxy CafeF JSON | Cache 6-12h + **lưu bản chụp gần nhất** |
-| 4.2 | Bảng so sánh 28 NH × 8 kỳ hạn, lọc/sort theo kỳ hạn | Có logo ngân hàng sẵn trong nguồn |
-| 4.3 | Nổi bật lãi suất cao nhất mỗi kỳ hạn | |
-| 4.4 | Sổ tiết kiệm nhập tay: NH, số tiền, kỳ hạn, lãi suất, ngày gửi | |
-| 4.5 | Tự tính: ngày đáo hạn, lãi dự kiến, tổng lãi năm | |
-| 4.6 | **Cảnh báo sổ sắp đáo hạn** (30/15/7 ngày) | Giá trị thực tế cao nhất của trang này |
-| 4.7 | Công cụ "gửi X tiền, Y tháng — ngân hàng nào lời nhất" | So trực tiếp trên bảng lãi suất |
-| 4.8 | Hiển thị rõ "Cập nhật lúc …" cho bảng lãi suất | Nguồn không cam kết, user phải biết độ tươi |
+| 4.1 | ~~Route `/api/savings/rates`~~ | **XONG 08/08** — cache 6h + giữ bản chụp; đã đo từ Render trước |
+| 4.2 | ~~Bảng 29 NH × 8 kỳ hạn, lọc/sort~~ | **XONG 08/08** — kỳ hạn sắp theo SỐ THÁNG, NH không niêm yết xuống cuối |
+| 4.3 | ~~Nổi bật lãi suất cao nhất mỗi kỳ hạn~~ | **XONG 08/08** |
+| 4.4 | ~~Sổ tiết kiệm nhập tay~~ | **XONG 08/08** — `savings_accounts`; lãi suất lưu theo con số đã chốt lúc gửi |
+| 4.5 | ~~Ngày đáo hạn, lãi dự kiến, tổng lãi năm~~ | **XONG 08/08** — lãi cuối kỳ, không tái tục, chưa trừ thuế/phí |
+| 4.6 | ~~Cảnh báo sổ sắp đáo hạn (30/15/7)~~ | **XONG 08/08** — đặt trên cùng trang, không giấu trong bảng |
+| 4.7 | ~~Công cụ "gửi X tiền, Y tháng"~~ | **XONG 08/08** — top 5 + chênh lệch hạng 1 với hạng cuối |
+| 4.8 | ~~Nhãn độ tươi của bảng~~ | **XONG 08/08** — ghi **"lấy lúc"**, không phải "cập nhật lúc": nguồn không mang thời điểm ngân hàng đổi lãi suất |
 
 ---
 

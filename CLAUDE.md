@@ -22,7 +22,7 @@
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 
-Cache busting hiện **`?v=20260807c`** (đã kiểm: 47 chỗ trong 5 file HTML, bản live
+Cache busting hiện **`?v=20260808a`** (đã kiểm: 56 chỗ trong 6 file HTML, bản live
 cũng đang phục vụ đúng chuỗi này).
 
 ---
@@ -242,6 +242,16 @@ GET /api/crypto/history?id=bitcoin&days=90
 
 GET /api/crypto/search?q=sol
 → [{ id, symbol, name, rank }]   CoinGecko, lùi về bảng nội bộ ~40 coin.
+```
+
+```
+GET /api/savings/rates                  (CafeF — file JSON tĩnh trên CDN)
+→ { fetchedAt, source:"CafeF", terms:["0T","1T",…"24T"],
+    banks:[{ name, symbol, icon, rates:{ "12T": 5.9, … } }],
+    stale?, snapshotAt? }
+   `fetchedAt` = lúc SERVER lấy về, KHÔNG phải lúc ngân hàng đổi lãi suất —
+   trang ghi "lấy lúc". `rates[kỳ hạn]` = null: ngân hàng không niêm yết kỳ hạn
+   đó, không phải 0%/năm. `stale: true` = nguồn chết, đang trả bản chụp cũ.
 ```
 
 **`/api/fx/rates` và `/api/fx/history` là HAI LOẠI tỷ giá khác nhau, lệch ~0,8%
@@ -642,13 +652,13 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260807c`. Nhánh `main` sạch, đã push, backend đã deploy bản
-mới nhất (đã kiểm 07/08 trên Render: `/api/fx/*`, `/api/gold/prices` 20 loại từ
-PNJ, `/api/crypto/*` trả từ Binance kèm tỷ giá quy đổi).
+Cache busting `?v=20260808a`. Nhánh `main` sạch, đã push, backend đã deploy bản
+mới nhất (đã kiểm 08/08 trên Render: `/api/fx/*`, `/api/gold/prices`,
+`/api/crypto/*` từ Binance kèm tỷ giá quy đổi, `/api/savings/rates` 29 ngân hàng).
 
-Website hiện có **5 trang**: `/` (tổng gia sản, mới là khung),
-`/chung-khoan.html`, `/ngoai-te.html`, `/vang.html` và `/coin.html`
-(bốn trang sau đầy đủ). Còn `/tiet-kiem.html` — xem mục 10.
+Website hiện có **đủ 6 trang**. Năm trang kênh đầu tư đã đầy đủ:
+`/chung-khoan.html`, `/ngoai-te.html`, `/vang.html`, `/coin.html`,
+`/tiet-kiem.html`. Riêng `/` (tổng gia sản) vẫn là khung — chờ GĐ 5+6.
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
@@ -672,11 +682,50 @@ Website hiện có **5 trang**: `/` (tổng gia sản, mới là khung),
 | **Giá coin** | Binance + tỷ giá dự án | CoinGecko **chặn IP Render** — xem mục 7. VND là số **quy đổi**, trang ghi nhãn |
 | **Danh mục coin** | `Store` (`holdings_crypto`) | cùng khuôn hai trang kia; giá vốn nhập theo **₫/1 coin** |
 | **Tổng quan thị trường** | `/indices` + `/index-history` | tab đầu của trang chứng khoán: KL phiên/tuần/mã chọn + độ rộng; **0 endpoint mới** |
+| **Lãi suất tiết kiệm** | CafeF CDN | 29 NH × 8 kỳ hạn, có logo; ô cao nhất mỗi kỳ hạn tô đậm; nhãn **"lấy lúc"** |
+| **Sổ tiết kiệm** | `Store` (`savings_accounts`) | lãi cuối kỳ; **cảnh báo đáo hạn 30/15/7 ngày** đặt trên cùng trang |
 | **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
 | Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 
 ### Nhật ký theo phiên
+
+**08/08/2026 (phiên 8) — GĐ 4 trang Gửi tiết kiệm: XONG CẢ 8 ĐẦU VIỆC.**
+Bump `?v=20260807c` → **`?v=20260808a`** (56 chỗ trong 6 file HTML). **Có đụng
+`server/`** → Render đã deploy lại, đã kiểm live. **Website giờ đủ 6 trang.**
+
+**Đã đo nguồn TỪ RENDER trước khi xây trang** (bài học Yahoo + CoinGecko ở mục
+7): CafeF trả 29 ngân hàng × 8 kỳ hạn bình thường từ IP Render, không bị chặn.
+
+- `/api/savings/rates`: proxy file JSON tĩnh của CafeF, cache 6h, **giữ bản chụp
+  gần nhất trong bộ nhớ** — nguồn chết thì trả bản cũ kèm `stale: true` +
+  `snapshotAt`, trang hiện dải cảnh báo ghi rõ bản chụp lấy lúc nào.
+- Kỳ hạn sắp theo **số tháng**, không theo chuỗi: sắp chuỗi thì "12T" đứng trước
+  "1T" và bảng đọc thành vô nghĩa.
+- Ô lãi suất cao nhất mỗi kỳ hạn tô đậm; ngân hàng không niêm yết kỳ hạn đang
+  sắp thì **xuống cuối**, không coi là 0%.
+- **Cảnh báo đáo hạn 30/15/7 ngày đặt TRÊN CÙNG trang**, không giấu trong bảng —
+  đây là giá trị thực tế cao nhất của trang. Ba mức vì việc cần làm khác nhau:
+  30 ngày là lúc bắt đầu tìm lãi suất mới, 7 ngày là lúc phải quyết.
+
+**Hai quyết định về số liệu, đừng "sửa lại":**
+1. **Lãi suất của sổ lưu theo con số ĐÃ CHỐT LÚC GỬI**, không đọc lại từ bảng
+   niêm yết. Bảng là lãi suất hôm nay; sổ đã khoá lãi suất từ ngày gửi. Ô nhập
+   tự điền gợi ý theo bảng nhưng user gõ vào là thôi tự động (ưu đãi, số tiền
+   lớn… cho lãi suất khác bảng).
+2. **Công thức là lãi cuối kỳ, không tái tục, chưa trừ thuế/phí:**
+   `lãi = gốc × (%năm ÷ 100) × số tháng ÷ 12`. Sổ lĩnh lãi hàng tháng hay tự
+   động tái tục cho con số khác — trang ghi rõ giả định thay vì im lặng.
+
+`setMonth` tự dồn ngày 31 sang tháng sau (31/01 + 1 tháng = 03/03) nên ngày đáo
+hạn kẹp lại về ngày cuối tháng đích — đúng như cách ngân hàng ghi trên sổ.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live): 100.000.000 ₫ kỳ hạn 12
+tháng → Shinhan 7,50% = +7.500.000 ₫, chênh hạng 1 với hạng 5 là 800.000 ₫; sổ
+500tr 5,9% gửi 14/8/2025 → đáo hạn 14/8/2026, còn 6 ngày, lãi +29.500.000 ₫,
+cảnh báo đỏ hiện trên cùng; sửa thành 600tr @6,1% → +36.600.000 ₫; nhập lãi
+suất 0 báo lỗi; nút con mắt che 16 ô `.money` kể cả trong dải cảnh báo; mobile
+375px không tràn ngang.
 
 **07/08/2026 (phiên 7) — tab "Tổng quan thị trường" + logo coin + gỡ CoinMarketCap.**
 Bump `?v=20260807b` → **`?v=20260807c`**. **Có đụng `server/`** (thêm 2 trường),
@@ -716,53 +765,6 @@ trong bảng này ảnh không bao giờ được coi là lọt vào tầm nhìn
 **CoinMarketCap đã gỡ hết** khỏi `server/index.js` và nhãn ở trang coin: gói có
 API key là gói trả phí. Đừng dựng lại.
 
-**07/08/2026 (phiên 6) — GĐ 3 trang Coin: XONG CẢ 4 ĐẦU VIỆC.**
-Bump `?v=20260806b` → `?v=20260807a` → **`?v=20260807b`** (47 chỗ trong 5 file
-HTML). **Có đụng `server/`** → Render đã deploy lại, đã kiểm live.
-
-**Nguồn giá phải đổi giữa chừng: CoinGecko chặn IP của Render.** Đo 07/08:
-`/api/crypto/*` trên Render trả `CoinGecko HTTP 429` ba lần liên tiếp, trong khi
-cùng request đó từ máy local trả 200. Y hệt vụ Yahoo ở GĐ 1 — **thử nguồn ở máy
-local KHÔNG chứng minh được nó chạy ở production.**
-
-User chốt hướng: **Binance + tỷ giá của chính dự án.**
-- Giá USD từ Binance `/ticker/24hr`; VND = USD × tỷ giá USD/VND lấy từ
-  `fxTimeseries` (**liên ngân hàng**, không phải giá bán lẻ VCB có biên mua-bán).
-- Payload có `vndFrom {rate, rateDate, source}`; trang ghi **"VND quy đổi"** cạnh
-  tên nguồn và hiện dải giải thích. Số quy đổi là số **khác loại** với giá báo
-  trực tiếp — nhãn nguồn của biểu đồ cũng đọc từ payload, không viết cứng.
-- Lịch sử: Binance `/klines` × tỷ giá **của chính ngày đó**. Dùng một tỷ giá duy
-  nhất cho cả năm sẽ biến biến động tỷ giá thành biến động giá coin. Cuối tuần
-  thị trường ngoại hối đóng nên lấy tỷ giá gần nhất trước đó (coin chạy 24/7).
-- Tìm kiếm: bảng nội bộ ~40 coin khi CoinGecko không trả lời.
-
-**CoinMarketCap đã thêm nhưng TẮT** cho tới khi có `CMC_API_KEY` (mọi endpoint
-CMC trả 401 `error_code 1002 "API key missing"` — không có đường dùng thử). Khi
-có key thì CMC được ưu tiên. Hai điều chưa chắc: gói free có convert VND hay
-không (chưa có key để đo), và CMC định danh theo **ticker** nên chỉ trả lời được
-coin nằm trong `CRYPTO_SYMBOLS` — thiếu một mã là bỏ qua cả lượt, vì bảng thiếu
-coin của user thì tệ hơn.
-
-**Ba lỗi Binance đã sửa:** `symbols` phải là mảng JSON **URL-encode toàn bộ** (kể
-cả dấu ngoặc vuông) nếu không trả 400; **USDT không có cặp `USDTUSDT`** nên để
-nó lọt vào lô là Binance trả 400 cho **cả lô**, mất giá của mọi coin khác (xử lý
-riêng: `usd = 1` theo định nghĩa cặp); và dòng note dự phòng cũ ghi "chỉ có giá
-USD" nay không còn đúng.
-
-**Hai lỗi của biểu đồ, xem mục 7.**
-
-**Tái cấu trúc kèm theo:** CSS khung biểu đồ (`.chart-stack` / `.chart-wrap` /
-`.trend-overlay` / `.chart-wrap-rsi`) chuyển từ `chung-khoan.css` sang
-`base.css`. Để riêng ở đó thì trang ngoại tệ và coin **mất
-`.trend-overlay { position: absolute }`**, lớp canvas phủ rơi xuống dưới và đẩy
-`.chart-stack` từ 260px thành 524px. Đã kiểm lại cả ba trang có biểu đồ.
-
-Đã kiểm trên trình duyệt thật (local rồi bản live): 5 coin mặc định ra đủ giá
-VND/USD/24h; tìm "cardano" → thêm vào danh sách, lưu qua `Store`; xoá khỏi danh
-sách; đổi coin và đổi khung; danh mục 0,05 BTC giá vốn 1.500.000.000 →
-84.234.733 ₫, lãi 9.234.733 ₫ (+12,31%), sửa thành 0,1 → nhân đôi đúng; số âm
-báo lỗi; xoá 2 nhịp; nút con mắt che 7 ô `.money`.
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
@@ -772,19 +774,27 @@ Các phiên trước đó: **`docs/NHATKY.md`**.
 Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy, bản
 live đã kiểm. **GĐ 1 xong toàn bộ 8 đầu việc.**
 
-Việc kế tiếp: **GĐ 4 — trang Gửi tiết kiệm** (3 phiên). Đọc `docs/QUYHOACH.md`
-mục 2.7 và bảng GĐ 4. Nguồn là **file JSON tĩnh trên CDN của CafeF** (28 ngân
-hàng × 8 kỳ hạn, có sẵn logo) — trang gốc là Blazor WebAssembly, không cào HTML
-được. **Đo endpoint đó TỪ RENDER trước khi xây trang quanh nó** (bài học ở mục 7,
-đã dính hai lần).
+Việc kế tiếp: **GĐ 5 — Supabase + đăng nhập** (5 phiên, **khó nhất cả kế
+hoạch**). Đọc `docs/QUYHOACH.md` mục 3.4 + bảng GĐ 5. Tóm tắt: tạo project
+Supabase free, thiết kế schema 7 bảng, **bật Row Level Security ngay lúc tạo**,
+đăng nhập bằng email magic link, viết driver Supabase cho `store.js` (cùng giao
+diện, đổi driver — mọi hàm `Store` đã trả Promise sẵn từ GĐ 0 chính là để cho
+lúc này), màn hình nhập dữ liệu cũ từ localStorage, nút xuất JSON, job snapshot
+giá hàng ngày.
 
-Khuôn mẫu để nhân bản: **trang Coin hoặc trang Vàng**. `coin.html` + `coin.css` +
-`pages/coin.js` là bộ ba đầy đủ nhất: bảng có nhãn nguồn đọc từ payload + danh
-sách theo dõi lưu qua `Store` + biểu đồ + danh mục nhập tay + `.money`. Thành
-phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`, `.row-btn`,
+**Rủi ro phải nói thẳng trước khi bắt đầu:** đây là lúc dữ liệu tài sản thật có
+thể mất. Bắt buộc xuất JSON sao lưu trước khi chạy bước nhập dữ liệu, và **giữ
+nguyên localStorage** (không xoá) cho tới khi xác nhận DB đúng. Việc nhập dữ
+liệu **phải do user bấm**, không tự động.
+
+Bốn collection đang có dữ liệu thật cần chuyển: `tx_stock` (legacy key riêng),
+`watchlist` (legacy), `holdings_fx`, `holdings_gold`, `holdings_crypto`,
+`savings_accounts`, và `settings` (privacyMode, fxPinned, coinWatch).
+
+Khuôn mẫu nếu cần thêm trang tài sản: **trang Tiết kiệm hoặc Coin** (mới nhất).
+Thành phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`, `.row-btn`,
 `.edit-input`, `.chart-stack`, `.chart-wrap`, `.trend-overlay`) đã nằm ở
-`base.css` — **đừng chép lại vào CSS trang mới**. Đừng dựng từ trang chứng khoán:
-trang đó còn mang theo ticker/heatmap/tín hiệu không liên quan.
+`base.css` — **đừng chép lại vào CSS trang mới**.
 
 **CoinMarketCap đã bị gỡ 07/08** — gói có API key là gói trả phí, user chốt
 không dùng. Đừng dựng lại.
