@@ -76,6 +76,10 @@ const APP_CONFIG = {
   // nên ở production nguồn thật là Binance + tỷ giá USD/VND của chính dự án.
   // Payload có `vndFrom` khi giá VND là số quy đổi — trang phải ghi nhãn.
   cryptoProvider:       { name: "CoinGecko + Binance", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/crypto" },
+  // Savings. File JSON tĩnh trên CDN của CafeF — không key, không challenge.
+  // Payload có `stale` khi nguồn chết và server trả bản chụp cũ; trang phải nói
+  // ra, và nhãn thời gian là "lấy lúc" chứ không phải "cập nhật lúc".
+  savingsProvider:      { name: "CafeF", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/savings" },
   // Gold. PNJ primary, BTMC fallback — the payload says which one answered, and
   // the page must show it: two shops quote different boards, and an unlabelled
   // swap looks like the market moved. Prices are thousand VND per chỉ.

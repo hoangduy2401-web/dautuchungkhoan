@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gửi tiết kiệm — Quản lý gia sản</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/base.css?v=20260808a" />
+<link rel="stylesheet" href="assets/css/tiet-kiem.css?v=20260808a" />
+</head>
+<body>
+
+  <!-- Shared nav across all 6 pages; rendered by assets/js/core/nav.js -->
+  <div id="appNav"></div>
+
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-top">
+        <div class="mark">Gửi <span>tiết kiệm</span></div>
+      </div>
+      <div class="sub">So sánh lãi suất ngân hàng &amp; theo dõi sổ tiết kiệm</div>
+      <div class="clock" id="clock"></div>
+    </div>
+    <div class="header-right">
+      <span class="backend-status" id="backendStatus"></span>
+      <div class="controls">
+        <div class="segmented">
+          <button type="button" id="tLight">Sáng</button>
+          <button type="button" id="tDark">Tối</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Cảnh báo sổ sắp đáo hạn — giá trị thực tế cao nhất của trang này, nên
+       nằm trên cùng chứ không nằm trong thẻ danh mục phía dưới. -->
+  <section class="sv-alerts" id="svAlerts" hidden></section>
+
+  <main class="main-grid-savings">
+
+    <!-- Bảng lãi suất -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Lãi suất tiết kiệm</h2>
+        <span class="src-badge" id="svSource">—</span>
+      </div>
+      <div class="sv-stale" id="svStale" hidden></div>
+
+      <div class="sv-toolbar">
+        <input id="svSearch" class="hold-input" placeholder="Tìm ngân hàng, vd: VCB" maxlength="30" autocomplete="off" />
+        <label class="sv-sort">
+          <span>Sắp theo kỳ hạn</span>
+          <select id="svSortTerm" class="hold-input"></select>
+        </label>
+      </div>
+
+      <div class="asset-table-wrap">
+        <table class="asset-table sv-table">
+          <thead><tr id="svHead"></tr></thead>
+          <tbody id="svBody">
+            <tr><td class="empty-state">Đang chờ máy chủ…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sv-note" id="svNote"></p>
+    </div>
+
+    <!-- Công cụ so sánh: gửi X tiền, Y tháng -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Gửi bao nhiêu, ở đâu lời nhất</h2>
+        <span class="src-badge">Lãi cuối kỳ, không tái tục</span>
+      </div>
+      <div class="panel-body sv-calc">
+        <div class="sv-calc-form">
+          <input id="calcAmount" class="hold-input" inputmode="decimal" placeholder="Số tiền gửi, vd: 100.000.000" aria-label="Số tiền" />
+          <select id="calcTerm" class="hold-input" aria-label="Kỳ hạn"></select>
+        </div>
+        <div class="sv-top" id="calcTop"></div>
+      </div>
+    </div>
+
+    <!-- Sổ tiết kiệm nhập tay -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Sổ tiết kiệm của tôi</h2>
+        <span class="src-badge">Lãi cuối kỳ theo lãi suất đã chốt</span>
+      </div>
+
+      <form id="holdForm" class="hold-form sv-hold-form">
+        <input id="holdBank" class="hold-input" list="bankList" placeholder="Ngân hàng, vd: Vietcombank" aria-label="Ngân hàng" autocomplete="off" />
+        <datalist id="bankList"></datalist>
+        <input id="holdAmount" class="hold-input" inputmode="decimal" placeholder="Số tiền gửi (₫)" aria-label="Số tiền" />
+        <select id="holdTerm" class="hold-input" aria-label="Kỳ hạn"></select>
+        <input id="holdRate" class="hold-input" inputmode="decimal" placeholder="Lãi suất %/năm" aria-label="Lãi suất" />
+        <input id="holdDate" class="hold-input" type="date" aria-label="Ngày gửi" />
+        <button type="submit" class="btn">+ Thêm</button>
+      </form>
+      <div class="hold-error" id="holdError" hidden></div>
+
+      <div class="hold-summary" id="holdSummary"></div>
+
+      <div class="asset-table-wrap">
+        <table class="asset-table hold-table">
+          <thead>
+            <tr>
+              <th>Ngân hàng</th>
+              <th class="num">Số tiền (₫)</th>
+              <th class="num">Kỳ hạn</th>
+              <th class="num">Lãi suất</th>
+              <th class="col-date">Ngày gửi</th>
+              <th class="col-date">Đáo hạn</th>
+              <th class="num">Lãi dự kiến (₫)</th>
+              <th class="th-act"></th>
+            </tr>
+          </thead>
+          <tbody id="holdTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="app-footer">
+    Dữ liệu chỉ mang tính tham khảo, không phải khuyến nghị đầu tư.
+    Lãi suất: CafeF · Lãi tính theo công thức lãi cuối kỳ, chưa trừ thuế/phí.
+  </footer>
+
+  <script src="assets/js/core/config.js?v=20260808a"></script>
+  <script src="assets/js/core/store.js?v=20260808a"></script>
+  <script src="assets/js/core/theme.js?v=20260808a"></script>
+  <script src="assets/js/core/nav.js?v=20260808a"></script>
+  <script src="assets/js/core/mockData.js?v=20260808a"></script>
+  <script src="assets/js/core/dataService.js?v=20260808a"></script>
+  <script src="assets/js/pages/tiet-kiem.js?v=20260808a"></script>
+</body>
+</html>

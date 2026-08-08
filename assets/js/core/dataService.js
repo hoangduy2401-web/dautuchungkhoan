@@ -228,6 +228,14 @@ const DataService = (function () {
     return fetchJson(`${cfg.cryptoProvider.baseUrl}/search?q=${encodeURIComponent(q)}`, T_FAST);
   }
 
+  // ---- Savings ----------------------------------------------------------
+  // {fetchedAt, source:"CafeF", terms:[...], banks:[{name,symbol,icon,rates}],
+  //  stale?, snapshotAt?} — `rates[kỳ hạn]` = null khi ngân hàng không niêm yết
+  // kỳ hạn đó, KHÔNG phải 0%.
+  function getSavingsRates() {
+    return fetchJson(`${cfg.savingsProvider.baseUrl}/rates`, T_FAST);
+  }
+
   // ---- SSI account (read-only) ----------------------------------------
   // Never falls back to mock: showing invented holdings would be worse than
   // showing nothing. Errors propagate so the UI can ask for a PIN/OTP.
@@ -268,6 +276,7 @@ const DataService = (function () {
     getFxRates,
     getFxHistory,
     getGoldPrices,
+    getSavingsRates,
     getCryptoPrices,
     getCryptoHistory,
     searchCoins,
