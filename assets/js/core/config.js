@@ -89,6 +89,22 @@ const APP_CONFIG = {
   // interbank mid price. ~0.8% apart, permanently. The page labels both.
   fxProvider:           { name: "Vietcombank + FXRatesAPI", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/fx" },
 
+  // Supabase (GĐ 5). Hai giá trị này CÔNG KHAI ĐƯỢC — chúng đi kèm mọi request
+  // từ trình duyệt, ai xem mã nguồn trang cũng đọc được. Lớp chặn thật là Row
+  // Level Security ở `supabase/schema.sql`, không phải việc giấu key.
+  //
+  // Key `sb_secret_...` (tên cũ: `service_role`) thì NGƯỢC LẠI HOÀN TOÀN: nó bỏ
+  // qua RLS, đọc/xoá được sạch dữ liệu. Không bao giờ để ở file này hay bất kỳ
+  // file nào trong repo — chỉ nằm trong biến môi trường của Render.
+  //
+  // ENABLED còn false cho tới khi driver Supabase (5.4) chạy được. Bật sớm là
+  // trang đọc DB rỗng trong khi dữ liệu thật vẫn nằm ở localStorage.
+  supabase: {
+    ENABLED: false,
+    url: "https://kndumltxfrhqxbjrlice.supabase.co",
+    publishableKey: "sb_publishable_UfJaGsDm-Dh5Mffx30H5Jw_gw6fHPBj",
+  },
+
   currency: "VND",
 };
 

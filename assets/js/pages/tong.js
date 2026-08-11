@@ -5,4 +5,5 @@
 // ============================================================
 document.addEventListener("DOMContentLoaded", () => {
   initChrome(); // theme toggle + glass slider + clock
+  Backup.render(); // nút xuất JSON (GĐ 5.6) — lối thoát trước khi lên Supabase
 });

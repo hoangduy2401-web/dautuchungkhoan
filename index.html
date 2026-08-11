@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260808b" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260811a" />
 </head>
 <body>
 
@@ -33,6 +33,10 @@
   </header>
 
   <main class="main-grid-single">
+    <!-- Sao lưu (GĐ 5.6) — đặt trên trang tổng vì đây là nơi màn hình nhập dữ
+         liệu lên Supabase (5.5) sẽ vào, và hai việc phải nằm cạnh nhau. -->
+    <div id="backupPanel"></div>
+
     <div class="panel">
       <div class="panel-head"><h2>Trang tổng — đang xây dựng</h2></div>
       <div class="panel-body">
@@ -69,10 +73,11 @@
     Quy hoạch đầy đủ ở <code>docs/QUYHOACH.md</code>.
   </footer>
 
-  <script src="assets/js/core/config.js?v=20260808b"></script>
-  <script src="assets/js/core/store.js?v=20260808b"></script>
-  <script src="assets/js/core/theme.js?v=20260808b"></script>
-  <script src="assets/js/core/nav.js?v=20260808b"></script>
-  <script src="assets/js/pages/tong.js?v=20260808b"></script>
+  <script src="assets/js/core/config.js?v=20260811a"></script>
+  <script src="assets/js/core/store.js?v=20260811a"></script>
+  <script src="assets/js/core/theme.js?v=20260811a"></script>
+  <script src="assets/js/core/nav.js?v=20260811a"></script>
+  <script src="assets/js/core/backup.js?v=20260811a"></script>
+  <script src="assets/js/pages/tong.js?v=20260811a"></script>
 </body>
 </html>
