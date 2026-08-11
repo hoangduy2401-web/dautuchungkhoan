@@ -33,8 +33,10 @@
   </header>
 
   <main class="main-grid-single">
-    <!-- Sao lưu (GĐ 5.6) — đặt trên trang tổng vì đây là nơi màn hình nhập dữ
-         liệu lên Supabase (5.5) sẽ vào, và hai việc phải nằm cạnh nhau. -->
+    <!-- Đăng nhập (GĐ 5.3) + Sao lưu (GĐ 5.6) — đặt trên trang tổng vì đây là
+         nơi màn hình nhập dữ liệu lên Supabase (5.5) sẽ vào, ba việc phải nằm
+         cạnh nhau. -->
+    <div id="authPanel"></div>
     <div id="backupPanel"></div>
 
     <div class="panel">
@@ -73,10 +75,14 @@
     Quy hoạch đầy đủ ở <code>docs/QUYHOACH.md</code>.
   </footer>
 
+  <!-- supabase-js: nạp từ unpkg với version ghim, y như lightweight-charts ở
+       các trang biểu đồ. Đặt TRƯỚC auth.js — auth.js đọc window.supabase. -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
   <script src="assets/js/core/config.js?v=20260811a"></script>
   <script src="assets/js/core/store.js?v=20260811a"></script>
   <script src="assets/js/core/theme.js?v=20260811a"></script>
   <script src="assets/js/core/nav.js?v=20260811a"></script>
+  <script src="assets/js/core/auth.js?v=20260811a"></script>
   <script src="assets/js/core/backup.js?v=20260811a"></script>
   <script src="assets/js/pages/tong.js?v=20260811a"></script>
 </body>

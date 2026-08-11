@@ -97,10 +97,17 @@ const APP_CONFIG = {
   // qua RLS, đọc/xoá được sạch dữ liệu. Không bao giờ để ở file này hay bất kỳ
   // file nào trong repo — chỉ nằm trong biến môi trường của Render.
   //
-  // ENABLED còn false cho tới khi driver Supabase (5.4) chạy được. Bật sớm là
-  // trang đọc DB rỗng trong khi dữ liệu thật vẫn nằm ở localStorage.
+  // HAI CỜ TÁCH RIÊNG, cố ý:
+  //   AUTH_ENABLED  — cho phép đăng nhập (5.3). Bật được ngay, không ảnh hưởng
+  //                   dữ liệu: đăng nhập xong mọi trang vẫn đọc localStorage.
+  //   STORE_ENABLED — chuyển `store.js` sang đọc/ghi DB (5.4). Bật cái này khi
+  //                   dữ liệu CHƯA nhập lên DB là trang hiện danh mục rỗng
+  //                   trong khi dữ liệu thật vẫn nằm nguyên ở localStorage —
+  //                   trông y hệt mất sạch. Chỉ bật sau khi 5.5 chạy xong và
+  //                   đã đối chiếu trên cả máy tính lẫn điện thoại.
   supabase: {
-    ENABLED: false,
+    AUTH_ENABLED: true,
+    STORE_ENABLED: false,
     url: "https://kndumltxfrhqxbjrlice.supabase.co",
     publishableKey: "sb_publishable_UfJaGsDm-Dh5Mffx30H5Jw_gw6fHPBj",
   },
