@@ -116,6 +116,49 @@ const Auth = (function () {
     );
   }
 
+  // Bảng chẩn đoán "máy này đang đọc cái gì".
+  //
+  // Có vì một lần mất gần một buổi (15/08): máy tính hiện 6 mã, điện thoại hiện
+  // 5 mã, và không cách nào biết máy nào sai nếu không mở DevTools — thứ không
+  // mở nổi trên iPhone. Ba con số dưới đây phân định được ngay:
+  //   origin  — `http://` và `https://` là HAI kho localStorage tách biệt
+  //   ?v=     — máy đang chạy bản JS nào (cache cũ thì lệch)
+  //   DB      — đọc THẲNG từ Supabase lúc bấm, không qua `Store`, nên nó là
+  //             sự thật trên server chứ không phải thứ trang đang vẽ
+  async function renderDiag() {
+    const box = document.getElementById("authDiag");
+    if (!box) return;
+
+    const ver = (() => {
+      const el = [...document.scripts].find((x) => x.src.includes("core/auth.js"));
+      return el ? el.src.split("?")[1] || "(không có)" : "?";
+    })();
+
+    let db = "—";
+    try {
+      const rows = await SupabaseDriver.list("watchlist");
+      db = rows.length ? `${rows.length} mã — ${rows.join(" · ")}` : "0 mã";
+    } catch (err) {
+      db = `lỗi đọc: ${esc(err.message)}`;
+    }
+
+    const trang = (typeof Store !== "undefined" && Store.driver) || "?";
+    const canhBao =
+      trang !== "supabase"
+        ? `<p class="build-note"><strong>Trang đang KHÔNG đọc từ Supabase.</strong> ` +
+          `Mọi thay đổi ở máy này chỉ nằm trong trình duyệt này.</p>`
+        : "";
+
+    box.innerHTML =
+      `<table class="asset-table"><tbody>` +
+      `<tr><td>Địa chỉ đang mở</td><td><strong>${esc(location.origin)}</strong></td></tr>` +
+      `<tr><td>Phiên bản JS</td><td>${esc(ver)}</td></tr>` +
+      `<tr><td>Trang đang đọc từ</td><td><strong>${esc(trang)}</strong></td></tr>` +
+      `<tr><td>Watchlist TRÊN SUPABASE</td><td>${db}</td></tr>` +
+      `</tbody></table>` +
+      canhBao;
+  }
+
   function shell(inner) {
     return (
       `<div class="panel">` +
@@ -146,13 +189,14 @@ const Auth = (function () {
 
     if (s) {
       host.innerHTML = shell(
-        `<p class="build-note">Đang đăng nhập: <strong>${esc(s.user.email)}</strong>` +
-          `<br>Dữ liệu vẫn đang đọc từ <strong>trình duyệt này</strong> — việc chuyển ` +
-          `lên Supabase là giai đoạn 5.4/5.5, chưa làm. Đăng nhập lúc này chưa thay đổi gì.</p>` +
+        `<p class="build-note">Đang đăng nhập: <strong>${esc(s.user.email)}</strong></p>` +
+          `<div id="authDiag"><p class="build-note">Đang đọc trạng thái…</p></div>` +
           `<button type="button" class="btn-outline" id="authTest">Kiểm tra kết nối Supabase</button> ` +
           `<button type="button" class="btn-outline" id="authOut">Đăng xuất</button>` +
           `<div id="authTestOut"></div>`
       );
+
+      renderDiag();
 
       document.getElementById("authOut").addEventListener("click", async (e) => {
         e.target.disabled = true;
