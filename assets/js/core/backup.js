@@ -121,9 +121,7 @@ const Backup = (function () {
       `<div class="panel-head"><h2>Sao lưu dữ liệu</h2>` +
       `<button type="button" class="btn" id="backupBtn">Tải bản sao lưu (.json)</button></div>` +
       `<div class="panel-body">` +
-      `<p class="build-note">Toàn bộ danh mục đang nằm trong bộ nhớ của trình duyệt này. ` +
-      `Xoá cache, đổi máy hay dùng cửa sổ ẩn danh là mất. Tải một bản về máy trước khi ` +
-      `chuyển dữ liệu lên Supabase (giai đoạn 5) — và giữ lại bản đó.</p>` +
+      `<p class="build-note" id="backupWhere"></p>` +
       `<div id="backupPreview"></div>` +
       `<p class="build-note" id="backupMsg" style="margin-top:14px"></p>` +
       `</div></div>`;
@@ -131,6 +129,21 @@ const Backup = (function () {
     const preview = document.getElementById("backupPreview");
     const msg = document.getElementById("backupMsg");
     const btn = document.getElementById("backupBtn");
+
+    // Câu mở đầu đổi theo driver đang chạy. Để nguyên câu "nằm trong trình
+    // duyệt này" sau khi đã chuyển sang DB là nói sai với user về chỗ dữ liệu
+    // thật đang nằm — và đó là câu họ dựa vào để quyết có cần sao lưu hay không.
+    Store.ready.then(() => {
+      const where = document.getElementById("backupWhere");
+      if (!where) return;
+      where.innerHTML =
+        Store.driver === "supabase"
+          ? `Dữ liệu đang lưu trên <strong>Supabase</strong> và đọc được từ mọi thiết bị. ` +
+            `Bản sao lưu này là lối thoát khi muốn rời Supabase — tải định kỳ và giữ lại.`
+          : `Toàn bộ danh mục đang nằm trong bộ nhớ của <strong>trình duyệt này</strong>. ` +
+            `Xoá cache, đổi máy hay dùng cửa sổ ẩn danh là mất. Tải một bản về máy ` +
+            `trước khi chuyển dữ liệu lên Supabase — và giữ lại bản đó.`;
+    });
 
     renderPreview(preview).catch((err) => {
       preview.innerHTML = `<p class="build-note">Không đọc được dữ liệu: ${err.message}</p>`;

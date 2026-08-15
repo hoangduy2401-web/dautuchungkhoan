@@ -18,6 +18,68 @@
 const Store = (function () {
   const PREFIX = "vn_gs_"; // gia san
 
+  // ---- Chọn driver (GĐ 5.4) ------------------------------------------------
+  //
+  // Vấn đề thứ tự: các trang gọi `Store.list()` ngay lúc DOMContentLoaded,
+  // nhưng biết đã đăng nhập hay chưa lại là việc bất đồng bộ. Hỏi nhanh quá thì
+  // câu trả lời là "chưa" và trang đọc nhầm localStorage trong khi dữ liệu thật
+  // nằm ở DB — trông y hệt mất dữ liệu.
+  //
+  // Cách xử: MỌI hàm công khai chờ `ready` trước khi chạm driver. Các hàm này
+  // vốn đã async từ GĐ 0 nên thêm một `await` ở đầu là không trang nào thấy
+  // khác biệt — đây chính là khoản đầu tư từ GĐ 0 được dùng.
+  let backend = null; // null = driver localStorage bên dưới
+  let resolveReady;
+  const ready = new Promise((r) => (resolveReady = r));
+
+  function supabaseWanted() {
+    return !!(
+      typeof APP_CONFIG !== "undefined" &&
+      APP_CONFIG.supabase &&
+      APP_CONFIG.supabase.STORE_ENABLED &&
+      typeof SupabaseDriver !== "undefined" &&
+      typeof Auth !== "undefined"
+    );
+  }
+
+  async function decideDriver() {
+    if (!supabaseWanted()) return null;
+    try {
+      const s = await Auth.session();
+      // Chưa đăng nhập thì KHÔNG rơi về localStorage một cách im lặng khi cờ
+      // STORE_ENABLED đang bật: lúc đó dữ liệu thật ở DB, còn localStorage có
+      // thể là bản cũ đọc ra thì sai, hoặc rỗng thì hoảng. Trang phải đăng nhập.
+      return s ? SupabaseDriver : null;
+    } catch (err) {
+      console.warn("[Store] không hỏi được phiên đăng nhập:", err.message);
+      return null;
+    }
+  }
+
+  // Quyết định sau khi mọi script khác đã nạp (store.js đứng trước auth.js
+  // trong HTML), rồi quyết lại mỗi lần đăng nhập / đăng xuất.
+  function initDriver() {
+    decideDriver().then((d) => {
+      backend = d;
+      resolveReady();
+      if (supabaseWanted()) {
+        Auth.onChange(async () => {
+          backend = await decideDriver();
+        });
+      }
+    });
+  }
+
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initDriver);
+    } else {
+      initDriver();
+    }
+  } else {
+    resolveReady();
+  }
+
   // Legacy keys from the single-page dashboard. Kept so existing users do not
   // lose their watchlist/transactions when the app becomes multi-page.
   const LEGACY_KEYS = {
@@ -67,12 +129,19 @@ const Store = (function () {
   }
 
   // ---- Public API (all async on purpose — see header) ----
+  //
+  // Mỗi hàm `await ready` rồi hỏi `backend`: có driver Supabase thì giao cho
+  // nó, không thì chạy phần localStorage ngay bên dưới.
 
   async function list(collection) {
+    await ready;
+    if (backend) return backend.list(collection);
     return readRaw(collection);
   }
 
   async function add(collection, row) {
+    await ready;
+    if (backend) return backend.add(collection, row);
     const rows = readRaw(collection);
     const withId = { id: row.id || newId(), ...row };
     rows.push(withId);
@@ -81,6 +150,8 @@ const Store = (function () {
   }
 
   async function update(collection, id, patch) {
+    await ready;
+    if (backend) return backend.update(collection, id, patch);
     const rows = readRaw(collection);
     const i = rows.findIndex((r) => r.id === id);
     if (i === -1) return null;
@@ -90,6 +161,8 @@ const Store = (function () {
   }
 
   async function remove(collection, id) {
+    await ready;
+    if (backend) return backend.remove(collection, id);
     const rows = readRaw(collection);
     const next = rows.filter((r) => r.id !== id);
     if (next.length === rows.length) return false;
@@ -100,18 +173,31 @@ const Store = (function () {
   // Replace the whole collection. Needed for ordered lists (watchlist drag) and
   // for the phase-5 import; prefer add/update/remove for everything else.
   async function replace(collection, rows) {
+    await ready;
+    if (backend) return backend.replace(collection, rows);
     writeRaw(collection, Array.isArray(rows) ? rows : []);
     return rows;
   }
 
+  // Đăng ký đồng bộ (các trang gọi lúc dựng giao diện, không await được), nên
+  // gắn vào CẢ HAI driver: driver nào đang chạy thì handler vẫn được gọi.
   function onChange(collection, handler) {
     if (!listeners.has(collection)) listeners.set(collection, new Set());
     listeners.get(collection).add(handler);
-    return () => listeners.get(collection).delete(handler); // unsubscribe
+    let offRemote = null;
+    ready.then(() => {
+      if (backend) offRemote = backend.onChange(collection, handler);
+    });
+    return () => {
+      listeners.get(collection).delete(handler);
+      if (offRemote) offRemote();
+    };
   }
 
   // ---- Settings: single object, not a list ----
   async function getSetting(name, fallback = null) {
+    await ready;
+    if (backend) return backend.getSetting(name, fallback);
     try {
       const raw = localStorage.getItem(PREFIX + "settings");
       const obj = raw ? JSON.parse(raw) : {};
@@ -122,6 +208,8 @@ const Store = (function () {
   }
 
   async function setSetting(name, value) {
+    await ready;
+    if (backend) return backend.setSetting(name, value);
     let obj = {};
     try {
       const raw = localStorage.getItem(PREFIX + "settings");
@@ -139,6 +227,16 @@ const Store = (function () {
   // matter which driver is active — used by the phase-5 migration and by the
   // manual backup button.
   async function exportAll() {
+    await ready;
+    if (backend) return backend.exportAll();
+    return exportLocal();
+  }
+
+  // Đọc THẲNG localStorage, bỏ qua driver đang chạy. Màn hình nhập dữ liệu ở
+  // 5.5 cần đúng thứ này: lúc đó driver đã là Supabase, mà nguồn cần nhập lại
+  // nằm ở localStorage. Dùng `exportAll()` khi ấy sẽ xuất ra chính cái DB rỗng
+  // đang định nhập vào — vòng tròn, và không ai nhận ra cho tới lúc mất dữ liệu.
+  function exportLocal() {
     const out = {};
     for (const k of Object.keys(localStorage)) {
       if (k.startsWith(PREFIX) || Object.values(LEGACY_KEYS).includes(k)) {
@@ -149,7 +247,12 @@ const Store = (function () {
   }
 
   return {
-    driver: "localStorage",
+    // Getter chứ không phải chuỗi cố định: driver chốt sau khi hỏi xong phiên
+    // đăng nhập, nên đọc lúc nạp trang sẽ luôn ra "localStorage".
+    get driver() {
+      return backend ? backend.driver : "localStorage";
+    },
+    ready,
     list,
     add,
     update,
@@ -159,6 +262,7 @@ const Store = (function () {
     getSetting,
     setSetting,
     exportAll,
+    exportLocal,
   };
 })();
 

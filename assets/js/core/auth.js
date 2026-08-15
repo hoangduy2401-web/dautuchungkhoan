@@ -149,12 +149,45 @@ const Auth = (function () {
         `<p class="build-note">Đang đăng nhập: <strong>${esc(s.user.email)}</strong>` +
           `<br>Dữ liệu vẫn đang đọc từ <strong>trình duyệt này</strong> — việc chuyển ` +
           `lên Supabase là giai đoạn 5.4/5.5, chưa làm. Đăng nhập lúc này chưa thay đổi gì.</p>` +
-          `<button type="button" class="btn-outline" id="authOut">Đăng xuất</button>`
+          `<button type="button" class="btn-outline" id="authTest">Kiểm tra kết nối Supabase</button> ` +
+          `<button type="button" class="btn-outline" id="authOut">Đăng xuất</button>` +
+          `<div id="authTestOut"></div>`
       );
+
       document.getElementById("authOut").addEventListener("click", async (e) => {
         e.target.disabled = true;
         await signOut();
         render();
+      });
+
+      // Vòng thêm-đọc-sửa-xoá thật trên DB. Chạy trên bảng `cash_flows` mà chưa
+      // trang nào dùng, nên không đụng danh mục thật.
+      document.getElementById("authTest").addEventListener("click", async (e) => {
+        const out = document.getElementById("authTestOut");
+        e.target.disabled = true;
+        out.innerHTML = `<p class="build-note">Đang chạy…</p>`;
+        try {
+          const steps = await SupabaseDriver.selfTest();
+          const rows = steps
+            .map(
+              (s) =>
+                `<tr><td>${s.ok ? "✅" : "❌"}</td><td>${esc(s.name)}</td>` +
+                `<td>${esc(s.detail)}</td></tr>`
+            )
+            .join("");
+          const bad = steps.filter((s) => !s.ok).length;
+          out.innerHTML =
+            `<table class="asset-table" style="margin-top:12px"><tbody>${rows}</tbody></table>` +
+            `<p class="build-note">${
+              bad
+                ? `<strong>${bad} bước hỏng.</strong> Chưa được bật STORE_ENABLED khi còn dòng đỏ.`
+                : `Tất cả các bước đều chạy. Driver Supabase đọc/ghi được.`
+            }</p>`;
+        } catch (err) {
+          out.innerHTML = `<p class="build-note">Không chạy được: ${esc(err.message)}</p>`;
+        } finally {
+          e.target.disabled = false;
+        }
       });
       return;
     }
