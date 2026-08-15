@@ -751,7 +751,10 @@ function renderSigStrategies(el, symbols) {
  * Signal badge beside the symbol name in the chart panel.
  * Uses the fixed SIG_DAYS window, never state.range — otherwise the badge would
  * change when the user switches 1M/3M/6M, which reads as a bug.
- * One extra call per symbol, cached in state.sigBars and shared with the tab.
+ *
+ * Thường KHÔNG tốn lần gọi nào: `loadSelectedSymbol` đã tải sẵn cửa sổ rộng
+ * hơn rồi cắt 180 phiên bỏ vào `state.sigBars`. Nhánh tự đi lấy bên dưới chỉ
+ * chạy khi lần tải đó hỏng, hoặc khi tab Tín hiệu hỏi một mã chưa từng mở.
  */
 async function renderSymbolSignal(sym) {
   const paint = () => {
@@ -1245,8 +1248,9 @@ function renderRangeTabs() {
     { label: "3M", days: 90 },
     { label: "6M", days: 180 },
     { label: "1Y", days: 365 },
-    // 5Y ~ 1250 trading days; the backend chunks history in 30-day calls, so the
-    // first uncached load of this range is slow (~40 SSI calls). Cached after.
+    // 5Y ~ 1250 phiên. Backend chia lịch sử theo khối 365 ngày (trước là 30),
+    // nên lần tải đầu của khung này tốn 5 lượt gọi SSI thay vì 61 — khoảng 4
+    // giây thay vì 8. Sau đó đọc từ cache.
     { label: "5Y", days: 1825 },
   ];
   const el = document.getElementById("rangeTabs");
@@ -1284,11 +1288,22 @@ async function loadSelectedSymbol() {
       q ? `${fmt(q.price)} <small>${fmtPct(q.changePct)}</small>` : "—"
     }</span>
   `;
-  const [history, fundamentals, news] = await Promise.all([
-    DataService.getHistory(sym, state.range).catch(() => null),
+  // MỘT lần gọi lịch sử cho cả biểu đồ lẫn huy hiệu tín hiệu.
+  //
+  // Trước đây là hai: biểu đồ xin `state.range`, huy hiệu xin SIG_DAYS (180).
+  // Nhưng hai khoảng đó chồng lấn hoàn toàn — cửa sổ rộng hơn đã chứa trọn cửa
+  // sổ hẹp hơn. Xin đúng một lần cửa sổ rộng nhất rồi cắt ra dùng là đủ cả hai,
+  // và cắt ở trình duyệt thì không tốn gì.
+  const fetchDays = Math.max(state.range, SIG_DAYS);
+  const [full, fundamentals, news] = await Promise.all([
+    DataService.getHistory(sym, fetchDays).catch(() => null),
     DataService.getFundamentals(sym),
     DataService.getNews(state.watchlist),
   ]);
+
+  // Backend cắt lịch sử theo `end - days`; lặp lại đúng công thức đó ở đây để
+  // biểu đồ nhận đúng bộ nến như khi còn gọi riêng theo `state.range`.
+  const history = sliceLastDays(full, state.range);
 
   // Pass the dataset identity so the 45s refresh keeps any trendline/ruler the
   // user drew (same symbol + range = same anchors); switching either clears it.
@@ -1302,10 +1317,24 @@ async function loadSelectedSymbol() {
   renderFundamentals(fundamentals);
   renderNews(news);
 
-  // Badge LAST and un-awaited. The backend limiter runs concurrency=1, so
-  // starting this before the chart would put a 180-day fetch ahead of the data
-  // the user is actually looking at and delay the chart on a cold cache.
+  // Nạp sẵn cửa sổ 180 phiên cho huy hiệu từ chính dữ liệu vừa tải. Nhờ vậy
+  // `renderSymbolSignal` chỉ việc vẽ, không phải gọi mạng lần nữa. Tải hỏng
+  // thì để nguyên — nó vẫn còn đường tự đi lấy.
+  if (Array.isArray(full) && full.length && !state.sigBars[sym]) {
+    state.sigBars[sym] = sliceLastDays(full, SIG_DAYS);
+  }
   renderSymbolSignal(sym);
+}
+
+// Cắt lấy phần đuôi của chuỗi nến theo số ngày LỊCH (không phải số phiên) —
+// đúng công thức backend dùng, nên kết quả trùng với bộ nến của lần gọi riêng.
+// `date` dạng YYYY-MM-DD nên so chuỗi là so ngày, không cần dựng Date cho từng nến.
+function sliceLastDays(bars, days) {
+  if (!Array.isArray(bars) || !bars.length) return bars;
+  const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const out = bars.filter((b) => b.date >= cutoff);
+  // Chuỗi ngắn hơn cửa sổ (mã mới niêm yết) thì giữ nguyên, đừng trả mảng rỗng.
+  return out.length ? out : bars;
 }
 
 // Index counterpart of loadSelectedSymbol. Deliberately NOT a branch inside that
