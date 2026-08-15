@@ -300,8 +300,18 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + baseUrl trỏ
   commit trùng (bị 1 lần, phải `git reset --hard`).
 - HTTPS: chứng chỉ Let's Encrypt do GitHub cấp và tự gia hạn.
 - **Enforce HTTPS bị chặn**: GitHub báo "domain is not properly configured" vì
-  tên miền gốc chỉ có 1 bản ghi A — GitHub đòi đủ 4 IP. Mắt Bão có vẻ chỉ cho 1
-  bản ghi A → nếu đúng, phải chuyển nameserver sang Cloudflare mới thêm đủ.
+  tên miền gốc chỉ có 1 bản ghi A — GitHub đòi đủ 4 IP.
+  **Đo lại 15/08/2026: `dig +short dashboardstock.io.vn A` vẫn chỉ trả
+  `185.199.108.153`.** Giả thuyết cũ "Mắt Bão chỉ cho 1 bản ghi A → phải chuyển
+  nameserver sang Cloudflare" **chưa ai kiểm chứng** — DNS thường cho nhiều bản
+  ghi A cùng tên. Thử thêm 3 IP còn lại ở Mắt Bão TRƯỚC khi tính chuyện đổi
+  nameserver.
+- **Hai origin `http://` và `https://` đã gây mất gần một buổi (15/08)** — xem
+  mục 7. `config.js` nay có đoạn `forceHttps()` chuyển hướng ở phía trình duyệt,
+  nhưng **đó chỉ là lớp vá**: nó chạy sau khi trang đã tải, và không cứu được
+  dữ liệu đã lỡ ghi vào kho `http://`. Lớp sửa thật vẫn là đủ 4 bản ghi A +
+  Enforce HTTPS. Giữ `forceHttps()` kể cả sau khi bật — lưới thứ hai, vô hại.
+  Cửa thoát `?http-ok=1` để cứu dữ liệu còn kẹt ở kho `http://`.
 - **Secrets sống 2 nơi tách biệt**: `server/.env` (local only, `.gitignore` chặn)
   và Environment vars ở Render dashboard. Sửa nơi này không ảnh hưởng nơi kia.
 - Git: PAT lưu macOS osxkeychain, cần scope `repo` **và `workflow`** (thiếu
@@ -952,10 +962,18 @@ biểu đồ nhanh gấp 2 + cảnh báo đơn vị giá vốn (15/08).
 
 ### Việc nhỏ (không chặn) — user tự làm
 1. **Bật tự động gia hạn tên miền ở Mắt Bão** (quên = dashboard chết, không ai báo).
-2. **Enforce HTTPS**: cần đủ 4 bản ghi A → phải chuyển nameserver sang Cloudflare.
-   `http://` hiện vẫn trả 200. **Ưu tiên cao hơn trước**: bản `http://` có kho
-   localStorage RIÊNG và `github.io` chuyển hướng về đúng bản đó — xem bài học
-   "hai origin" mục 7.
+2. **Enforce HTTPS — ĐANG LÀM DỞ, ưu tiên cao nhất.** Đây là thứ đã ăn mất gần
+   một buổi ngày 15/08 (mục 7). Đã có lớp vá `forceHttps()` trong `config.js`
+   nhưng lớp sửa thật gồm hai bước, **user tự làm**:
+   1. Vào DNS ở **Mắt Bão**, tên miền `dashboardstock.io.vn`, thêm **3 bản ghi A**
+      còn thiếu cho tên gốc `@`: `185.199.109.153`, `185.199.110.153`,
+      `185.199.111.153`. Giữ nguyên bản ghi `185.199.108.153` đang có và CNAME
+      `www`. Chờ 15–60 phút.
+   2. GitHub → repo → **Settings → Pages** → chờ ô **Enforce HTTPS** hết mờ rồi
+      tích vào. Trước khi đủ 4 IP thì ô này bị khoá.
+
+   Kiểm bằng: `dig +short dashboardstock.io.vn A` phải ra đủ 4 dòng, và
+   `curl -sI http://dashboardstock.io.vn` phải trả 301 thay vì 200.
 3. GitHub tự tắt scheduled workflow sau 60 ngày repo không commit → tab Actions
    bấm *Enable workflow* khi cần.
 

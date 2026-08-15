@@ -1,4 +1,31 @@
 // ============================================================
+// CHẶN http:// — phải nằm ở ĐẦU file script đầu tiên được nạp.
+//
+// `http://` và `https://` là hai origin khác nhau, nên chúng có localStorage
+// RIÊNG và phiên đăng nhập Supabase RIÊNG. Ngày 15/08/2026 chuyện này ăn mất
+// gần một buổi: máy tính mở bản `http://` (chưa đăng nhập, ghi vào localStorage
+// của origin đó) trong khi điện thoại mở bản `https://` (đã đăng nhập, đọc DB).
+// Hai máy hiện hai danh sách khác nhau mà nhìn bề ngoài không có gì bất thường.
+//
+// Đây chỉ là lớp vá tạm ở phía trình duyệt. Lớp sửa thật là **đủ 4 bản ghi A**
+// + bật *Enforce HTTPS* trong GitHub Pages — xem `CLAUDE.md` mục 6. Giữ đoạn
+// này kể cả sau khi đã bật Enforce HTTPS: nó vô hại và là lưới thứ hai.
+//
+// KHÔNG đụng tới localhost (phát triển local chạy `http://localhost:5599`).
+// Cửa thoát `?http-ok=1` chỉ dùng khi cần cứu dữ liệu còn kẹt ở kho `http://`.
+(function forceHttps() {
+  if (typeof location === "undefined") return;
+  const host = location.hostname;
+  const isLocal = host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
+  if (location.protocol !== "http:" || isLocal) return;
+  if (location.search.includes("http-ok=1")) {
+    console.warn("[https] đang ở bản http:// theo yêu cầu — dữ liệu ở đây TÁCH RIÊNG");
+    return;
+  }
+  location.replace("https://" + host + location.pathname + location.search + location.hash);
+})();
+
+// ============================================================
 // APP CONFIG — the ONLY file to edit when switching mock -> real data.
 // ============================================================
 const APP_CONFIG = {
