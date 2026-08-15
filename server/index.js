@@ -1881,6 +1881,92 @@ app.get("/health", (req, res) =>
   res.json({ ok: true, startedAt: BOOT_AT, uptimeSec: Math.round(process.uptime()) })
 );
 
+// ============================================================
+// SNAPSHOT GIÁ HÀNG NGÀY (GĐ 5.7 của docs/QUYHOACH.md)
+//
+// Vì sao cần: tỷ giá Vietcombank, giá vàng PNJ và bảng lãi suất tiết kiệm
+// KHÔNG có nguồn lịch sử miễn phí nào cho VN. Không tự lưu từ hôm nay thì một
+// năm nữa vẫn không vẽ được biểu đồ một năm — dữ liệu đã trôi qua không mua
+// lại được. Đây là lý do việc này làm sớm, dù thứ dùng tới nó (GĐ 6) còn xa.
+//
+// Ghi bằng SECRET KEY, không phải publishable key: bảng `price_snapshots` mở
+// cho mọi người ĐỌC nhưng không có policy ghi nào (xem supabase/schema.sql),
+// nên chỉ khoá bỏ qua RLS mới ghi được. Khoá đó chỉ sống trong env của Render,
+// không bao giờ nằm trong repo hay chạm tới frontend.
+//
+// Không set env -> job TẮT HẲN, in một dòng log rồi thôi. Giống cách
+// /api/account/* tắt khi thiếu DASHBOARD_API_KEY: thiếu cấu hình thì không
+// chạy, chứ không chạy nửa vời.
+// ============================================================
+const SUPA_URL = process.env.SUPABASE_URL || "";
+const SUPA_SECRET = process.env.SUPABASE_SECRET_KEY || "";
+const SNAPSHOT_ENABLED = !!(SUPA_URL && SUPA_SECRET);
+
+// Mỗi loại một hàng mỗi ngày, chốt bằng ràng buộc unique(kind, taken_on).
+// Dùng UPSERT (merge-duplicates) chứ không phải bỏ qua trùng, cố ý: chạy lại
+// trong ngày sẽ ĐÈ LÊN hàng cũ, nên hàng còn lại cuối ngày là bảng giá muộn
+// nhất — gần giá đóng cửa nhất. Bỏ qua trùng thì hàng giữ lại là bảng lúc
+// nửa đêm, tức bảng của hôm trước.
+async function writeSnapshot(kind, payload) {
+  const res = await fetchWithTimeout(
+    `${SUPA_URL}/rest/v1/price_snapshots?on_conflict=kind,taken_on`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SUPA_SECRET,
+        Authorization: `Bearer ${SUPA_SECRET}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({ kind, payload }),
+    },
+    15000
+  );
+  if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
+}
+
+// Đọc qua withCache y như route của người dùng: bảng giá vừa phục vụ ai đó
+// xong thì job này KHÔNG gọi lại nguồn, chỉ lấy bản đã có trong bộ nhớ.
+const SNAPSHOT_KINDS = [
+  ["fx", () => withCache("fx:rates", FX_RATES_TTL_MS, computeFxRates)],
+  ["gold", () => withCache("gold:prices", GOLD_TTL_MS, computeGoldPrices)],
+  ["savings", () => withCache("savings:rates", SAVINGS_TTL_MS, computeSavings)],
+];
+
+async function snapshotDaily() {
+  if (!SNAPSHOT_ENABLED) return;
+  for (const [kind, producer] of SNAPSHOT_KINDS) {
+    try {
+      const payload = await producer();
+      // Nguồn chết mà server trả bản chụp cũ (`stale: true`) thì KHÔNG ghi:
+      // lưu lại sẽ tạo ra một điểm dữ liệu mang ngày hôm nay nhưng giá của
+      // hôm khác, và về sau không ai phân biệt nổi trên biểu đồ.
+      if (payload && payload.stale) {
+        console.warn(`[snapshot] bỏ qua ${kind}: nguồn đang trả bản chụp cũ`);
+        continue;
+      }
+      await writeSnapshot(kind, payload);
+      console.log(`[snapshot] ${kind} ok`);
+    } catch (err) {
+      // Hỏng một loại không được làm hỏng hai loại còn lại, và tuyệt đối
+      // không được làm sập tiến trình.
+      console.warn(`[snapshot] ${kind} lỗi:`, err.message);
+    }
+  }
+}
+
+// Mỗi giờ chứ không phải mỗi 24 giờ: Render Free khởi động lại thường xuyên,
+// mà setInterval 24h thì mỗi lần restart là đồng hồ đếm lại từ đầu — có thể
+// không bao giờ tới hạn. Chạy hàng giờ + upsert theo ngày cho ra đúng một
+// hàng mỗi ngày, và sống sót qua mọi lần restart.
+const SNAPSHOT_INTERVAL_MS = Number(process.env.SNAPSHOT_INTERVAL_MS) || 3600_000;
+if (SNAPSHOT_ENABLED) {
+  setTimeout(snapshotDaily, 60_000); // để server ấm và cache có dữ liệu đã
+  setInterval(snapshotDaily, SNAPSHOT_INTERVAL_MS);
+} else {
+  console.log("[snapshot] TẮT — thiếu SUPABASE_URL hoặc SUPABASE_SECRET_KEY");
+}
+
 // ------------------------------------------------------------
 // Warm-cache loop. Sequentially (concurrency 1) refresh the hot data —
 // indices + the default watchlist quotes — a little before the 45s TTL
