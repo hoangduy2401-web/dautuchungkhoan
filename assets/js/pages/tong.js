@@ -7,4 +7,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initChrome(); // theme toggle + glass slider + clock
   Auth.render(); // đăng nhập magic link (GĐ 5.3) — chưa đụng dữ liệu
   Backup.render(); // nút xuất JSON (GĐ 5.6) — lối thoát trước khi lên Supabase
+  Migrate.render(); // màn hình nhập dữ liệu cũ (GĐ 5.5) — chỉ chạy khi user bấm
 });
