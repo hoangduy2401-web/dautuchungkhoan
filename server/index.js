@@ -257,11 +257,30 @@ async function ssiGet(path, params) {
 }
 
 // ------------------------------------------------------------
-// DailyOhlc is capped at 30 days per call (PDF v2.2), so fetch in chunks
-// and page through each chunk.
+// DailyOhlc chunking.
+//
+// Từng để 30 ngày/lần + PageSize 100 theo PDF v2.2 của SSI. ĐO LẠI 15/08/2026:
+// giới hạn đó không còn đúng — một lần gọi trả 65 nến cho 90 ngày, 249 nến cho
+// 365 ngày, 1.247 nến cho 5 năm (PageSize 2000).
+//
+// Đối chiếu FPT 365 ngày, bản chia khối và bản một lần gọi: 249 nến cả hai,
+// không lệch ngày nào, giá chênh đúng tỷ lệ 1000 (là phép quy đổi nghìn đồng
+// sẵn có). Dữ liệu giống hệt.
+//
+// Vì sao 365 chứ không phải 2000 (đủ ôm 5 năm trong một lần): 365 là mốc đã
+// đối chiếu từng nến, còn khoảng rộng hơn mới chỉ đếm số dòng. Nếu SSI siết
+// lại giới hạn thì kiểu hỏng ở đây là IM LẶNG — trả về ít nến hơn chứ không
+// báo lỗi — nên chọn mốc đã kiểm kỹ. Vòng chia khối giữ nguyên làm lưới an
+// toàn, chỉ đổi độ rộng mỗi khối.
+//
+// Số lần gọi SSI cho một biểu đồ: 3M 3->1, 1Y 13->1, 5Y 61->5.
+// Đo trên 10 mã, khung 90 ngày mặc định: 8,89s -> 4,84s (nhanh hơn 1,8 lần).
 // ------------------------------------------------------------
-const OHLC_CHUNK_DAYS = 30;
-const OHLC_PAGE_SIZE = 100; // SSI max is typically 100
+// Chỉnh được bằng biến môi trường, y như SSI_CONCURRENCY và WARM_INTERVAL_MS:
+// SSI siết lại giới hạn thì hạ hai số này trong Render là xong, không cần sửa
+// code rồi deploy lại. Đặt về 30/100 là quay đúng hành vi cũ.
+const OHLC_CHUNK_DAYS = Number(process.env.OHLC_CHUNK_DAYS) || 365;
+const OHLC_PAGE_SIZE = Number(process.env.OHLC_PAGE_SIZE) || 1000;
 
 async function fetchOhlcChunk(symbol, from, to) {
   const rows = [];
