@@ -23,8 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260815a`** — nhưng **6 file đã đổi nội dung SAU khi
-chuỗi này được đặt**. Phải bump lên `20260815b` trước khi làm 5.8; lý do ở mục 10.
+Cache busting hiện **`?v=20260815b`** (73 chỗ trong 6 file HTML).
 
 ---
 
@@ -838,21 +837,12 @@ Cũng là bước duy nhất còn rủi ro thật.
    **dữ liệu cũ còn nguyên vì chưa hề xoá**. Đừng xoá localStorage cho tới khi
    bước 5 chạy đúng ít nhất một lần.
 
-**⚠ CHƯA BUMP `?v=` — 6 FILE ĐANG LỆCH.** Chuỗi `?v=20260815a` được đặt ở commit
-`346ae45` (costGuard), rồi **ba commit sau đó vẫn sửa asset mà không bump**:
-
-| File | Commit sửa sau khi bump |
-|---|---|
-| `pages/chung-khoan.js` | `fc8d246` gộp 2 lần gọi lịch sử |
-| `core/store-supabase.js`, `pages/tong.js` | `a3e63db` (5.5) |
-| `core/store.js`, `core/nav.js`, `css/base.css` | `0fb0b59` dải cảnh báo |
-
-Trình duyệt nào đã tải `20260815a` giữa các lần deploy sẽ dùng bản cache cũ.
-Nguy hiểm nhất là `nav.js` + `store.js`: thiếu chúng thì **không có dải cảnh báo
-chưa đăng nhập** — đúng thứ bước 4 cần kiểm. Bump `20260815b` ở cả 6 file HTML
-trước khi làm 5.8.
-
-**Cách kiểm nhanh loại lỗi này** (đưa vào quy trình handoff từ nay):
+**Cạm bẫy `?v=` đã dính một lần 15/08 — đưa vào quy trình handoff từ nay.** Chuỗi
+`20260815a` được đặt ở commit `346ae45`, rồi **ba commit sau đó vẫn sửa asset mà
+không bump** (`chung-khoan.js`, `store-supabase.js`, `tong.js`, `store.js`,
+`nav.js`, `base.css`). Trình duyệt đã tải giữa các lần deploy sẽ dùng bản cũ —
+nguy nhất là thiếu `nav.js`+`store.js` thì **không có dải cảnh báo chưa đăng
+nhập**. Đã bump `20260815b` khi làm 5.8. Lệnh soát:
 ```bash
 git diff --name-only <commit-bump-cuoi>..HEAD -- 'assets/**' | grep -E '\.(js|css)$'
 ```

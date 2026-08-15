@@ -100,14 +100,18 @@ const APP_CONFIG = {
   // HAI CỜ TÁCH RIÊNG, cố ý:
   //   AUTH_ENABLED  — cho phép đăng nhập (5.3). Bật được ngay, không ảnh hưởng
   //                   dữ liệu: đăng nhập xong mọi trang vẫn đọc localStorage.
-  //   STORE_ENABLED — chuyển `store.js` sang đọc/ghi DB (5.4). Bật cái này khi
-  //                   dữ liệu CHƯA nhập lên DB là trang hiện danh mục rỗng
-  //                   trong khi dữ liệu thật vẫn nằm nguyên ở localStorage —
-  //                   trông y hệt mất sạch. Chỉ bật sau khi 5.5 chạy xong và
-  //                   đã đối chiếu trên cả máy tính lẫn điện thoại.
+  //   STORE_ENABLED — chuyển `store.js` sang đọc/ghi DB (5.4). BẬT 15/08/2026
+  //                   sau khi 5.5 đã ghi dữ liệu lên DB (watchlist 5 mã +
+  //                   settings + 1 dòng vàng, đối chiếu trong panel Chuyển dữ
+  //                   liệu). localStorage KHÔNG bị xoá — đổi cờ này về false là
+  //                   quay lại ngay, dữ liệu cũ còn nguyên.
+  //
+  //                   Chưa đăng nhập thì trang vẫn đọc localStorage NHƯNG hiện
+  //                   dải cảnh báo cam trên mọi trang (`Store.needsLogin` +
+  //                   `nav.js`). Đừng bỏ dải đó đi cho gọn — xem mục 7.
   supabase: {
     AUTH_ENABLED: true,
-    STORE_ENABLED: false,
+    STORE_ENABLED: true,
     url: "https://kndumltxfrhqxbjrlice.supabase.co",
     publishableKey: "sb_publishable_UfJaGsDm-Dh5Mffx30H5Jw_gw6fHPBj",
   },
