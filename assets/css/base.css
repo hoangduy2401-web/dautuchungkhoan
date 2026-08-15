@@ -553,6 +553,9 @@ tr:hover td { background: var(--surface-hover); }
   margin-bottom: 10px;
 }
 .hold-error[hidden] { display: none; }
+/* Canh bao don vi (CostGuard): khac mau loi that vi day KHONG chan thao tac —
+   bam lai lan nua la app nhan so da nhap. Do = sai, cam = dang ngo. */
+.hold-error.warn { color: var(--accent-orange); background: var(--accent-soft); }
 
 .hold-summary { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
 .hold-summary:empty { display: none; }

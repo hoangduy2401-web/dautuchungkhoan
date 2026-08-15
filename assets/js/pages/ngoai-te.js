@@ -559,11 +559,20 @@ function fillHoldCodes() {
   if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
 }
 
-function setHoldError(msg) {
+// kind = "warn": cảnh báo đơn vị, không chặn — đổi màu để khỏi lẫn với lỗi thật.
+function setHoldError(msg, kind) {
   const el = document.getElementById("holdError");
   el.textContent = msg || "";
   el.hidden = !msg;
+  el.classList.toggle("warn", kind === "warn" && !!msg);
 }
+
+// Ô giá vốn trang này là **₫/1 đơn vị ngoại tệ** — CÙNG đơn vị với tỷ giá đang
+// hiện, không phải quy đổi gì (khác trang Vàng). Lỗi hay gặp: gõ "26" thay vì
+// "26.000" cho USD. Dùng đúng `holdRate` mà bảng dùng để định giá, nên cảnh báo
+// và bảng nói cùng một con số; VCB không niêm yết -> null -> CostGuard im lặng.
+const costConfirm = CostGuard.makeConfirmer();
+const COST_GUARD_OPTS = { unitLabel: "₫/1 đơn vị", marketLabel: "tỷ giá hiện tại", fmt: fmtRate };
 
 function wireHoldings() {
   document.getElementById("holdForm").addEventListener("submit", async (e) => {
@@ -578,6 +587,11 @@ function wireHoldings() {
     if (!code) return setHoldError("Chưa nạp được danh sách ngoại tệ — thử lại khi bảng tỷ giá hiện số.");
     if (amount === null || amount <= 0) return setHoldError("Số tiền phải là số lớn hơn 0.");
     if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+    if (cost !== null) {
+      const warn = costConfirm.guard(`add|${code}|${cost}`, cost, holdRate(code), COST_GUARD_OPTS);
+      if (warn) return setHoldError(warn, "warn");
+    }
 
     setHoldError("");
     await Store.add(HOLDINGS_COLLECTION, {
@@ -609,6 +623,7 @@ function wireHoldings() {
 
     if (btn.dataset.act === "cancel") {
       fxState.editingId = null;
+      costConfirm.reset(); // bỏ dở thì nhịp xác nhận cũng phải quên
       setHoldError("");
       renderHoldings();
       return;
@@ -620,6 +635,17 @@ function wireHoldings() {
       const cost = costRaw ? parseAmount(costRaw) : null;
       if (amount === null || amount <= 0) return setHoldError("Số tiền phải là số lớn hơn 0.");
       if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+      if (cost !== null) {
+        const h = fxState.holdings.find((x) => String(x.id) === id);
+        const warn = costConfirm.guard(
+          `edit|${id}|${cost}`,
+          cost,
+          h ? holdRate(h.code) : null,
+          COST_GUARD_OPTS
+        );
+        if (warn) return setHoldError(warn, "warn");
+      }
 
       setHoldError("");
       await Store.update(HOLDINGS_COLLECTION, id, { amount, cost, updatedAt: new Date().toISOString() });

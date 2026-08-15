@@ -633,10 +633,24 @@ function renderHoldSummary(rows) {
       : "");
 }
 
-function setHoldError(msg) {
+// kind = "warn": cảnh báo đơn vị, không chặn — đổi màu để khỏi lẫn với lỗi thật.
+function setHoldError(msg, kind) {
   const el = document.getElementById("holdError");
   el.textContent = msg || "";
   el.hidden = !msg;
+  el.classList.toggle("warn", kind === "warn" && !!msg);
+}
+
+// Ô giá vốn trang này là **₫/1 coin** — CÙNG đơn vị với giá đang hiện ở bảng,
+// không phải quy đổi gì (khác trang Vàng, nơi ô nhập là triệu ₫/lượng còn dữ
+// liệu là nghìn ₫/chỉ). Lỗi hay gặp ở đây là gõ GIÁ USD vào ô VND.
+// `vnd` null (nguồn lỗi) -> null -> CostGuard im lặng, không cảnh báo suông.
+const costConfirm = CostGuard.makeConfirmer();
+const COST_GUARD_OPTS = { unitLabel: "₫/1 coin", marketLabel: "giá hiện tại", fmt: fmtVnd };
+
+function marketCostFor(coinId) {
+  const c = coinById(coinId);
+  return c && hasVal(c.vnd) ? Number(c.vnd) : null;
 }
 
 function wireHoldings() {
@@ -654,6 +668,11 @@ function wireHoldings() {
     if (!id) return setHoldError("Chưa nạp được giá coin — thử lại khi bảng hiện số.");
     if (qty === null || qty <= 0) return setHoldError("Số lượng phải là số lớn hơn 0.");
     if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+    if (cost !== null) {
+      const warn = costConfirm.guard(`add|${id}|${cost}`, cost, marketCostFor(id), COST_GUARD_OPTS);
+      if (warn) return setHoldError(warn, "warn");
+    }
 
     setHoldError("");
     await Store.add(HOLDINGS_COLLECTION, {
@@ -688,6 +707,7 @@ function wireHoldings() {
 
     if (btn.dataset.act === "cancel") {
       coinState.editingId = null;
+      costConfirm.reset(); // bỏ dở thì nhịp xác nhận cũng phải quên
       setHoldError("");
       renderHoldings();
       return;
@@ -700,6 +720,17 @@ function wireHoldings() {
       const date = tr.querySelector('[data-edit="date"]').value || null;
       if (qty === null || qty <= 0) return setHoldError("Số lượng phải là số lớn hơn 0.");
       if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+      if (cost !== null) {
+        const h = coinState.holdings.find((x) => String(x.id) === rowId);
+        const warn = costConfirm.guard(
+          `edit|${rowId}|${cost}`,
+          cost,
+          h ? marketCostFor(h.coinId) : null,
+          COST_GUARD_OPTS
+        );
+        if (warn) return setHoldError(warn, "warn");
+      }
 
       setHoldError("");
       await Store.update(HOLDINGS_COLLECTION, rowId, { qty, cost, date, updatedAt: new Date().toISOString() });

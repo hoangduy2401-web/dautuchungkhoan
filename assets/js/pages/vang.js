@@ -318,6 +318,27 @@ function wireConverter() {
    ============================================================ */
 const COST_TO_PER_CHI = 100; // triệu ₫/lượng -> nghìn ₫/chỉ (×1e6 ÷10 ÷1e3)
 
+// Giá thị trường quy về ĐÚNG đơn vị của ô giá vốn (triệu ₫/lượng) để CostGuard
+// so sánh. Ưu tiên giá tiệm MUA VÀO — đó là giá dùng để định giá danh mục, nên
+// cảnh báo và bảng nói cùng một con số. Tiệm không niêm yết chiều mua (PNJ chỉ
+// mua vàng nguyên liệu) thì lấy tạm giá bán ra; không có cả hai thì trả null và
+// CostGuard im lặng, không cảnh báo dựa trên số không có.
+function marketCostFor(code) {
+  const it = itemByCode(code);
+  if (!it) return null;
+  const perChi = hasVal(it.buy) ? it.buy : hasVal(it.sell) ? it.sell : null;
+  return perChi === null ? null : perChi / COST_TO_PER_CHI;
+}
+
+const costConfirm = CostGuard.makeConfirmer();
+const COST_GUARD_OPTS = {
+  unitLabel: "triệu ₫/lượng",
+  marketLabel: "giá vàng hiện tại",
+  // maximumFractionDigits, KHÔNG dùng fmtMoney: fmtMoney ghim cả min lẫn max nên
+  // gợi ý "80" bị in thành "80,0" — số gợi ý phải gõ lại được y nguyên.
+  fmt: (n) => Number(n).toLocaleString("vi-VN", { maximumFractionDigits: n < 100 ? 1 : 0 }),
+};
+
 function holdRow(h) {
   const it = itemByCode(h.code);
   const qty = Number(h.qty) || 0;
@@ -417,10 +438,12 @@ function renderHoldSummary(rows) {
       : "");
 }
 
-function setHoldError(msg) {
+// kind = "warn": cảnh báo đơn vị, không chặn — đổi màu để khỏi lẫn với lỗi thật.
+function setHoldError(msg, kind) {
   const el = document.getElementById("holdError");
   el.textContent = msg || "";
   el.hidden = !msg;
+  el.classList.toggle("warn", kind === "warn" && !!msg);
 }
 
 function wireHoldings() {
@@ -438,6 +461,11 @@ function wireHoldings() {
     if (!code) return setHoldError("Chưa nạp được bảng giá — thử lại khi bảng hiện số.");
     if (qty === null || qty <= 0) return setHoldError("Số lượng phải là số lớn hơn 0.");
     if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+    if (cost !== null) {
+      const warn = costConfirm.guard(`add|${code}|${cost}`, cost, marketCostFor(code), COST_GUARD_OPTS);
+      if (warn) return setHoldError(warn, "warn");
+    }
 
     setHoldError("");
     await Store.add(HOLDINGS_COLLECTION, {
@@ -471,6 +499,7 @@ function wireHoldings() {
 
     if (btn.dataset.act === "cancel") {
       goldState.editingId = null;
+      costConfirm.reset(); // bỏ dở thì nhịp xác nhận cũng phải quên
       setHoldError("");
       renderHoldings();
       return;
@@ -483,6 +512,17 @@ function wireHoldings() {
       const date = tr.querySelector('[data-edit="date"]').value || null;
       if (qty === null || qty <= 0) return setHoldError("Số lượng phải là số lớn hơn 0.");
       if (costRaw && (cost === null || cost <= 0)) return setHoldError("Giá vốn phải là số lớn hơn 0, hoặc để trống.");
+
+      if (cost !== null) {
+        const h = goldState.holdings.find((x) => String(x.id) === id);
+        const warn = costConfirm.guard(
+          `edit|${id}|${cost}`,
+          cost,
+          h ? marketCostFor(h.code) : null,
+          COST_GUARD_OPTS
+        );
+        if (warn) return setHoldError(warn, "warn");
+      }
 
       setHoldError("");
       await Store.update(HOLDINGS_COLLECTION, id, { qty, cost, date, updatedAt: new Date().toISOString() });
