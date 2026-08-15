@@ -76,9 +76,39 @@ const Nav = (function () {
     // Default OFF: starting hidden reads as "data failed to load", not as a
     // deliberate privacy state.
     Store.getSetting(PRIVACY_SETTING, false).then(applyPrivacy);
+
+    Store.ready.then(renderLoginWarning);
+  }
+
+  // Dải cảnh báo "chưa đăng nhập" — hiện trên MỌI trang khi dữ liệu thật đã
+  // nằm ở Supabase mà máy này chưa đăng nhập.
+  //
+  // Vì sao không chặn hẳn trang: mở trên máy mới sẽ thành trang trắng, tệ hơn.
+  // Vì sao không im lặng: localStorage của máy này có thể là bản cũ — đọc ra
+  // thì sai; hoặc rỗng — thì tưởng mất sạch dữ liệu. Cả hai đều là con số
+  // người dùng dùng để ra quyết định, nên phải nói ra chỗ nó đến từ đâu.
+  function renderLoginWarning() {
+    const host = document.getElementById("appNav");
+    if (!host) return;
+    const existing = document.getElementById("loginWarn");
+
+    if (!Store.needsLogin) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing) return;
+
+    const bar = document.createElement("div");
+    bar.id = "loginWarn";
+    bar.className = "login-warn";
+    bar.innerHTML =
+      `Chưa đăng nhập trên máy này. Số đang hiện là bản lưu trong trình duyệt, ` +
+      `<strong>không phải dữ liệu trên Supabase</strong> — có thể cũ hoặc trống. ` +
+      `<a href="index.html">Đăng nhập</a> để xem đúng.`;
+    host.insertAdjacentElement("afterend", bar);
   }
 
   document.addEventListener("DOMContentLoaded", render);
 
-  return { render, applyPrivacy, currentPage, PAGES };
+  return { render, applyPrivacy, currentPage, renderLoginWarning, PAGES };
 })();

@@ -42,16 +42,24 @@ const Store = (function () {
     );
   }
 
+  // Cờ đọc được từ ngoài: STORE_ENABLED đang bật mà chưa đăng nhập.
+  //
+  // Lúc đó trang VẪN đọc localStorage — chặn hẳn thì mở máy mới là trang trắng,
+  // tệ hơn. Nhưng nó KHÔNG được phép im lặng: dữ liệu thật đang ở DB, còn
+  // localStorage của máy này có thể là bản cũ (đọc ra thì sai) hoặc rỗng (thì
+  // tưởng mất sạch). `nav.js` đọc cờ này để hiện dải cảnh báo trên mọi trang.
+  let needsLogin = false;
+
   async function decideDriver() {
+    needsLogin = false;
     if (!supabaseWanted()) return null;
     try {
       const s = await Auth.session();
-      // Chưa đăng nhập thì KHÔNG rơi về localStorage một cách im lặng khi cờ
-      // STORE_ENABLED đang bật: lúc đó dữ liệu thật ở DB, còn localStorage có
-      // thể là bản cũ đọc ra thì sai, hoặc rỗng thì hoảng. Trang phải đăng nhập.
+      needsLogin = !s;
       return s ? SupabaseDriver : null;
     } catch (err) {
       console.warn("[Store] không hỏi được phiên đăng nhập:", err.message);
+      needsLogin = true;
       return null;
     }
   }
@@ -65,6 +73,9 @@ const Store = (function () {
       if (supabaseWanted()) {
         Auth.onChange(async () => {
           backend = await decideDriver();
+          // Đăng nhập/đăng xuất giữa chừng thì dải cảnh báo phải đổi theo, chứ
+          // không đợi tải lại trang.
+          if (typeof Nav !== "undefined") Nav.renderLoginWarning();
         });
       }
     });
@@ -251,6 +262,10 @@ const Store = (function () {
     // đăng nhập, nên đọc lúc nạp trang sẽ luôn ra "localStorage".
     get driver() {
       return backend ? backend.driver : "localStorage";
+    },
+    // true = đang đọc localStorage TRONG KHI dữ liệu thật nằm ở Supabase.
+    get needsLogin() {
+      return needsLogin;
     },
     ready,
     list,

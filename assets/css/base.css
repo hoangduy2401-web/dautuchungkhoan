@@ -645,3 +645,14 @@ tr:hover td { background: var(--surface-hover); }
 @media (prefers-reduced-motion: reduce) {
   .ticker-track, .live-dot::before { animation: none; }
 }
+
+/* Dai canh bao "chua dang nhap" (GD 5). Cam chu khong do: du lieu van doc
+   duoc, chi la doc tu cho khac voi noi user tuong. Do danh cho loi that. */
+.login-warn {
+  background: var(--accent-soft); color: var(--accent-orange);
+  border: 1px solid var(--accent-orange);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px; margin: 0 0 14px;
+  font-size: var(--text-sm); line-height: 1.5;
+}
+.login-warn a { color: inherit; font-weight: 600; text-decoration: underline; }
