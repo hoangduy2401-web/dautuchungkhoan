@@ -292,26 +292,21 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + baseUrl trỏ
 - Tên miền `dashboardstock.io.vn` mua tại **Mắt Bão** (nameserver
   `ns1/ns2.matbao.vn`), **phải gia hạn hàng năm** — hết hạn: dashboard chết,
   GitHub không cảnh báo.
-- DNS: A `@` → `185.199.108.153` (GitHub Pages còn 3 IP dự phòng
-  `.109/.110/.111.153` nhưng Mắt Bão chỉ cho 1 bản ghi A — 1 IP đủ chạy, chỉ mất
-  lớp dự phòng); CNAME `www` → `hoangduy2401-web.github.io.`
+- DNS: **đủ 4 bản ghi A** `@` → `185.199.108/109/110/111.153`; CNAME `www` →
+  `hoangduy2401-web.github.io.` **Mắt Bão CHO nhiều bản ghi A** — ghi chú cũ
+  "chỉ cho 1, phải chuyển sang Cloudflare" là phỏng đoán sai, đã bác bỏ 15/08.
 - File **`CNAME` ở gốc repo bắt buộc** — xóa: mất tên miền, trang rơi về URL cũ.
   GitHub tự tạo file này khi khai báo custom domain (Settings → Pages), đừng
   commit trùng (bị 1 lần, phải `git reset --hard`).
 - HTTPS: chứng chỉ Let's Encrypt do GitHub cấp và tự gia hạn.
-- **Enforce HTTPS bị chặn**: GitHub báo "domain is not properly configured" vì
-  tên miền gốc chỉ có 1 bản ghi A — GitHub đòi đủ 4 IP.
-  **Đo lại 15/08/2026: `dig +short dashboardstock.io.vn A` vẫn chỉ trả
-  `185.199.108.153`.** Giả thuyết cũ "Mắt Bão chỉ cho 1 bản ghi A → phải chuyển
-  nameserver sang Cloudflare" **chưa ai kiểm chứng** — DNS thường cho nhiều bản
-  ghi A cùng tên. Thử thêm 3 IP còn lại ở Mắt Bão TRƯỚC khi tính chuyện đổi
-  nameserver.
-- **Hai origin `http://` và `https://` đã gây mất gần một buổi (15/08)** — xem
-  mục 7. `config.js` nay có đoạn `forceHttps()` chuyển hướng ở phía trình duyệt,
-  nhưng **đó chỉ là lớp vá**: nó chạy sau khi trang đã tải, và không cứu được
-  dữ liệu đã lỡ ghi vào kho `http://`. Lớp sửa thật vẫn là đủ 4 bản ghi A +
-  Enforce HTTPS. Giữ `forceHttps()` kể cả sau khi bật — lưới thứ hai, vô hại.
-  Cửa thoát `?http-ok=1` để cứu dữ liệu còn kẹt ở kho `http://`.
+- **Enforce HTTPS: ĐÃ BẬT 15/08/2026.** Trước đó bị chặn vì tên miền gốc chỉ có
+  1 bản ghi A (GitHub đòi đủ 4). Thêm 3 IP còn lại ở Mắt Bão là ô Enforce HTTPS
+  hết mờ, tích được ngay — không phải chuyển nameserver đi đâu cả.
+  Kiểm: `dig +short dashboardstock.io.vn A` ra 4 dòng, và
+  `curl -sI http://dashboardstock.io.vn` trả **301** (trước là 200).
+- `config.js` vẫn giữ `forceHttps()` chuyển hướng phía trình duyệt làm **lưới
+  thứ hai**. Nay thừa vì đã có 301 ở tầng máy chủ, nhưng vô hại và cứu được nếu
+  ai đó lỡ tắt Enforce HTTPS. Cửa thoát `?http-ok=1` để đọc kho `http://` cũ.
 - **Secrets sống 2 nơi tách biệt**: `server/.env` (local only, `.gitignore` chặn)
   và Environment vars ở Render dashboard. Sửa nơi này không ảnh hưởng nơi kia.
 - Git: PAT lưu macOS osxkeychain, cần scope `repo` **và `workflow`** (thiếu
@@ -417,8 +412,46 @@ dòng user vừa gõ để thử (`updatedAt` cách lúc xuất file 20 giây). 
 liệu cũ nào cần chuyển.** Mục 10 cũ ghi sai — đó là danh sách khoá *cần chuyển
 nếu có*, chưa ai kiểm chứng. User xác nhận mới chỉ dùng trang chứng khoán.
 
-**Hệ quả còn lại:** chừng nào chưa enforce HTTPS thì hai kho vẫn tách. Xong 5.8
-(dữ liệu ở DB gắn với tài khoản, không gắn origin) thì vấn đề tự biến mất.
+**ĐÃ CẮN LẦN THỨ HAI cùng ngày, tốn thêm gần một buổi.** Sau khi bật
+`STORE_ENABLED`, máy tính hiện 6 mã còn điện thoại hiện 5. Đã đi lạc qua hai giả
+thuyết sai trước khi tìm ra: (a) trình duyệt nhúng trong app Gmail — sai, user
+mở đúng Safari; (b) PKCE trói link vào trình duyệt gửi yêu cầu — đúng về lý
+thuyết nhưng không phải nguyên nhân lần này. Sự thật: **máy tính đang mở tab
+`http://`** còn lại từ lúc lấy bản sao lưu, chưa đăng nhập ở origin đó, nên mã
+mới rơi vào localStorage của `http://` và không bao giờ lên DB.
+
+**Đã sửa tận gốc 15/08:** thêm đủ 4 bản ghi A ở Mắt Bão → bật được Enforce HTTPS
+→ `http://` nay trả 301. Thêm `forceHttps()` trong `config.js` làm lưới thứ hai.
+Xem mục 6.
+
+**Bài học rộng hơn — thứ đáng nhớ nhất của phiên này:** khi hai thiết bị hiện hai
+kết quả khác nhau, ĐỪNG đoán. Không có cách nào mở DevTools trên iPhone, nên đã
+làm hẳn **bảng chẩn đoán trong panel Tài khoản** (`auth.js`, `renderDiag`) in ra
+origin · phiên bản JS · driver đang dùng · watchlist đọc THẲNG từ Supabase. Bảng
+đó chỉ ra nguyên nhân trong một lần nhìn, sau khi hai giả thuyết đã đi lạc. Giữ
+lại bảng đó.
+
+### Magic link bị trói vào trình duyệt đã bấm nút gửi — PKCE (15/08/2026)
+
+**Triệu chứng.** Bấm "Gửi liên kết đăng nhập" trên máy tính, mở link trong email
+bằng điện thoại → không đăng nhập được, và tốn một lượt trong hạn mức 2 thư/giờ.
+
+**Nguyên nhân.** `auth.js` đặt `flowType: "pkce"`. Luồng đó sinh một *code
+verifier* và lưu vào bộ nhớ của **trình duyệt gửi yêu cầu**; lúc mở link phải có
+đúng mã đó mới đổi được phiên. Tài liệu Supabase nói thẳng: *"the code exchange
+must be initiated on the same browser and device where the flow was started."*
+
+**Cách dùng đúng.** Muốn đăng nhập thiết bị nào thì bấm nút gửi **từ chính thiết
+bị và trình duyệt đó**. Sao chép link sang máy khác không cứu được — thứ thiếu
+không phải link mà là mã nằm trong bộ nhớ máy kia.
+
+**Đừng đổi sang implicit cho tiện.** PKCE được chọn có lý do: token không bao giờ
+nằm trong URL. Fragment `#access_token=` của implicit lọt vào lịch sử trình duyệt
+và các tiện ích mở rộng đọc được. Ràng buộc cùng-trình-duyệt là cái giá phải trả.
+
+**Thêm một bẫy phụ trên iPhone:** bấm link trong app Gmail mở bằng trình duyệt
+nhúng của app đó, không phải Safari — lại là một kho lưu trữ khác. Giữ ngón vào
+link → *Sao chép* → dán vào Safari.
 
 ### Chú thích nói "không im lặng" mà code lại im lặng (15/08/2026)
 
@@ -797,6 +830,20 @@ thật của user: watchlist 5 mã + `privacyMode` + 1 dòng vàng thử. User x
 **Biểu đồ chứng khoán nhanh gấp 2** — hai thay đổi tách làm hai lần deploy, cố ý,
 để hỏng cái nào còn biết. Chi tiết + số đo ở bài học mục 7.
 
+**5.8 xong — GĐ 5 ĐÓNG, 8/8.** `STORE_ENABLED: true`. Đã đối chiếu thật: máy tính
+thêm mã, điện thoại thấy đủ. Trước khi tới đó phải gỡ hai thứ chắn đường: cạm bẫy
+hai origin (mục 7) và một byte NUL lọt vào truy vấn xoá.
+
+**Hạ tầng sửa xong luôn trong phiên:** thêm đủ 4 bản ghi A ở Mắt Bão → bật được
+Enforce HTTPS → `http://` trả 301. Việc này nợ từ lâu, hoá ra chỉ mất 15 phút và
+không cần chuyển nameserver như ghi chú cũ phỏng đoán.
+
+**Đã thử rồi tắt: SMTP riêng qua Brevo.** Gắn vào báo lỗi gửi thư, và khi nguyên
+nhân thật (hai origin) lộ ra thì nó cũng không còn cần thiết — mỗi thiết bị chỉ
+đăng nhập một lần nên 2 thư/giờ là đủ. Đã tắt, quay lại SMTP dựng sẵn, đăng nhập
+chạy bình thường. Tài khoản Brevo còn đó, muốn bật lại thì các ô vẫn nguyên.
+**Nhớ:** `Auth → Rate Limits` chỉ có tác dụng khi đang bật SMTP riêng.
+
 Việc chen ngang (phiên nền riêng): `costGuard.js` — cảnh báo nhập sai đơn vị ở ô
 giá vốn 3 trang tài sản, hai nhịp, so với **giá thị trường đang hiển thị** chứ
 không phải ngưỡng cứng.
@@ -825,60 +872,63 @@ Các phiên trước đó: **`docs/NHATKY.md`**.
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
 Cây làm việc sạch, đã push, backend đã deploy, bản live đã kiểm.
-**GĐ 5 xong 5.1–5.7. Còn đúng 5.8 và đó là việc kế tiếp.**
+**GĐ 5 XONG HẾT 8/8 (15/08).** Dữ liệu tài sản nay sống trên Supabase, đọc được
+từ mọi thiết bị sau khi đăng nhập — đã đối chiếu thật giữa máy tính và điện thoại.
 
-Dữ liệu **đã nằm trên Supabase** (watchlist 5 mã · `settings` · 1 dòng vàng)
-nhưng `STORE_ENABLED: false` nên mọi trang **vẫn đọc localStorage**. Hai nguồn
-đang song song, cố ý, để so được trước khi chuyển hẳn.
+`STORE_ENABLED: true`. **localStorage vẫn chưa xoá** và không cần vội xoá: nó là
+đường lui, đổi cờ về `false` là quay lại ngay. Xoá được sau khi đã dùng DB ổn
+định vài tuần và có bản sao lưu JSON trong tay.
 
-#### Việc kế tiếp: 5.8 — bật `STORE_ENABLED` + đối chiếu điện thoại
+#### Việc kế tiếp: GĐ 6 — Trang tổng gia sản
 
-Đây là **lý do tồn tại của cả GĐ 5**: sửa trên máy tính, mở điện thoại thấy đúng.
-Cũng là bước duy nhất còn rủi ro thật.
+Đọc `docs/QUYHOACH.md` bảng GĐ 6 (7 đầu việc). Giờ mới làm được vì `Store` đã đọc
+từ một nguồn duy nhất cho cả 5 kênh.
 
-1. **BUMP `?v=` TRƯỚC** — xem cảnh báo ngay dưới, không làm là bước 3 vô nghĩa.
-2. Đổi `STORE_ENABLED: false` → `true` trong `assets/js/core/config.js`, push.
-3. Máy tính: đăng nhập → trang Chứng khoán phải ra đúng `SSI · ACB · VCB · HPG ·
-   FPT`; trang Vàng ra 1 dòng SJC.
-4. Điện thoại: mở trang → phải thấy **dải cảnh báo cam** → đăng nhập → phải thấy
-   **cùng** 5 mã đó.
-5. Thêm một mã trên máy tính → tải lại trên điện thoại → phải thấy mã mới.
-6. Sai bất kỳ chỗ nào: đổi cờ về `false`, push. Quay lại localStorage ngay,
-   **dữ liệu cũ còn nguyên vì chưa hề xoá**. Đừng xoá localStorage cho tới khi
-   bước 5 chạy đúng ít nhất một lần.
+**6.5 là mục quan trọng nhất cả giai đoạn**, không phải 6.1: kênh nào lỗi nguồn
+thì trang phải ghi rõ *"chưa tính được kênh vàng"*, **không lặng lẽ cộng thiếu**.
+Một trang tổng cộng thiếu một kênh mà không báo gì sẽ đưa ra con số tài sản sai —
+mà đây là con số user dùng để ra quyết định.
 
-**Cạm bẫy `?v=` đã dính một lần 15/08 — đưa vào quy trình handoff từ nay.** Chuỗi
-`20260815a` được đặt ở commit `346ae45`, rồi **ba commit sau đó vẫn sửa asset mà
-không bump** (`chung-khoan.js`, `store-supabase.js`, `tong.js`, `store.js`,
-`nav.js`, `base.css`). Trình duyệt đã tải giữa các lần deploy sẽ dùng bản cũ —
-nguy nhất là thiếu `nav.js`+`store.js` thì **không có dải cảnh báo chưa đăng
-nhập**. Đã bump `20260815b` khi làm 5.8. Lệnh soát:
+**Việc còn nợ từ trước, phải làm trong GĐ 6:** định giá ngoại tệ và vàng hiện chỉ
+tính trong trang của chúng. Logic quy đổi nằm ở `ngoai-te.js` và `vang.js`, **cùng
+tên `holdRow` nhưng là hai bản khác nhau**. Cần dùng ở nơi thứ ba thì tách sang
+`assets/js/core/`, đừng chép bản thứ ba.
+
+Chế độ riêng tư: 6.6 bắt buộc rà **cả 6 trang**, và 6.7 yêu cầu biểu đồ tròn bỏ
+nhãn số tuyệt đối khi bật (xem mục 3b).
+
+#### Cạm bẫy `?v=` — đã dính một lần 15/08, đưa vào quy trình handoff
+
+Chuỗi `20260815a` được đặt ở commit `346ae45`, rồi ba commit sau đó vẫn sửa asset
+mà không bump. Trình duyệt đã tải giữa các lần deploy sẽ dùng bản cũ. Lệnh soát:
 ```bash
 git diff --name-only <commit-bump-cuoi>..HEAD -- 'assets/**' | grep -E '\.(js|css)$'
 ```
-Ra file nào tức là file đó đang phục vụ dưới một chuỗi `?v=` đã cũ.
+Ra file nào tức là file đó đang phục vụ dưới một chuỗi `?v=` đã cũ. Phiên 15/08
+phải bump 5 lần (`a`→`e`) vì sửa nhiều đợt — bump mỗi lần deploy, đừng gộp.
 
-**Giới hạn email 2/giờ.** SMTP có sẵn của Supabase chỉ cho 2 email/giờ và họ nói
-rõ nó chỉ để thử nghiệm. Bước 4 tốn một email. Hết hạn mức thì **chờ ~1 tiếng**,
-đừng vội gắn SMTP riêng: `persistSession` + `autoRefreshToken` giữ đăng nhập lâu
-dài, mỗi thiết bị chỉ đăng nhập một lần, nên giới hạn này chỉ khó chịu lúc đang
-thử đi thử lại. Chỉnh `Auth → Rate Limits` **vô ích** nếu chưa gắn SMTP riêng.
+#### Đăng nhập — hai điều phải nhớ
 
-#### Sau 5.8: GĐ 6 — Trang tổng gia sản
+1. **Bấm "Gửi liên kết đăng nhập" từ chính trình duyệt sẽ mở link đó** (PKCE —
+   mục 7). Gửi từ máy tính rồi mở trên điện thoại là hỏng, và mất một lượt.
+2. **Hạn mức 2 thư/giờ**, SMTP dựng sẵn của Supabase, chỉ gửi tới địa chỉ thuộc
+   dự án. Đủ dùng: mỗi thiết bị chỉ đăng nhập một lần rồi ở lại rất lâu. Đã thử
+   SMTP riêng qua Brevo rồi **tắt** (mục 9). `Auth → Rate Limits` chỉ có tác dụng
+   khi đang bật SMTP riêng — chỉnh lúc khác là vô ích.
 
-Lúc đó `Store` đã đọc DB nên gom 5 kênh về một chỗ mới làm được. Xem `docs/
-QUYHOACH.md` bảng GĐ 6, và mục 6.5 là mục quan trọng nhất (kênh lỗi nguồn phải
-ghi rõ "chưa tính được kênh X", **không lặng lẽ tính thiếu**).
+**Bảng chẩn đoán trong panel Tài khoản** (`auth.js`, `renderDiag`) in ra origin ·
+phiên bản JS · driver đang dùng · watchlist đọc thẳng từ Supabase. Hai thiết bị
+hiện hai kết quả khác nhau thì mở nó ra trước, đừng đoán — xem mục 7.
 
-#### Còn nợ trong GĐ 5
+#### Còn nợ nhỏ
 
-- **Đường upsert của job snapshot chưa chứng minh.** Lần ghi thứ hai trong ngày
-  (đè lên hàng cũ) chỉ chạy vào lượt hàng giờ tiếp theo. Rủi ro thấp: nếu
-  `merge-duplicates` không ăn thì `unique(kind, taken_on)` từ chối, job ghi log
-  lỗi rồi bỏ qua — mất một lần cập nhật, không hỏng dữ liệu. **Cách kiểm:** đọc
-  `price_snapshots` bằng publishable key (bảng này ai đọc cũng được), đếm phải
-  đúng 1 dòng mỗi loại mỗi ngày, không nhân lên.
 - `docs/QUYHOACH.md` vẫn ghi "schema 7 bảng" — thực tế **9**. Sửa khi tiện.
+- Job snapshot: đường **upsert đã chứng minh chạy đúng** (đo 15/08, 7 tiếng rưỡi
+  sau lượt đầu: vẫn đúng 3 dòng, `id` không tăng, nhưng `fx` và `savings` mang
+  mốc thời gian mới hơn hẳn — tức đè tại chỗ, không nhân dòng). `gold` giữ
+  nguyên mốc 09:21 là ĐÚNG: đó là giờ PNJ niêm yết bảng, cả ngày không đổi.
+  **Cách kiểm lại sau này:** đọc `price_snapshots` bằng publishable key (bảng
+  này ai đọc cũng được), phải đúng 1 dòng mỗi loại mỗi ngày.
 
 Khuôn mẫu nếu cần thêm trang tài sản: **trang Tiết kiệm hoặc Coin** (mới nhất).
 Thành phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`, `.row-btn`,
@@ -939,12 +989,11 @@ bước B của chart chỉ số. Không ảnh hưởng thứ tự GĐ 1–7.
 | 2 | **Vàng** — PNJ/BTMC, quy đổi lượng-chỉ-gram, danh mục, cảnh báo chênh lệch | ✅ 06/08 (6/6) |
 | 3 | **Coin** — giá VND, danh sách theo dõi, biểu đồ, danh mục | ✅ 07/08 (4/4) |
 | 4 | **Gửi tiết kiệm** — bảng lãi suất, so sánh, sổ + cảnh báo đáo hạn | ✅ 08/08 (8/8) |
-| **5** | **Supabase + đăng nhập** — khó nhất | ▶ **7/8** (15/08) — còn 5.8 |
-| 6 | **Tổng gia sản** — gom 5 kênh về VND, biểu đồ tròn, dòng tiền | chờ 5.8 |
+| 5 | **Supabase + đăng nhập** — khó nhất | ✅ 15/08 (8/8) |
+| **6** | **Tổng gia sản** — gom 5 kênh về VND, biểu đồ tròn, dòng tiền | ▶ kế tiếp |
 | 7 | **Đồng bộ số dư Binance** — key chỉ-đọc, ký HMAC, tránh đếm trùng | chờ |
 
-Chi tiết GĐ 5: 5.1 schema ✅ · 5.2 RLS ✅ · 5.3 magic link ✅ · 5.4 driver ✅ ·
-5.5 nhập dữ liệu ✅ · 5.6 xuất JSON ✅ · 5.7 snapshot ✅ · **5.8 chưa**.
+Chi tiết GĐ 5: cả 8 đầu việc 5.1–5.8 đã xong và đã kiểm trên 2 thiết bị.
 
 Việc chen ngang đã làm ngoài quy hoạch: reskin Fey (03/08), chart chỉ số
 (04/08), tab Tổng quan thị trường (07/08), theme mặc định Sáng (08/08),
