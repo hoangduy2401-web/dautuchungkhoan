@@ -21,9 +21,10 @@
 | Backend proxy (Render Free) | https://dashboard-chung-khoan.onrender.com |
 | Repo | github.com/hoangduy2401-web/dautuchungkhoan (nhánh `main`) |
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
+| Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260808b`** (đã kiểm: 56 chỗ trong 6 file HTML, bản live
-cũng đang phục vụ đúng chuỗi này).
+Cache busting hiện **`?v=20260815a`** — nhưng **6 file đã đổi nội dung SAU khi
+chuỗi này được đặt**. Phải bump lên `20260815b` trước khi làm 5.8; lý do ở mục 10.
 
 ---
 
@@ -147,11 +148,27 @@ Mục đích: mở website cho người khác xem mà không lộ số tài sả
 Cây thư mục: `ls` là ra. Chỉ ghi ở đây những thứ nhìn cây thư mục không đoán được:
 
 **Thứ tự nạp script (đừng đổi):**
-lightweight-charts → `config.js` → `store.js` → `theme.js` → `nav.js` →
-`mockData.js` → `dataService.js` → `portfolio.js` → `signals.js` →
-`chartModule.js` → `pages/<trang>.js`
+lightweight-charts → **supabase-js** → `config.js` → `store.js` → `auth.js` →
+`store-supabase.js` → `theme.js` → `nav.js` → `mockData.js` → `dataService.js` →
+`costGuard.js` → `portfolio.js` → `signals.js` → `chartModule.js` →
+`pages/<trang>.js`
 
 `store.js` phải đứng trước `nav.js` và `portfolio.js` — cả hai gọi `Store`.
+supabase-js phải đứng trước `auth.js` — `auth.js` đọc `window.supabase`.
+
+Riêng `backup.js` + `migrate.js` chỉ nạp ở `index.html` (trang tổng).
+
+**File của GĐ 5 — file nào lo việc gì:**
+
+| File | Việc |
+|---|---|
+| `supabase/schema.sql` | 9 bảng + RLS. Chạy trong SQL Editor, chạy lại nhiều lần không hỏng |
+| `core/auth.js` | CHỈ lo danh tính (magic link). Không đọc/ghi một dòng dữ liệu nào |
+| `core/store.js` | Facade + chọn driver. Mọi hàm `await ready` trước khi chạm driver |
+| `core/store-supabase.js` | Driver DB thật. Đổi tên trường camelCase ↔ snake_case ở đây |
+| `core/backup.js` | Xuất JSON (5.6) |
+| `core/migrate.js` | Nhập dữ liệu cũ (5.5). Nguồn: localStorage HOẶC file .json |
+| `server/index.js` | Job snapshot (5.7) — cuối file, cạnh vòng warm cache |
 
 **Bump `?v=` ở CẢ `index.html` LẪN `chung-khoan.html`.** Chúng dùng chung
 `base.css`, `store.js`, `theme.js`, `nav.js`; bump một file là file kia chạy code
@@ -326,6 +343,95 @@ Actions bấm *Enable workflow*.
 
 - Regex `\b` **không hoạt động với tiếng Việt** → dùng lookaround Unicode
   `(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])` với cờ `u`.
+
+### SSI đã bỏ giới hạn 30 ngày/lần của DailyOhlc — chú thích cũ sai (15/08/2026)
+
+**Triệu chứng.** User báo biểu đồ "khá chậm". Lấy mẫu 24 lần trong 6 phút: nền
+~0,7s nhưng xen giữa là **2,2 / 2,8 / 3,3 / 5,8 / 8,1 giây**.
+
+**Đã loại trừ — đừng điều tra lại:**
+- **KHÔNG phải cold start Render.** `/health` báo `uptimeSec` 572703 = 6,6 ngày.
+  Keep-alive chạy tốt. *(Đây là chỗ đầu tiên nên nhìn, nhưng lần này không phải.)*
+- **KHÔNG phải SSI bóp theo tần suất.** Bắn 6 request liên tiếp không nghỉ: đều
+  0,59–0,95s. Để yên 100 giây rồi gọi một phát: 0,82s. Không tái hiện được.
+- **KHÔNG phải tab dashboard tự làm nặng** (45s/lần refresh 30 quote). Spike vẫn
+  còn khi không mở tab nào.
+
+**Nguyên nhân.** `server/index.js` chia lịch sử theo khối 30 ngày, theo chú thích
+"DailyOhlc is capped at 30 days per call (PDF v2.2)". **Giới hạn đó không còn
+đúng.** Đo lại: một lần gọi trả 65 nến cho 90 ngày, **249 nến cho 365 ngày**,
+1.247 nến cho 5 năm (`PageSize=2000`). Mỗi biểu đồ vì thế bắn 3 (3M) / 13 (1Y) /
+**61 (5Y)** lượt gọi SSI tuần tự qua limiter `concurrency=1`. Độ trễ SSI vốn thất
+thường nên **mỗi khối là một lần rút thăm** — chỉ cần một lượt trúng lượt chậm là
+cả biểu đồ đứng chờ.
+
+**Cách sửa.** `OHLC_CHUNK_DAYS` 30 → 365, `OHLC_PAGE_SIZE` 100 → 1000; giữ vòng
+chia khối + phân trang làm lưới an toàn. Hai hằng số **chỉnh được bằng biến môi
+trường** — SSI siết lại thì đặt `OHLC_CHUNK_DAYS=30 OHLC_PAGE_SIZE=100` trong
+Render, không cần deploy.
+
+**Vì sao 365 chứ không phải 2000** (đủ ôm 5 năm một lần): 365 là mốc đã đối chiếu
+**từng nến**. Kiểu hỏng ở đây **IM LẶNG** — trả ít nến hơn chứ không báo lỗi.
+Đừng nâng lên mà không đối chiếu lại từng nến.
+
+**Số đo** (hai bản chạy song song cùng máy, chỉ khác hai hằng số) — 90 ngày×10 mã
+8,55→**4,19s**; 180 ngày 1,44→**0,59s**; 365 ngày 2,25→**1,17s**; 5 năm
+10,92→**4,54s**. Dữ liệu giống hệt: FPT/VNM/SHB × 90 và 365 ngày, 0 nến lệch;
+5 năm BID 1.247 nến cả hai bản, cùng dải `2021-08-16 → 2026-08-14`. Sau deploy,
+10 mẫu live nằm gọn 0,48–0,66s — **hết spike**.
+
+**Việc thứ hai, deploy TÁCH RIÊNG** (gộp một lần thì hỏng cái nào cũng khó biết):
+mở một mã từng bắn **2** lần `/history` — biểu đồ xin `state.range`, huy hiệu tín
+hiệu xin `SIG_DAYS`=180 — dù 180 đã chứa trọn 90. Nay xin một lần
+`max(range, 180)` rồi cắt bằng `sliceLastDays`, lặp đúng công thức `end - days`
+của backend nên bộ nến không đổi (1M 22=22, 3M 65=65, 1Y 249=249, 5Y 1247=1247;
+huy hiệu 122 nến giống bản gọi thẳng, RSI lệch 0).
+
+### `http://` và `https://` là HAI kho localStorage khác nhau (15/08/2026)
+
+**Triệu chứng.** Chuẩn bị GĐ 5.5, mục 10 ghi "bảy khoá đang có dữ liệu thật cần
+chuyển". User tải bản sao lưu ở `https://dashboardstock.io.vn` → **chỉ có 2 nhóm**
+(watchlist 5 mã + `privacyMode`). Không có danh mục vàng/ngoại tệ/coin/tiết kiệm.
+
+**Nguyên nhân.** localStorage tách theo **origin**, mà scheme là một phần của
+origin. `http://dashboardstock.io.vn` trả 200 **trực tiếp, không chuyển hướng**
+(mục 10 vẫn nợ việc enforce HTTPS), và `hoangduy2401-web.github.io` — địa chỉ cũ
+trước khi có tên miền riêng — **chuyển hướng về đúng bản `http://`**. Ai từng
+dùng địa chỉ cũ thì dữ liệu nằm ở kho `http://`, bản `https://` không thấy.
+
+**Cách sửa.** `migrate.js` nhận nguồn từ **file .json** chứ không chỉ từ
+localStorage của origin đang mở. Không có đường đó thì phần dữ liệu bên kia
+không có cách nào lên DB. **Đừng gỡ nút "Lấy từ file sao lưu" cho gọn.**
+
+**Kết cục thật của lần này:** kho `http://` cũng chỉ có 1 dòng vàng, và nó là
+dòng user vừa gõ để thử (`updatedAt` cách lúc xuất file 20 giây). **Không có dữ
+liệu cũ nào cần chuyển.** Mục 10 cũ ghi sai — đó là danh sách khoá *cần chuyển
+nếu có*, chưa ai kiểm chứng. User xác nhận mới chỉ dùng trang chứng khoán.
+
+**Hệ quả còn lại:** chừng nào chưa enforce HTTPS thì hai kho vẫn tách. Xong 5.8
+(dữ liệu ở DB gắn với tài khoản, không gắn origin) thì vấn đề tự biến mất.
+
+### Chú thích nói "không im lặng" mà code lại im lặng (15/08/2026)
+
+**Triệu chứng.** Chưa xảy ra với user — bắt được khi rà lại đường đi của 5.8.
+
+**Nguyên nhân.** `store.js` viết:
+```js
+// Chưa đăng nhập thì KHÔNG rơi về localStorage một cách im lặng...
+return s ? SupabaseDriver : null;   // null CHÍNH LÀ driver localStorage
+```
+Chú thích và code ngược nhau. Nếu bật `STORE_ENABLED` mà không sửa: mở trên
+**điện thoại chưa đăng nhập** thì trang đọc localStorage của máy đó — rỗng — rồi
+hiện danh mục trống y như thật.
+
+**Cách sửa.** Vẫn đọc localStorage (chặn hẳn thì máy mới thành trang trắng, tệ
+hơn) nhưng **không im lặng**: cờ `Store.needsLogin` + dải cảnh báo cam
+(`.login-warn`) do `nav.js` vẽ trên **mọi trang**. Cam chứ không đỏ — dữ liệu vẫn
+đọc được, chỉ là đọc từ chỗ khác với nơi user tưởng; đỏ dành cho lỗi thật.
+
+**Bài học rộng hơn:** chú thích mô tả *ý định* không tự nó thành *hành vi*. Khi
+đọc một khối có chú thích mạnh ("KHÔNG BAO GIỜ", "phải"), kiểm code có làm đúng
+thế không — ở đây chính người viết chú thích cũng viết sai code ngay dưới nó.
 
 ### Cuối tuần, SSI vẫn trả phiên gần nhất — đừng coi đó là hôm nay (08/08/2026)
 
@@ -607,9 +713,13 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260808b`. Nhánh `main` sạch, đã push, backend đã deploy bản
-mới nhất (đã kiểm 08/08 trên Render: `/api/fx/*`, `/api/gold/prices`,
-`/api/crypto/*` từ Binance kèm tỷ giá quy đổi, `/api/savings/rates` 29 ngân hàng).
+Cache busting `?v=20260815a`. Nhánh `main` sạch, đã push, backend đã deploy bản
+mới nhất (đã kiểm 15/08 trên Render: `/api/price/history` sau khi bỏ chunk 30
+ngày, job snapshot ghi được vào Supabase).
+
+**Dữ liệu vẫn đang đọc từ localStorage.** GĐ 5 đã đưa dữ liệu LÊN Supabase
+(watchlist 5 mã + `settings` + 1 dòng vàng) nhưng `STORE_ENABLED: false` nên mọi
+trang vẫn đọc bản trong trình duyệt. Bật cờ đó là việc 5.8 — xem mục 10.
 
 Website hiện có **đủ 6 trang**. Năm trang kênh đầu tư đã đầy đủ:
 `/chung-khoan.html`, `/ngoai-te.html`, `/vang.html`, `/coin.html`,
@@ -617,7 +727,7 @@ Website hiện có **đủ 6 trang**. Năm trang kênh đầu tư đã đầy đ
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
-| Giá / nến / chỉ số | SSI FCData | chunking 30 ngày; index intraday tái tạo từ RatioChange |
+| Giá / nến / chỉ số | SSI FCData | chunk **365 ngày** (đổi 15/08, xem mục 7); index intraday tái tạo từ RatioChange |
 | **Chart chỉ số** | SSI `DailyIndex` | bấm thẻ chỉ số = vẽ **đường** (không có OHLC); 5 ô thống kê toàn sàn |
 | Chart khung thời gian | — | 1M / 3M / 6M / 1Y / 5Y (30/90/180/365/1825 ngày) |
 | Ticker tape | rổ VN30 | tách khỏi watchlist; backend warm cả 30 mã |
@@ -640,10 +750,47 @@ Website hiện có **đủ 6 trang**. Năm trang kênh đầu tư đã đầy đ
 | **Lãi suất tiết kiệm** | CafeF CDN | 29 NH × 8 kỳ hạn, có logo; ô cao nhất mỗi kỳ hạn tô đậm; nhãn **"lấy lúc"** |
 | **Sổ tiết kiệm** | `Store` (`savings_accounts`) | lãi cuối kỳ; **cảnh báo đáo hạn 30/15/7 ngày** đặt trên cùng trang |
 | **Nút con mắt** (ẩn số tiền) | — | toàn site, xem mục 3b |
-| Giao diện | Fey design system | tối mặc định, **không còn Liquid Glass** — mục 3 |
+| Giao diện | Fey design system | **sáng mặc định** (đổi 08/08), **không còn Liquid Glass** — mục 3 |
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
+| **Đăng nhập** | Supabase Auth, magic link | PKCE; tài khoản tạo sẵn trong dashboard, đã tắt tự đăng ký |
+| **Cảnh báo đơn vị giá vốn** | `costGuard.js` | 3 trang tài sản; so với giá thị trường đang hiện, không ngưỡng cứng; hai nhịp |
+| **Snapshot giá hàng ngày** | job trong `server/index.js` | ghi `price_snapshots` mỗi giờ, upsert 1 hàng/ngày/loại; cần `SUPABASE_SECRET_KEY` trong env Render |
 
 ### Nhật ký theo phiên
+
+**15/08/2026 (phiên 10) — GĐ 5 xong 7/8 đầu việc + biểu đồ nhanh gấp 2.**
+Bump `?v=20260811a` → **`?v=20260815a`**. **Có đụng `server/` hai lần** (bỏ giới
+hạn chunk 30 ngày, thêm job snapshot) → Render đã deploy lại, đã kiểm live.
+
+**GĐ 5 — Supabase.** Làm 5.1→5.7, chỉ còn 5.8 (bật `STORE_ENABLED` + đối chiếu
+điện thoại). Thứ tự cố ý: **nút xuất JSON làm TRƯỚC mọi thứ khác** — lối thoát
+phải tồn tại trước khi có bất kỳ đường ghi nào lên DB.
+
+- `supabase/schema.sql`: **9 bảng chứ không phải 7** như quy hoạch ghi — thêm
+  `watchlist` (là collection riêng trong `store.js`, khoá legacy, bảng đếm 7 bỏ
+  sót) và `price_snapshots` cho 5.7. RLS bật ngay trong cùng file với lệnh tạo
+  bảng. Chạy lại nhiều lần không hỏng.
+- Đăng nhập magic link, **PKCE không phải implicit**; `shouldCreateUser: false`
+  + đã tắt "Allow new users to sign up" trên dự án.
+- `store.js` giữ facade, driver thật ở `store-supabase.js`. **Hai cờ tách riêng**
+  `AUTH_ENABLED` / `STORE_ENABLED` — xem `config.js`.
+- `migrate.js` (5.5) nhập được từ **localStorage HOẶC file .json**. Đường thứ hai
+  không phải cho sang: xem bài học "hai origin" ở mục 7.
+- 5.7: job ghi snapshot tỷ giá/vàng/lãi suất **mỗi giờ** (không phải mỗi 24h),
+  upsert theo `unique(kind, taken_on)`. Đã chạy thật trên Render, 3 dòng ngày
+  15-08 có dữ liệu đúng (USD bán 26.330 · SJC 14.100/14.400 nghìn đ/chỉ · 29 NH).
+
+**Dữ liệu cũ gần như KHÔNG có** — đây là phát hiện làm đổi hẳn mức rủi ro của
+5.5, và mục 10 cũ ghi sai. Chi tiết ở bài học "hai origin" mục 7. Toàn bộ tài sản
+thật của user: watchlist 5 mã + `privacyMode` + 1 dòng vàng thử. User xác nhận
+**mới chỉ dùng trang chứng khoán**, các trang khác chỉ xem tham khảo.
+
+**Biểu đồ chứng khoán nhanh gấp 2** — hai thay đổi tách làm hai lần deploy, cố ý,
+để hỏng cái nào còn biết. Chi tiết + số đo ở bài học mục 7.
+
+Việc chen ngang (phiên nền riêng): `costGuard.js` — cảnh báo nhập sai đơn vị ở ô
+giá vốn 3 trang tài sản, hai nhịp, so với **giá thị trường đang hiển thị** chứ
+không phải ngưỡng cứng.
 
 **08/08/2026 (phiên 9) — đổi theme mặc định + sửa lỗi so sánh khối lượng ngày nghỉ.**
 Bump `?v=20260808a` → **`?v=20260808b`**. **Có đụng `server/`** (thêm 1 trường),
@@ -662,79 +809,76 @@ Render đã deploy lại, đã kiểm live.
 Đã kiểm mắt cả trang chứng khoán, tiết kiệm và coin ở nền sáng: bảng, biểu đồ,
 logo, thanh độ rộng thị trường đều đọc được; bản live cũng đã kiểm.
 
-**08/08/2026 (phiên 8) — GĐ 4 trang Gửi tiết kiệm: XONG CẢ 8 ĐẦU VIỆC.**
-Bump `?v=20260807c` → **`?v=20260808a`** (56 chỗ trong 6 file HTML). **Có đụng
-`server/`** → Render đã deploy lại, đã kiểm live. **Website giờ đủ 6 trang.**
-
-**Đã đo nguồn TỪ RENDER trước khi xây trang** (bài học Yahoo + CoinGecko ở mục
-7): CafeF trả 29 ngân hàng × 8 kỳ hạn bình thường từ IP Render, không bị chặn.
-
-- `/api/savings/rates`: proxy file JSON tĩnh của CafeF, cache 6h, **giữ bản chụp
-  gần nhất trong bộ nhớ** — nguồn chết thì trả bản cũ kèm `stale: true` +
-  `snapshotAt`, trang hiện dải cảnh báo ghi rõ bản chụp lấy lúc nào.
-- Kỳ hạn sắp theo **số tháng**, không theo chuỗi: sắp chuỗi thì "12T" đứng trước
-  "1T" và bảng đọc thành vô nghĩa.
-- Ô lãi suất cao nhất mỗi kỳ hạn tô đậm; ngân hàng không niêm yết kỳ hạn đang
-  sắp thì **xuống cuối**, không coi là 0%.
-- **Cảnh báo đáo hạn 30/15/7 ngày đặt TRÊN CÙNG trang**, không giấu trong bảng —
-  đây là giá trị thực tế cao nhất của trang. Ba mức vì việc cần làm khác nhau:
-  30 ngày là lúc bắt đầu tìm lãi suất mới, 7 ngày là lúc phải quyết.
-
-**Hai quyết định về số liệu, đừng "sửa lại":**
-1. **Lãi suất của sổ lưu theo con số ĐÃ CHỐT LÚC GỬI**, không đọc lại từ bảng
-   niêm yết. Bảng là lãi suất hôm nay; sổ đã khoá lãi suất từ ngày gửi. Ô nhập
-   tự điền gợi ý theo bảng nhưng user gõ vào là thôi tự động (ưu đãi, số tiền
-   lớn… cho lãi suất khác bảng).
-2. **Công thức là lãi cuối kỳ, không tái tục, chưa trừ thuế/phí:**
-   `lãi = gốc × (%năm ÷ 100) × số tháng ÷ 12`. Sổ lĩnh lãi hàng tháng hay tự
-   động tái tục cho con số khác — trang ghi rõ giả định thay vì im lặng.
-
-`setMonth` tự dồn ngày 31 sang tháng sau (31/01 + 1 tháng = 03/03) nên ngày đáo
-hạn kẹp lại về ngày cuối tháng đích — đúng như cách ngân hàng ghi trên sổ.
-
-Đã kiểm trên trình duyệt thật (local rồi bản live): 100.000.000 ₫ kỳ hạn 12
-tháng → Shinhan 7,50% = +7.500.000 ₫, chênh hạng 1 với hạng 5 là 800.000 ₫; sổ
-500tr 5,9% gửi 14/8/2025 → đáo hạn 14/8/2026, còn 6 ngày, lãi +29.500.000 ₫,
-cảnh báo đỏ hiện trên cùng; sửa thành 600tr @6,1% → +36.600.000 ₫; nhập lãi
-suất 0 báo lỗi; nút con mắt che 16 ô `.money` kể cả trong dải cảnh báo; mobile
-375px không tràn ngang.
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
 
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
-Không có việc nào đang dở. Cây làm việc sạch, đã push, backend đã deploy, bản
-live đã kiểm. **GĐ 0–4 xong hết; website đủ 6 trang.** Chỉ còn `/` (tổng gia
-sản) là khung, chờ GĐ 5+6.
+Cây làm việc sạch, đã push, backend đã deploy, bản live đã kiểm.
+**GĐ 5 xong 5.1–5.7. Còn đúng 5.8 và đó là việc kế tiếp.**
 
-Việc kế tiếp: **GĐ 5 — Supabase + đăng nhập** (5 phiên, **khó nhất cả kế
-hoạch**). Đọc `docs/QUYHOACH.md` mục 3.4 + bảng GĐ 5. Tóm tắt: tạo project
-Supabase free, thiết kế schema 7 bảng, **bật Row Level Security ngay lúc tạo**,
-đăng nhập bằng email magic link, viết driver Supabase cho `store.js` (cùng giao
-diện, đổi driver — mọi hàm `Store` đã trả Promise sẵn từ GĐ 0 chính là để cho
-lúc này), màn hình nhập dữ liệu cũ từ localStorage, nút xuất JSON, job snapshot
-giá hàng ngày.
+Dữ liệu **đã nằm trên Supabase** (watchlist 5 mã · `settings` · 1 dòng vàng)
+nhưng `STORE_ENABLED: false` nên mọi trang **vẫn đọc localStorage**. Hai nguồn
+đang song song, cố ý, để so được trước khi chuyển hẳn.
 
-**⚠ USER TỰ LÀM TRƯỚC KHI BẮT ĐẦU GĐ 5** (không có cái này thì không code được
-gì):
-1. Tạo project ở `supabase.com` (gói free), chọn region gần VN (Singapore).
-2. Lấy **Project URL** và **anon public key** ở Settings → API, đưa cho phiên
-   sau. Hai giá trị này công khai được (RLS mới là lớp chặn thật) nên để trong
-   `config.js`; **`service_role` key thì KHÔNG BAO GIỜ** — nó bỏ qua RLS.
-3. Xác nhận email dùng để đăng nhập magic link.
+#### Việc kế tiếp: 5.8 — bật `STORE_ENABLED` + đối chiếu điện thoại
 
-**Rủi ro phải nói thẳng trước khi bắt đầu:** đây là lúc dữ liệu tài sản thật có
-thể mất. Thứ tự bắt buộc: **làm nút xuất JSON TRƯỚC**, xuất một bản sao lưu,
-rồi mới nhập lên DB; **giữ nguyên localStorage** (không xoá) cho tới khi xác
-nhận DB đúng trên cả máy tính lẫn điện thoại. Việc nhập dữ liệu **phải do user
-bấm**, không tự động, và phải xem trước được nội dung sẽ nhập.
+Đây là **lý do tồn tại của cả GĐ 5**: sửa trên máy tính, mở điện thoại thấy đúng.
+Cũng là bước duy nhất còn rủi ro thật.
 
-Bảy khoá đang có dữ liệu thật cần chuyển (đọc bằng `Store.exportAll()`):
-`tx_stock` và `watchlist` (hai khoá LEGACY, tên khác tiền tố `vn_gs_` — xem
-`store.js`), `holdings_fx`, `holdings_gold`, `holdings_crypto`,
-`savings_accounts`, `settings` (privacyMode · fxPinned · coinWatch).
+1. **BUMP `?v=` TRƯỚC** — xem cảnh báo ngay dưới, không làm là bước 3 vô nghĩa.
+2. Đổi `STORE_ENABLED: false` → `true` trong `assets/js/core/config.js`, push.
+3. Máy tính: đăng nhập → trang Chứng khoán phải ra đúng `SSI · ACB · VCB · HPG ·
+   FPT`; trang Vàng ra 1 dòng SJC.
+4. Điện thoại: mở trang → phải thấy **dải cảnh báo cam** → đăng nhập → phải thấy
+   **cùng** 5 mã đó.
+5. Thêm một mã trên máy tính → tải lại trên điện thoại → phải thấy mã mới.
+6. Sai bất kỳ chỗ nào: đổi cờ về `false`, push. Quay lại localStorage ngay,
+   **dữ liệu cũ còn nguyên vì chưa hề xoá**. Đừng xoá localStorage cho tới khi
+   bước 5 chạy đúng ít nhất một lần.
+
+**⚠ CHƯA BUMP `?v=` — 6 FILE ĐANG LỆCH.** Chuỗi `?v=20260815a` được đặt ở commit
+`346ae45` (costGuard), rồi **ba commit sau đó vẫn sửa asset mà không bump**:
+
+| File | Commit sửa sau khi bump |
+|---|---|
+| `pages/chung-khoan.js` | `fc8d246` gộp 2 lần gọi lịch sử |
+| `core/store-supabase.js`, `pages/tong.js` | `a3e63db` (5.5) |
+| `core/store.js`, `core/nav.js`, `css/base.css` | `0fb0b59` dải cảnh báo |
+
+Trình duyệt nào đã tải `20260815a` giữa các lần deploy sẽ dùng bản cache cũ.
+Nguy hiểm nhất là `nav.js` + `store.js`: thiếu chúng thì **không có dải cảnh báo
+chưa đăng nhập** — đúng thứ bước 4 cần kiểm. Bump `20260815b` ở cả 6 file HTML
+trước khi làm 5.8.
+
+**Cách kiểm nhanh loại lỗi này** (đưa vào quy trình handoff từ nay):
+```bash
+git diff --name-only <commit-bump-cuoi>..HEAD -- 'assets/**' | grep -E '\.(js|css)$'
+```
+Ra file nào tức là file đó đang phục vụ dưới một chuỗi `?v=` đã cũ.
+
+**Giới hạn email 2/giờ.** SMTP có sẵn của Supabase chỉ cho 2 email/giờ và họ nói
+rõ nó chỉ để thử nghiệm. Bước 4 tốn một email. Hết hạn mức thì **chờ ~1 tiếng**,
+đừng vội gắn SMTP riêng: `persistSession` + `autoRefreshToken` giữ đăng nhập lâu
+dài, mỗi thiết bị chỉ đăng nhập một lần, nên giới hạn này chỉ khó chịu lúc đang
+thử đi thử lại. Chỉnh `Auth → Rate Limits` **vô ích** nếu chưa gắn SMTP riêng.
+
+#### Sau 5.8: GĐ 6 — Trang tổng gia sản
+
+Lúc đó `Store` đã đọc DB nên gom 5 kênh về một chỗ mới làm được. Xem `docs/
+QUYHOACH.md` bảng GĐ 6, và mục 6.5 là mục quan trọng nhất (kênh lỗi nguồn phải
+ghi rõ "chưa tính được kênh X", **không lặng lẽ tính thiếu**).
+
+#### Còn nợ trong GĐ 5
+
+- **Đường upsert của job snapshot chưa chứng minh.** Lần ghi thứ hai trong ngày
+  (đè lên hàng cũ) chỉ chạy vào lượt hàng giờ tiếp theo. Rủi ro thấp: nếu
+  `merge-duplicates` không ăn thì `unique(kind, taken_on)` từ chối, job ghi log
+  lỗi rồi bỏ qua — mất một lần cập nhật, không hỏng dữ liệu. **Cách kiểm:** đọc
+  `price_snapshots` bằng publishable key (bảng này ai đọc cũng được), đếm phải
+  đúng 1 dòng mỗi loại mỗi ngày, không nhân lên.
+- `docs/QUYHOACH.md` vẫn ghi "schema 7 bảng" — thực tế **9**. Sửa khi tiện.
 
 Khuôn mẫu nếu cần thêm trang tài sản: **trang Tiết kiệm hoặc Coin** (mới nhất).
 Thành phần dùng chung (`.asset-table`, `.hold-*`, `.src-badge`, `.row-btn`,
@@ -759,6 +903,21 @@ ra, đang vá bằng cách vẽ lại sau 400ms (mục 7). Và bảng ticker n�
 coin — coin ngoài bảng vẫn thêm được khi CoinGecko trả lời, nhưng ở production
 thì không.
 
+**Đừng "sửa lại cho gọn" sáu chỗ sau của GĐ 5:**
+1. **Hai cờ `AUTH_ENABLED` / `STORE_ENABLED` tách riêng** — không gộp. Đăng nhập
+   được mà chưa chuyển kho dữ liệu là trạng thái hợp lệ và cần thiết.
+2. **`shouldCreateUser: false`** trong `auth.js` — gõ nhầm email phải báo lỗi,
+   không được lặng lẽ mở tài khoản rỗng thứ hai. Đã tắt tự đăng ký trên dự án.
+3. **Nút "Lấy từ file sao lưu"** trong `migrate.js` — lý do ở bài học "hai origin"
+   mục 7. Không phải tính năng cho sang.
+4. **`Store.exportLocal()`** đọc thẳng localStorage bỏ qua driver. Màn hình nhập
+   phải dùng nó; dùng `exportAll()` thì khi driver đã là Supabase, nguồn và đích
+   là một — xuất ra chính cái DB rỗng đang định ghi vào.
+5. **`id` trong schema để kiểu `text` chứ không phải `uuid`** — `Store.add` sinh
+   id base36, đổi sang uuid là mọi id trong file sao lưu cũ thành vô nghĩa.
+6. **`cost` cho phép NULL** ở 3 bảng danh mục. "Không theo dõi lãi/lỗ" khác
+   "giá vốn bằng 0"; đổi thành `not null default 0` là lãi/lỗ hiện +100%.
+
 **Đừng "sửa lại cho đúng quy hoạch" ba chỗ sau của trang Ngoại tệ:**
 1. Nguồn lịch sử là **FXRatesAPI, không phải Yahoo** — Yahoo chặn IP Render
    (mục 7). `docs/QUYHOACH.md` mục 2.10 đã sửa theo.
@@ -780,12 +939,16 @@ bước B của chart chỉ số. Không ảnh hưởng thứ tự GĐ 1–7.
 | 2 | **Vàng** — PNJ/BTMC, quy đổi lượng-chỉ-gram, danh mục, cảnh báo chênh lệch | ✅ 06/08 (6/6) |
 | 3 | **Coin** — giá VND, danh sách theo dõi, biểu đồ, danh mục | ✅ 07/08 (4/4) |
 | 4 | **Gửi tiết kiệm** — bảng lãi suất, so sánh, sổ + cảnh báo đáo hạn | ✅ 08/08 (8/8) |
-| **5** | **Supabase + đăng nhập** — 5 phiên, khó nhất | ▶ kế tiếp |
-| 6 | **Tổng gia sản** — gom 5 kênh về VND, biểu đồ tròn, dòng tiền | chờ GĐ 5 |
+| **5** | **Supabase + đăng nhập** — khó nhất | ▶ **7/8** (15/08) — còn 5.8 |
+| 6 | **Tổng gia sản** — gom 5 kênh về VND, biểu đồ tròn, dòng tiền | chờ 5.8 |
 | 7 | **Đồng bộ số dư Binance** — key chỉ-đọc, ký HMAC, tránh đếm trùng | chờ |
 
+Chi tiết GĐ 5: 5.1 schema ✅ · 5.2 RLS ✅ · 5.3 magic link ✅ · 5.4 driver ✅ ·
+5.5 nhập dữ liệu ✅ · 5.6 xuất JSON ✅ · 5.7 snapshot ✅ · **5.8 chưa**.
+
 Việc chen ngang đã làm ngoài quy hoạch: reskin Fey (03/08), chart chỉ số
-(04/08), tab Tổng quan thị trường (07/08), theme mặc định Sáng (08/08).
+(04/08), tab Tổng quan thị trường (07/08), theme mặc định Sáng (08/08),
+biểu đồ nhanh gấp 2 + cảnh báo đơn vị giá vốn (15/08).
 
 ### Tính năng chứng khoán chưa làm
 1. **Theo dõi dòng tiền** (user đã chọn từ 24/07, chưa làm): phát hiện đột biến
@@ -800,9 +963,26 @@ Việc chen ngang đã làm ngoài quy hoạch: reskin Fey (03/08), chart chỉ 
 ### Việc nhỏ (không chặn) — user tự làm
 1. **Bật tự động gia hạn tên miền ở Mắt Bão** (quên = dashboard chết, không ai báo).
 2. **Enforce HTTPS**: cần đủ 4 bản ghi A → phải chuyển nameserver sang Cloudflare.
-   `http://` hiện vẫn trả 200.
+   `http://` hiện vẫn trả 200. **Ưu tiên cao hơn trước**: bản `http://` có kho
+   localStorage RIÊNG và `github.io` chuyển hướng về đúng bản đó — xem bài học
+   "hai origin" mục 7.
 3. GitHub tự tắt scheduled workflow sau 60 ngày repo không commit → tab Actions
    bấm *Enable workflow* khi cần.
+
+### Đã cấu hình trên dịch vụ bên thứ ba (user đã làm, đừng hỏi lại)
+
+**Supabase** — project `kndumltxfrhqxbjrlice`, region Singapore, gói free:
+- Tài khoản đăng nhập `hoangduy2401@gmail.com` tạo sẵn trong dashboard, đã bật
+  Auto Confirm. **Đã TẮT "Allow new users to sign up"** — không thì ai đọc mã
+  nguồn trang cũng lấy được publishable key rồi tự mở tài khoản trên dự án.
+- Site URL + Redirect URLs đã đặt: `https://dashboardstock.io.vn/**`,
+  `http://localhost:5599/**`, `http://127.0.0.1:5599/**`.
+- `supabase/schema.sql` đã chạy: 9 bảng, `rls = true` cả 9, mỗi bảng 1 policy.
+  **Kiểm lại được bằng câu tự kiểm ở cuối file đó.**
+
+**Render** — env đã có `SUPABASE_URL` + `SUPABASE_SECRET_KEY` cho job snapshot.
+Khoá `sb_secret_...` **bỏ qua RLS**, chỉ sống trong env Render, không bao giờ vào
+repo và không bao giờ ra frontend. Tên biến ghi ở `server/.env.example`.
 
 ---
 

@@ -5,6 +5,43 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**08/08/2026 (phiên 8) — GĐ 4 trang Gửi tiết kiệm: XONG CẢ 8 ĐẦU VIỆC.**
+Bump `?v=20260807c` → **`?v=20260808a`** (56 chỗ trong 6 file HTML). **Có đụng
+`server/`** → Render đã deploy lại, đã kiểm live. **Website giờ đủ 6 trang.**
+
+**Đã đo nguồn TỪ RENDER trước khi xây trang** (bài học Yahoo + CoinGecko ở mục
+7): CafeF trả 29 ngân hàng × 8 kỳ hạn bình thường từ IP Render, không bị chặn.
+
+- `/api/savings/rates`: proxy file JSON tĩnh của CafeF, cache 6h, **giữ bản chụp
+  gần nhất trong bộ nhớ** — nguồn chết thì trả bản cũ kèm `stale: true` +
+  `snapshotAt`, trang hiện dải cảnh báo ghi rõ bản chụp lấy lúc nào.
+- Kỳ hạn sắp theo **số tháng**, không theo chuỗi: sắp chuỗi thì "12T" đứng trước
+  "1T" và bảng đọc thành vô nghĩa.
+- Ô lãi suất cao nhất mỗi kỳ hạn tô đậm; ngân hàng không niêm yết kỳ hạn đang
+  sắp thì **xuống cuối**, không coi là 0%.
+- **Cảnh báo đáo hạn 30/15/7 ngày đặt TRÊN CÙNG trang**, không giấu trong bảng —
+  đây là giá trị thực tế cao nhất của trang. Ba mức vì việc cần làm khác nhau:
+  30 ngày là lúc bắt đầu tìm lãi suất mới, 7 ngày là lúc phải quyết.
+
+**Hai quyết định về số liệu, đừng "sửa lại":**
+1. **Lãi suất của sổ lưu theo con số ĐÃ CHỐT LÚC GỬI**, không đọc lại từ bảng
+   niêm yết. Bảng là lãi suất hôm nay; sổ đã khoá lãi suất từ ngày gửi. Ô nhập
+   tự điền gợi ý theo bảng nhưng user gõ vào là thôi tự động (ưu đãi, số tiền
+   lớn… cho lãi suất khác bảng).
+2. **Công thức là lãi cuối kỳ, không tái tục, chưa trừ thuế/phí:**
+   `lãi = gốc × (%năm ÷ 100) × số tháng ÷ 12`. Sổ lĩnh lãi hàng tháng hay tự
+   động tái tục cho con số khác — trang ghi rõ giả định thay vì im lặng.
+
+`setMonth` tự dồn ngày 31 sang tháng sau (31/01 + 1 tháng = 03/03) nên ngày đáo
+hạn kẹp lại về ngày cuối tháng đích — đúng như cách ngân hàng ghi trên sổ.
+
+Đã kiểm trên trình duyệt thật (local rồi bản live): 100.000.000 ₫ kỳ hạn 12
+tháng → Shinhan 7,50% = +7.500.000 ₫, chênh hạng 1 với hạng 5 là 800.000 ₫; sổ
+500tr 5,9% gửi 14/8/2025 → đáo hạn 14/8/2026, còn 6 ngày, lãi +29.500.000 ₫,
+cảnh báo đỏ hiện trên cùng; sửa thành 600tr @6,1% → +36.600.000 ₫; nhập lãi
+suất 0 báo lỗi; nút con mắt che 16 ô `.money` kể cả trong dải cảnh báo; mobile
+375px không tràn ngang.
+
 **07/08/2026 (phiên 7) — tab "Tổng quan thị trường" + logo coin + gỡ CoinMarketCap.**
 Bump `?v=20260807b` → **`?v=20260807c`**. **Có đụng `server/`** (thêm 2 trường),
 Render đã deploy lại, đã kiểm live.
