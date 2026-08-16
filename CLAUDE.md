@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260815b`** (73 chỗ trong 6 file HTML).
+Cache busting hiện **`?v=20260816k`** (73 chỗ trong 6 file HTML).
 
 ---
 
@@ -428,6 +428,35 @@ không có thì đếm riêng và khai báo vào `partial`. Đừng "tối ưu" 
 
 Lưu ý đơn vị: `computeHoldings` trả `marketValue` theo **triệu đồng**, còn
 `networth.js` làm việc bằng **VND**. Trộn hai cái là sai một triệu lần.
+
+### SSI trả GIÁ 0 cho mã không tồn tại, không báo lỗi (16/08/2026)
+
+**Triệu chứng.** Danh mục tay chứng khoán có mã bịa "ZZZ" hiện lỗ -100% và kéo
+tụt tổng danh mục đúng bằng giá vốn.
+
+**Nguyên nhân.** `DataService.getQuote('ZZZ')` trả `{price: 0, changePct: 0,
+volume: 0}` — SSI không phân biệt "mã không tồn tại" với "giá bằng 0". Đo trực
+tiếp, không phải đoán.
+
+**Cách sửa.** Ở `portfolio.js`: coi `giá <= 0` là "không có giá" (trả null),
+không phải giá bằng không. Cổ phiếu đang giao dịch không bao giờ có giá 0.
+
+**Đây là lỗi THỨ HAI chồng lên lỗi cũ.** Lỗi cũ: `computeHoldings` dùng
+`currentPrices[sym] || avgCost` — mã thiếu quote được định giá bằng chính giá
+vốn, P&L ra 0, tổng vẫn cộng con số giả (đúng loại "lặng lẽ tính sai" mà luật
+vàng mục 3 cấm). Cả hai nay trả null; chỗ gọi hiện "—"/"chưa có giá" và loại
+khỏi phép cộng, tiêu đề đổi thành "Giá trị danh mục (chưa đủ)".
+
+**Đo sau khi sửa, 3 mã cùng lúc:** FPT (VN30) 68,30 +8,3; SZC (ngoài cả 2 rổ)
+19,50 -21,0 — `loadHoldingQuotes()` lấy được; ZZZ (bịa) "—" loại khỏi tổng.
+Lãi/lỗ tạm tính -12,7 = 8,3-21,0 (trước khi sửa là -17,7 vì nuốt -5,0 giả của
+ZZZ).
+
+**Ghi chú mục 10 cũ ĐÃ SAI, đã sửa:** nó viết "mã ngoài watchlist+VN30 dùng giá
+vốn... fetch thêm quote nếu muốn P&L live" — nhưng `loadHoldingQuotes()` ĐÃ đi
+fetch từ trước, chú thích của nó nói y hệt. Lỗ hổng thật chỉ ở ĐƯỜNG THẤT BẠI
+của lần fetch đó. `networth.js` (trang tổng) không dính vì nó cố ý tự hỏi quote
+riêng, biết trước cái bẫy này.
 
 ### SSI đã bỏ giới hạn 30 ngày/lần của DailyOhlc — chú thích cũ sai (15/08/2026)
 
@@ -836,7 +865,7 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260816g`. Nhánh `main` sạch, đã push, backend đã deploy bản
+Cache busting `?v=20260816k`. Nhánh `main` sạch, đã push, backend đã deploy bản
 mới nhất (đã kiểm 15/08 trên Render: `/api/price/history` sau khi bỏ chunk 30
 ngày, job snapshot ghi được vào Supabase).
 
@@ -879,9 +908,30 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Phân bổ tài sản** | — | thanh xếp chồng ngang (không phải biểu đồ tròn — mục 7); màu cố định theo kênh |
 | **Dòng tiền vào/ra** | `Store` (`cash_flows`) | tách "tăng do giá" khỏi "nạp thêm tiền" |
 | **Khoá mã 6 số** | `nav.js` + `settings` | chỉ hỏi mã khi HIỆN số; **không phải bảo mật thật** — mục 7 |
+| **Momentum Score A–F** | `signals.js` `momentum` | tab Tín hiệu, cột "Đà"; phân vị TRONG RỔ, không phải ngưỡng tuyệt đối |
+| **Đột biến khối lượng** | `signals.js` `volSpike` | tab Giá–KL; KL phiên cuối ≥2× TB 20 phiên; tách giá lên/xuống |
 | **Snapshot giá hàng ngày** | job trong `server/index.js` | ghi `price_snapshots` mỗi giờ, upsert 1 hàng/ngày/loại; cần `SUPABASE_SECRET_KEY` trong env Render |
 
 ### Nhật ký theo phiên
+
+**16/08/2026 (phiên 12) — 3 việc treo của trang Chứng khoán: XONG HẾT.**
+Bump `?v=20260816g` → **`?v=20260816k`** (4 lần trong phiên). **KHÔNG đụng
+`server/`** — cả 3 việc tính được từ dữ liệu đã có.
+
+Quyết định mở phiên: **hoãn GĐ 7 (Binance)**, làm 3 việc trang Chứng khoán
+trước. Lý do: user xác nhận mới chỉ dùng trang chứng khoán, chưa giữ coin nào —
+GĐ 7 tự động hoá một việc chưa từng làm, còn 3 việc này nằm trên trang dùng
+hằng ngày và việc 3 là một lỗi đang chạy.
+
+- **Việc 3** (`portfolio.js` + `chung-khoan.js`): mã thiếu quote không còn được
+  định giá bằng giá vốn. HAI lỗi chồng nhau — xem mục 7.
+- **Việc 2** (`signals.js`): Momentum Score A–F, phân vị trong rổ. Không thêm
+  lần gọi mạng nào.
+- **Việc 1** (`signals.js`): `volSpike()` — đột biến KL vs TB 20 phiên. Hoá ra
+  KHÔNG cần `server/` như mục 10 cũ ghi; phần cần server (marketcap heatmap) đã
+  tách ra, còn nợ.
+
+Cả 3 đều cùng một tinh thần với GĐ 6.5: thiếu dữ liệu thì nói ra, không bịa.
 
 **16/08/2026 (phiên 11) — GĐ 6 XONG CẢ 7 ĐẦU VIỆC. Trang tổng chạy thật.**
 Bump `?v=20260815e` → **`?v=20260816g`** (bump 7 lần trong phiên, mỗi lần deploy
@@ -906,66 +956,36 @@ một lần). **KHÔNG đụng `server/`** — toàn bộ là frontend.
 282.000.000; FPT 1.000 cp × 68,30 = 68.300.000; tổng 1.701.659.517 với giá vốn
 1.745.000.000 ra −2,48%. Khớp.
 
-**15/08/2026 (phiên 10) — GĐ 5 xong 7/8 đầu việc + biểu đồ nhanh gấp 2.**
-Bump `?v=20260811a` → **`?v=20260815a`**. **Có đụng `server/` hai lần** (bỏ giới
-hạn chunk 30 ngày, thêm job snapshot) → Render đã deploy lại, đã kiểm live.
-
-**GĐ 5 — Supabase.** Làm 5.1→5.7, chỉ còn 5.8 (bật `STORE_ENABLED` + đối chiếu
-điện thoại). Thứ tự cố ý: **nút xuất JSON làm TRƯỚC mọi thứ khác** — lối thoát
-phải tồn tại trước khi có bất kỳ đường ghi nào lên DB.
-
-- `supabase/schema.sql`: **9 bảng chứ không phải 7** như quy hoạch ghi — thêm
-  `watchlist` (là collection riêng trong `store.js`, khoá legacy, bảng đếm 7 bỏ
-  sót) và `price_snapshots` cho 5.7. RLS bật ngay trong cùng file với lệnh tạo
-  bảng. Chạy lại nhiều lần không hỏng.
-- Đăng nhập magic link, **PKCE không phải implicit**; `shouldCreateUser: false`
-  + đã tắt "Allow new users to sign up" trên dự án.
-- `store.js` giữ facade, driver thật ở `store-supabase.js`. **Hai cờ tách riêng**
-  `AUTH_ENABLED` / `STORE_ENABLED` — xem `config.js`.
-- `migrate.js` (5.5) nhập được từ **localStorage HOẶC file .json**. Đường thứ hai
-  không phải cho sang: xem bài học "hai origin" ở mục 7.
-- 5.7: job ghi snapshot tỷ giá/vàng/lãi suất **mỗi giờ** (không phải mỗi 24h),
-  upsert theo `unique(kind, taken_on)`. Đã chạy thật trên Render, 3 dòng ngày
-  15-08 có dữ liệu đúng (USD bán 26.330 · SJC 14.100/14.400 nghìn đ/chỉ · 29 NH).
-
-**Dữ liệu cũ gần như KHÔNG có** — đây là phát hiện làm đổi hẳn mức rủi ro của
-5.5, và mục 10 cũ ghi sai. Chi tiết ở bài học "hai origin" mục 7. Toàn bộ tài sản
-thật của user: watchlist 5 mã + `privacyMode` + 1 dòng vàng thử. User xác nhận
-**mới chỉ dùng trang chứng khoán**, các trang khác chỉ xem tham khảo.
-
-**Biểu đồ chứng khoán nhanh gấp 2** — hai thay đổi tách làm hai lần deploy, cố ý,
-để hỏng cái nào còn biết. Chi tiết + số đo ở bài học mục 7.
-
-**5.8 xong — GĐ 5 ĐÓNG, 8/8.** `STORE_ENABLED: true`. Đã đối chiếu thật: máy tính
-thêm mã, điện thoại thấy đủ. Trước khi tới đó phải gỡ hai thứ chắn đường: cạm bẫy
-hai origin (mục 7) và một byte NUL lọt vào truy vấn xoá.
-
-**Hạ tầng sửa xong luôn trong phiên:** thêm đủ 4 bản ghi A ở Mắt Bão → bật được
-Enforce HTTPS → `http://` trả 301. Việc này nợ từ lâu, hoá ra chỉ mất 15 phút và
-không cần chuyển nameserver như ghi chú cũ phỏng đoán.
-
-**Đã thử rồi tắt: SMTP riêng qua Brevo.** Gắn vào báo lỗi gửi thư, và khi nguyên
-nhân thật (hai origin) lộ ra thì nó cũng không còn cần thiết — mỗi thiết bị chỉ
-đăng nhập một lần nên 2 thư/giờ là đủ. Đã tắt, quay lại SMTP dựng sẵn, đăng nhập
-chạy bình thường. Tài khoản Brevo còn đó, muốn bật lại thì các ô vẫn nguyên.
-**Nhớ:** `Auth → Rate Limits` chỉ có tác dụng khi đang bật SMTP riêng.
-
-Việc chen ngang (phiên nền riêng): `costGuard.js` — cảnh báo nhập sai đơn vị ở ô
-giá vốn 3 trang tài sản, hai nhịp, so với **giá thị trường đang hiển thị** chứ
-không phải ngưỡng cứng.
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
 
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
-Cây làm việc sạch, đã push, bản live đã kiểm. **GĐ 6 XONG CẢ 7 ĐẦU VIỆC (16/08).**
-Website giờ chạy đủ 6 trang, kể cả trang tổng.
+Cây làm việc sạch, đã push, bản live đã kiểm. **GĐ 6 xong (16/08). Ba việc treo
+của trang Chứng khoán cũng xong (16/08, phiên 12).**
 
-Còn đúng **GĐ 7** là hết quy hoạch.
+Quy hoạch chính thức còn đúng **GĐ 7** là hết. Nhưng có hai việc nhỏ đáng cân
+nhắc trước, và một quyết định về GĐ 7 cần nhắc lại (xem ngay dưới).
 
-#### Việc kế tiếp: GĐ 7 — đồng bộ số dư Binance
+#### GĐ 7 đã được HOÃN có chủ ý (phiên 12) — đọc trước khi bắt tay
+
+User xác nhận **mới chỉ dùng trang Chứng khoán, chưa giữ coin nào** (bản sao lưu
+không có một dòng crypto). GĐ 7 tự động hoá đồng bộ số dư Binance — một việc user
+chưa từng làm — nên đã hoãn để làm 3 việc trang Chứng khoán trước. **Đừng tự khởi
+động GĐ 7; hỏi user đã mở tài khoản Binance và mua coin chưa.** Khi thật sự cần,
+quy hoạch vẫn nguyên ở `docs/QUYHOACH.md`.
+
+#### Hai việc nhỏ còn nợ, không cần user làm gì
+
+1. **Sizing bản đồ nhiệt VN30 theo vốn hóa** — cần endpoint marketcap ở
+   `server/` (1 endpoint warmed thay 30 call). Việc DUY NHẤT còn lại phải deploy
+   lại Render, nên để dành gộp chung nếu có đợt sửa server khác.
+2. Mục 7 giờ có ~16 bài học. Vài cái tháng 7 (`Format SSI thật`, `Lightweight
+   Charts 4 cạm bẫy`, `Tín hiệu FiinTrade`) đã ổn định đủ lâu để đẩy sang
+   `docs/BAIHOC-CU.md` nếu file thấy nặng.
+
+#### Nếu làm GĐ 7: đồng bộ số dư Binance
 
 Đọc `docs/QUYHOACH.md` bảng GĐ 7 (3 đầu việc). Khuôn bảo mật đã có sẵn: làm y
 như `/api/account/*` đang chạy (mục 8) — header `x-dashboard-key` so bằng
@@ -1101,15 +1121,13 @@ Việc chen ngang đã làm ngoài quy hoạch: reskin Fey (03/08), chart chỉ 
 biểu đồ nhanh gấp 2 + cảnh báo đơn vị giá vốn (15/08), khoá mã 6 số cho nút con
 mắt + dồn nhãn nguồn xuống cuối trang tổng (16/08).
 
-### Tính năng chứng khoán chưa làm
-1. **Theo dõi dòng tiền** (user đã chọn từ 24/07, chưa làm): phát hiện đột biến
-   khối lượng/giá trị (spike vs TB 20 phiên). Đụng `server/index.js`. Gộp luôn:
-   sizing heatmap theo vốn hóa (thêm 1 endpoint marketcap VN30 warmed thay 30
-   call) và nhóm "giá – khối lượng" của FiinTrade — cùng bản chất.
-2. **Momentum Score A–F** (FiinTrade Tầng 2) — đủ dữ liệu, dùng lại
-   `netForeignVal` + `state.sigBars` đã có.
-3. Portfolio thủ công: mã ngoài watchlist+VN30 dùng giá vốn làm giá hiện tại
-   (P&L=0) vì `state.quotes` thiếu — fetch thêm quote nếu muốn P&L live.
+### Tính năng chứng khoán — 3 việc treo ĐÃ XONG (16/08, phiên 12)
+1. ✅ Theo dõi dòng tiền — `volSpike()` bắt đột biến KL ≥2× TB 20 phiên, tab
+   Giá–KL. **Chỉ còn nợ sizing heatmap theo vốn hóa** — phần DUY NHẤT cần
+   `server/` (endpoint marketcap VN30 warmed thay 30 call). Để phiên sau hoặc
+   gộp vào đợt sửa server khác.
+2. ✅ Momentum Score A–F — `signals.js` `momentum` + `grader`, tab Tín hiệu.
+3. ✅ Mã thiếu quote không còn định giá bằng giá vốn — xem mục 7 (SSI giá 0).
 
 ### Việc nhỏ (không chặn) — user tự làm
 1. **Bật tự động gia hạn tên miền ở Mắt Bão** (quên = dashboard chết, không ai báo).

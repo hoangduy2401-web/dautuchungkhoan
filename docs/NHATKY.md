@@ -5,6 +5,54 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**15/08/2026 (phiên 10) — GĐ 5 xong 7/8 đầu việc + biểu đồ nhanh gấp 2.**
+Bump `?v=20260811a` → **`?v=20260815a`**. **Có đụng `server/` hai lần** (bỏ giới
+hạn chunk 30 ngày, thêm job snapshot) → Render đã deploy lại, đã kiểm live.
+
+**GĐ 5 — Supabase.** Làm 5.1→5.7, chỉ còn 5.8 (bật `STORE_ENABLED` + đối chiếu
+điện thoại). Thứ tự cố ý: **nút xuất JSON làm TRƯỚC mọi thứ khác** — lối thoát
+phải tồn tại trước khi có bất kỳ đường ghi nào lên DB.
+
+- `supabase/schema.sql`: **9 bảng chứ không phải 7** như quy hoạch ghi — thêm
+  `watchlist` (là collection riêng trong `store.js`, khoá legacy, bảng đếm 7 bỏ
+  sót) và `price_snapshots` cho 5.7. RLS bật ngay trong cùng file với lệnh tạo
+  bảng. Chạy lại nhiều lần không hỏng.
+- Đăng nhập magic link, **PKCE không phải implicit**; `shouldCreateUser: false`
+  + đã tắt "Allow new users to sign up" trên dự án.
+- `store.js` giữ facade, driver thật ở `store-supabase.js`. **Hai cờ tách riêng**
+  `AUTH_ENABLED` / `STORE_ENABLED` — xem `config.js`.
+- `migrate.js` (5.5) nhập được từ **localStorage HOẶC file .json**. Đường thứ hai
+  không phải cho sang: xem bài học "hai origin" ở mục 7.
+- 5.7: job ghi snapshot tỷ giá/vàng/lãi suất **mỗi giờ** (không phải mỗi 24h),
+  upsert theo `unique(kind, taken_on)`. Đã chạy thật trên Render, 3 dòng ngày
+  15-08 có dữ liệu đúng (USD bán 26.330 · SJC 14.100/14.400 nghìn đ/chỉ · 29 NH).
+
+**Dữ liệu cũ gần như KHÔNG có** — đây là phát hiện làm đổi hẳn mức rủi ro của
+5.5, và mục 10 cũ ghi sai. Chi tiết ở bài học "hai origin" mục 7. Toàn bộ tài sản
+thật của user: watchlist 5 mã + `privacyMode` + 1 dòng vàng thử. User xác nhận
+**mới chỉ dùng trang chứng khoán**, các trang khác chỉ xem tham khảo.
+
+**Biểu đồ chứng khoán nhanh gấp 2** — hai thay đổi tách làm hai lần deploy, cố ý,
+để hỏng cái nào còn biết. Chi tiết + số đo ở bài học mục 7.
+
+**5.8 xong — GĐ 5 ĐÓNG, 8/8.** `STORE_ENABLED: true`. Đã đối chiếu thật: máy tính
+thêm mã, điện thoại thấy đủ. Trước khi tới đó phải gỡ hai thứ chắn đường: cạm bẫy
+hai origin (mục 7) và một byte NUL lọt vào truy vấn xoá.
+
+**Hạ tầng sửa xong luôn trong phiên:** thêm đủ 4 bản ghi A ở Mắt Bão → bật được
+Enforce HTTPS → `http://` trả 301. Việc này nợ từ lâu, hoá ra chỉ mất 15 phút và
+không cần chuyển nameserver như ghi chú cũ phỏng đoán.
+
+**Đã thử rồi tắt: SMTP riêng qua Brevo.** Gắn vào báo lỗi gửi thư, và khi nguyên
+nhân thật (hai origin) lộ ra thì nó cũng không còn cần thiết — mỗi thiết bị chỉ
+đăng nhập một lần nên 2 thư/giờ là đủ. Đã tắt, quay lại SMTP dựng sẵn, đăng nhập
+chạy bình thường. Tài khoản Brevo còn đó, muốn bật lại thì các ô vẫn nguyên.
+**Nhớ:** `Auth → Rate Limits` chỉ có tác dụng khi đang bật SMTP riêng.
+
+Việc chen ngang (phiên nền riêng): `costGuard.js` — cảnh báo nhập sai đơn vị ở ô
+giá vốn 3 trang tài sản, hai nhịp, so với **giá thị trường đang hiển thị** chứ
+không phải ngưỡng cứng.
+
 **08/08/2026 (phiên 9) — đổi theme mặc định + sửa lỗi so sánh khối lượng ngày nghỉ.**
 Bump `?v=20260808a` → **`?v=20260808b`**. **Có đụng `server/`** (thêm 1 trường),
 Render đã deploy lại, đã kiểm live.
