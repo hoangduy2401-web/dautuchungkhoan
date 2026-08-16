@@ -692,7 +692,24 @@ function renderSigSummary(el, symbols) {
   });
 }
 
+// Ngưỡng "đột biến" khối lượng: gấp đôi trung bình 20 phiên. FiinTrade dùng
+// 1,5–2×; lấy mốc trên cho ít nhiễu, mã nào cũng dao động quanh 1× hằng ngày.
+const VOL_SPIKE_X = 2;
+
 function renderSigPriceVolume(el, symbols) {
+  // Đột biến KL trong PHIÊN GẦN NHẤT — cái user chọn từ 24/07. Khác hẳn "KL
+  // tăng liên tục" bên dưới: chuỗi bắt xu hướng nhiều phiên, còn cái này bắt
+  // một cú vọt đơn lẻ mà chuỗi bỏ sót (vọt 3× rồi phiên sau về bình thường thì
+  // volUp = 0). Tách giá lên / giá xuống vì ý nghĩa dòng tiền ngược nhau.
+  const spikeUp = [], spikeDown = [];
+  for (const s of symbols) {
+    const b = sigBarsFor(s);
+    if (!b) continue;
+    const sp = Signals.volSpike(b, 20);
+    if (!sp || sp.volX < VOL_SPIKE_X) continue;
+    (sp.priceUp ? spikeUp : spikeDown).push({ s, x: sp.volX });
+  }
+
   const groups = {
     "Giá tăng liên tục": [], "Giá giảm liên tục": [], "KL tăng liên tục": [],
     "KL tăng + giá tăng": [], "KL tăng + giá giảm": [],
@@ -713,13 +730,25 @@ function renderSigPriceVolume(el, symbols) {
     "Giá tăng liên tục": "up", "Giá giảm liên tục": "down", "KL tăng liên tục": "",
     "KL tăng + giá tăng": "up", "KL tăng + giá giảm": "down",
   };
-  el.innerHTML = Object.entries(groups).map(([name, list]) => `
+  // Nhóm đột biến đặt TRÊN CÙNG — nó là tín hiệu mạnh nhất trong tab này: một cú
+  // vọt khối lượng thường đi trước biến động giá.
+  const spikeBlock = (name, list, klass) => `
+    <div class="sig-group-title ${klass}">${name} (${list.length})</div>
+    ${list.length
+      ? `<div class="sig-chips">${list.sort((a, b) => b.x - a.x)
+          .map((x) => `<span class="sig-chip ${klass}" data-sym="${x.s}">${x.s} · ${x.x.toFixed(1)}× TB</span>`).join("")}</div>`
+      : `<div class="sig-chips"><span class="sig-chip" style="opacity:.55">Không mã nào</span></div>`}`;
+
+  el.innerHTML =
+    spikeBlock(`KL đột biến ≥${VOL_SPIKE_X}× + giá lên`, spikeUp, "up") +
+    spikeBlock(`KL đột biến ≥${VOL_SPIKE_X}× + giá xuống`, spikeDown, "down") +
+    Object.entries(groups).map(([name, list]) => `
     <div class="sig-group-title ${cls[name]}">${name} (${list.length})</div>
     ${list.length
       ? `<div class="sig-chips">${list.sort((a, b) => b.n - a.n)
           .map((x) => `<span class="sig-chip ${cls[name]}" data-sym="${x.s}">${x.s} · ${x.n} phiên</span>`).join("")}</div>`
       : `<div class="sig-chips"><span class="sig-chip" style="opacity:.55">Không mã nào</span></div>`}`).join("")
-    + `<div class="sig-note">Chuỗi phải &gt; 3 phiên (ngưỡng của FiinTrade). Dùng phiên gần nhất đã đóng cửa — backend không có khối lượng ước lượng trong phiên.</div>`;
+    + `<div class="sig-note"><b>KL đột biến</b>: khối lượng phiên gần nhất ≥ ${VOL_SPIKE_X}× trung bình 20 phiên trước — bắt cú vọt đơn lẻ mà "KL tăng liên tục" bỏ sót. Chuỗi liên tục phải &gt; 3 phiên (ngưỡng FiinTrade). Dùng phiên gần nhất đã đóng cửa — backend không có khối lượng ước lượng trong phiên.</div>`;
 
   el.querySelectorAll(".sig-chip[data-sym]").forEach((c) => {
     c.addEventListener("click", () => selectSymbol(c.dataset.sym));

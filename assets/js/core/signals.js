@@ -230,6 +230,30 @@ const Signals = (function () {
     return s.length ? s.reduce((a, b) => a + b.volume, 0) / s.length : 0;
   }
 
+  // Đột biến khối lượng: KL phiên cuối so với TB `lookback` phiên TRƯỚC nó.
+  // Trả cả bội số KL lẫn bội số GIÁ TRỊ (KL × giá đóng cửa) — FiinTrade tách hai
+  // thứ này: một mã giá thấp có thể vọt KL mà giá trị vẫn nhỏ, và ngược lại một
+  // bluechip nhích KL cũng thành dòng tiền lớn. Với phiên đơn lẻ giá gần như
+  // không đổi nên hai bội số sát nhau, nhưng vẫn tính riêng cho đúng.
+  //
+  // Loại phiên cuối khỏi mẫu trung bình: để chính nó trong mẫu thì một phiên
+  // vọt gấp 10 tự kéo trung bình lên, làm bội số thấp đi giả tạo.
+  function volSpike(bars, lookback = 20) {
+    const n = bars.length;
+    if (n < lookback + 1) return null;
+    const base = bars.slice(n - 1 - lookback, n - 1); // `lookback` phiên trước phiên cuối
+    const avgVol = base.reduce((a, b) => a + b.volume, 0) / base.length;
+    const avgVal = base.reduce((a, b) => a + b.volume * b.close, 0) / base.length;
+    const last = bars[n - 1];
+    if (avgVol <= 0) return null;
+    return {
+      volX: last.volume / avgVol,
+      valX: avgVal > 0 ? (last.volume * last.close) / avgVal : null,
+      lastVol: last.volume,
+      priceUp: last.close > bars[n - 2].close, // đột biến kèm giá lên hay xuống
+    };
+  }
+
   /* ---------------- Momentum Score (FiinTrade Tầng 2) ---------------- */
   //
   // 5 tiêu chí, tối đa 13 điểm (docs/YTUONG.md). Trả ĐIỂM THÔ + chi tiết từng
@@ -324,6 +348,6 @@ const Signals = (function () {
     momentum, grader,
     sma, rsi, cmf, roc,
     toWeekly, compute, streaks,
-    volRatio, pctChange, extremes, periodReturn, avgVolume,
+    volRatio, pctChange, extremes, periodReturn, avgVolume, volSpike,
   };
 })();
