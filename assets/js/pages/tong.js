@@ -83,6 +83,54 @@ function renderTotals(res) {
     `</div>`;
 }
 
+// Phân bổ tài sản (GĐ 6.3 + 6.7).
+//
+// KHÔNG phải biểu đồ tròn dù quy hoạch ghi vậy — **thanh xếp chồng ngang** đọc
+// dễ hơn cho việc này: 5 kênh, tên tiếng Việt dài, và so sánh tỷ trọng trên một
+// trục thẳng chính xác hơn nhiều so với so sánh góc quạt. Muốn quay lại hình
+// tròn thì đổi ở đây, phần tính toán không đụng gì.
+//
+// Màu gán CỐ ĐỊNH theo kênh, không theo thứ hạng: giá biến động thì bảng màu
+// vẫn đứng yên. Đã chạy validator cho cả nền sáng lẫn nền tối (xem base.css).
+//
+// 6.7: số tiền tuyệt đối bọc trong `.money` nên tự biến mất khi bật chế độ
+// riêng tư; phần trăm và chính thanh màu vẫn hiện — đúng mục 3.5, vì tỷ trọng
+// không tiết lộ quy mô tài sản.
+function renderAllocation(res) {
+  const host = document.getElementById("nwAlloc");
+  if (!host) return;
+
+  const tong = res.total.value || 0;
+  const phan = res.channels.filter((c) => c.ok && c.value > 0);
+
+  if (!tong || !phan.length) {
+    host.innerHTML = "";
+    return;
+  }
+
+  const bar = phan
+    .map((c) => {
+      const pct = (c.value / tong) * 100;
+      return `<span style="width:${pct.toFixed(2)}%;background:var(--series-${c.key})" title="${esc(c.label)} ${pct.toFixed(1)}%"></span>`;
+    })
+    .join("");
+
+  const legend = phan
+    .map((c) => {
+      const pct = (c.value / tong) * 100;
+      return (
+        `<li><i style="background:var(--series-${c.key})"></i>` +
+        `${esc(c.label)} <b>${pct.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%</b>` +
+        `<span class="money">${fmtVnd(c.value)}</span></li>`
+      );
+    })
+    .join("");
+
+  host.innerHTML =
+    `<div class="nw-alloc"><div class="nw-alloc-bar">${bar}</div>` +
+    `<ul class="nw-alloc-legend">${legend}</ul></div>`;
+}
+
 function renderChannels(res) {
   const body = document.getElementById("nwTableBody");
   if (!body) return;
@@ -142,6 +190,7 @@ async function loadNetWorth() {
     const res = await NetWorth.compute();
     renderAlerts(res);
     renderTotals(res);
+    renderAllocation(res);
     renderChannels(res);
     if (status) {
       status.textContent = `Cập nhật ${new Date(res.at).toLocaleTimeString("vi-VN")}`;

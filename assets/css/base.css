@@ -695,3 +695,56 @@ tr:hover td { background: var(--surface-hover); }
   .nw-totals { gap: 18px; }
   .nw-total .val { font-size: 21px; }
 }
+
+/* ---- Phan bo tai san (GD 6.3 + 6.7) ----
+   Mau phan loai gan CO DINH theo kenh, KHONG theo thu hang: kenh nao cung giu
+   mot mau du gia tri doi. Doi mau theo thu hang thi moi lan gia bien dong la
+   bang mau nhay lung tung, doc thanh vo nghia.
+   Bo mau da chay qua validator (CVD + tuong phan) o ca hai nen: sang #ffffff,
+   toi #121212. Doi mau thi PHAI chay lai, dung uoc luong bang mat. */
+:root {
+  --series-stock:   #2a78d6;
+  --series-gold:    #eb6834;
+  --series-fx:      #1baf7a;
+  --series-crypto:  #eda100;
+  --series-savings: #e87ba4;
+}
+:root[data-theme="dark"] {
+  --series-stock:   #3987e5;
+  --series-gold:    #d95926;
+  --series-fx:      #199e70;
+  --series-crypto:  #c98500;
+  --series-savings: #d55181;
+}
+
+.nw-alloc { margin: 4px 0 20px; }
+/* Thanh xep chong ngang thay cho bieu do tron: 5 kenh, ten dai, va so sanh ty
+   trong tren mot truc thang de doc hon nhieu so voi so sanh goc quat. */
+.nw-alloc-bar {
+  display: flex; gap: 2px; /* 2px khe = mau nen, tach hai mang mau ke nhau */
+  height: 14px; border-radius: 4px; overflow: hidden; margin-bottom: 12px;
+  background: var(--surface-inset);
+}
+.nw-alloc-bar > span { display: block; min-width: 2px; }
+
+.nw-alloc-legend {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+}
+.nw-alloc-legend li {
+  display: flex; align-items: baseline; gap: 7px;
+  font-size: var(--text-xs); color: var(--text-secondary);
+}
+.nw-alloc-legend i {
+  width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto;
+  transform: translateY(1px);
+}
+/* Chu dung token chu, KHONG dung mau chuoi so lieu - o mau ben canh da mang
+   danh tinh roi. */
+.nw-alloc-legend b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.nw-alloc-legend .money { color: var(--text-tertiary); }
+
+/* Cot dau bang tong mang ca nhan nguon lan gia dinh dinh gia - de dai tu nhien
+   thi bang phinh ra va cot Lai/lo bi day khoi khung nhin. Ep xuong dong. */
+#nwTableBody td:first-child { max-width: 340px; white-space: normal; }
+#nwTableBody .nw-note { white-space: normal; line-height: 1.4; }
