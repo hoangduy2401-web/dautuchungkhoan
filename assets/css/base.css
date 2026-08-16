@@ -777,3 +777,10 @@ tr:hover td { background: var(--surface-hover); }
 .nw-sources summary { cursor: pointer; color: var(--text-tertiary); }
 .nw-sources ul { margin: 10px 0 0; padding-left: 18px; line-height: 1.6; }
 .nw-src-note { color: var(--text-tertiary); }
+
+/* Form dong tien (GD 6.4) - 5 o + 1 nut, nhieu hon moi form khac trong du an
+   nen cho xuong dong som va de o ghi chu an het phan con lai. */
+.cf-form { flex-wrap: wrap; gap: 8px; }
+.cf-form .edit-input { min-width: 120px; }
+.cf-form input[type="date"] { min-width: 155px; }
+.cf-form #cfNote { flex: 1 1 200px; min-width: 200px; }

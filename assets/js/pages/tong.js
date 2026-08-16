@@ -210,6 +210,162 @@ function renderChannels(res) {
   }
 }
 
+// ============================================================
+// DÒNG TIỀN VÀO/RA (GĐ 6.4)
+//
+// Vì sao cần: nhìn tài sản tăng từ 100 triệu lên 300 triệu, không ai biết đó là
+// giá lên hay là mình nạp thêm 200 triệu. Hai chuyện khác hẳn nhau — một cái là
+// đầu tư có lãi, cái kia chỉ là chuyển tiền từ túi này sang túi khác.
+//
+//   Đã nạp ròng   = tổng tiền vào − tổng tiền ra
+//   Tăng do giá   = giá trị hiện tại − đã nạp ròng
+//
+// KÊNH NÀO CHƯA GHI DÒNG TIỀN NÀO THÌ KHÔNG TÍNH, và nói rõ là chưa tính được.
+// Coi "chưa ghi" như "nạp 0 đồng" sẽ ra kết luận "toàn bộ tài sản là lãi" —
+// sai trắng trợn, và đúng loại lỗi mà mục 6.5 tồn tại để chặn.
+//
+// Khác với cột Lãi/lỗ ở bảng trên: cột đó so với GIÁ VỐN của phần đang nắm giữ.
+// Ở đây so với TIỀN THẬT đã bỏ vào kênh, nên có tính cả phần đã bán, đã rút,
+// phí. Hai con số trả lời hai câu hỏi khác nhau, không phải cái nào sai.
+// ============================================================
+
+const CF_CHANNELS = [
+  ["stock", "Chứng khoán"],
+  ["gold", "Vàng"],
+  ["fx", "Ngoại tệ"],
+  ["crypto", "Coin"],
+  ["savings", "Tiết kiệm"],
+];
+
+// Nhận "500000000" lẫn "500.000.000" lẫn "500,000,000". Người Việt gõ dấu chấm
+// phân nhóm nghìn, và bắt gõ số trần là mời gõ nhầm một chữ số.
+function parseVnd(s) {
+  const clean = String(s).replace(/[.\s,]/g, "");
+  if (!/^\d+$/.test(clean)) return null;
+  const n = Number(clean);
+  return n > 0 ? n : null;
+}
+
+async function renderCashFlows(res) {
+  const host = document.getElementById("cfPanel");
+  if (!host) return;
+
+  const flows = await Store.list("cash_flows");
+  const byCh = {};
+  for (const f of flows) {
+    const c = (byCh[f.channel] = byCh[f.channel] || { vao: 0, ra: 0, n: 0 });
+    const amt = Number(f.amount) || 0;
+    if (f.direction === "out") c.ra += amt;
+    else c.vao += amt;
+    c.n++;
+  }
+
+  const nw = {};
+  if (res) for (const c of res.channels) nw[c.key] = c;
+
+  const rows = CF_CHANNELS.map(([key, label]) => {
+    const c = byCh[key];
+    const kenh = nw[key];
+    const giaTri = kenh && kenh.ok ? kenh.value : null;
+
+    if (!c) {
+      return (
+        `<tr><td>${esc(label)}</td><td class="num">—</td><td class="num">—</td>` +
+        `<td class="num">—</td><td class="muted">chưa ghi dòng tiền nào</td></tr>`
+      );
+    }
+    const napRong = c.vao - c.ra;
+    // Giá trị hiện tại chưa tính được thì phần "tăng do giá" cũng chưa tính
+    // được — không đoán bừa bằng 0.
+    const tang = giaTri === null ? null : giaTri - napRong;
+    return (
+      `<tr><td>${esc(label)}</td>` +
+      `<td class="num"><span class="money">${fmtVnd(c.vao)}</span></td>` +
+      `<td class="num"><span class="money">${fmtVnd(c.ra)}</span></td>` +
+      `<td class="num"><span class="money">${fmtVnd(napRong)}</span></td>` +
+      `<td class="num ${plClass(tang)}">` +
+      (tang === null
+        ? `<span class="muted">chưa định giá được kênh này</span>`
+        : `<span class="money">${fmtVnd(tang)}</span>`) +
+      `</td></tr>`
+    );
+  }).join("");
+
+  const lichSu = flows.length
+    ? flows
+        .slice()
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+        .map((f) => {
+          const label = (CF_CHANNELS.find(([k]) => k === f.channel) || [, f.channel])[1];
+          return (
+            `<tr><td>${esc(f.date || "")}</td><td>${esc(label)}</td>` +
+            `<td><span class="pill ${f.direction === "out" ? "sell" : "buy"}">` +
+            `${f.direction === "out" ? "Rút ra" : "Nạp vào"}</span></td>` +
+            `<td class="num"><span class="money">${fmtVnd(Number(f.amount))}</span></td>` +
+            `<td>${esc(f.note || "")}</td>` +
+            `<td><button type="button" class="del-btn" data-cf-del="${esc(f.id)}">✕</button></td></tr>`
+          );
+        })
+        .join("")
+    : `<tr><td colspan="6" class="empty-state">Chưa ghi dòng tiền nào.</td></tr>`;
+
+  host.innerHTML =
+    `<div class="panel"><div class="panel-head"><h2>Dòng tiền vào/ra</h2></div>` +
+    `<div class="panel-body">` +
+    `<p class="build-note">Ghi lại số tiền thật đã bỏ vào và rút ra từng kênh. ` +
+    `Có nó mới tách được <strong>tài sản tăng vì giá lên</strong> khỏi ` +
+    `<strong>tăng vì nạp thêm tiền</strong> — nhìn con số tổng không phân biệt được hai việc này.</p>` +
+
+    `<div class="watchlist-add cf-form">` +
+    `<select id="cfChannel" class="edit-input">` +
+    CF_CHANNELS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("") +
+    `</select>` +
+    `<select id="cfDir" class="edit-input">` +
+    `<option value="in">Nạp vào</option><option value="out">Rút ra</option></select>` +
+    `<input id="cfAmount" class="edit-input" inputmode="numeric" placeholder="Số tiền (₫)" />` +
+    `<input id="cfDate" class="edit-input" type="date" />` +
+    `<input id="cfNote" class="edit-input" placeholder="Ghi chú (không bắt buộc)" />` +
+    `<button type="button" id="cfAdd">Thêm</button>` +
+    `</div>` +
+    `<p class="build-note" id="cfErr"></p>` +
+
+    `<div class="asset-table-wrap"><table class="asset-table"><thead><tr>` +
+    `<th>Kênh</th><th class="num">Đã nạp</th><th class="num">Đã rút</th>` +
+    `<th class="num">Nạp ròng</th><th class="num">Tăng do giá</th>` +
+    `</tr></thead><tbody>${rows}</tbody></table></div>` +
+
+    `<div class="asset-table-wrap" style="margin-top:16px"><table class="asset-table"><thead><tr>` +
+    `<th>Ngày</th><th>Kênh</th><th>Chiều</th><th class="num">Số tiền</th><th>Ghi chú</th><th></th>` +
+    `</tr></thead><tbody>${lichSu}</tbody></table></div>` +
+    `</div></div>`;
+
+  document.getElementById("cfDate").value = new Date().toISOString().slice(0, 10);
+
+  document.getElementById("cfAdd").addEventListener("click", async () => {
+    const err = document.getElementById("cfErr");
+    const amount = parseVnd(document.getElementById("cfAmount").value);
+    const date = document.getElementById("cfDate").value;
+    if (amount === null) return (err.textContent = "Số tiền phải là số lớn hơn 0.");
+    if (!date) return (err.textContent = "Chọn ngày.");
+    err.textContent = "";
+    await Store.add("cash_flows", {
+      channel: document.getElementById("cfChannel").value,
+      direction: document.getElementById("cfDir").value,
+      amount,
+      date,
+      note: document.getElementById("cfNote").value.trim(),
+    });
+    await renderCashFlows(res);
+  });
+
+  host.querySelectorAll("[data-cf-del]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await Store.remove("cash_flows", b.dataset.cfDel);
+      await renderCashFlows(res);
+    })
+  );
+}
+
 // ---- Khoá chế độ riêng tư bằng mã 6 số ------------------------------------
 //
 // Phần logic (băm, hỏi mã, chặn chiều hiện số) nằm ở `nav.js` vì nút con mắt có
@@ -296,6 +452,7 @@ async function loadNetWorth() {
     renderTotals(res);
     renderAllocation(res);
     renderChannels(res);
+    renderCashFlows(res); // 6.4 — cần `res` để tính "tăng do giá"
     if (status) {
       status.textContent = `Cập nhật ${new Date(res.at).toLocaleTimeString("vi-VN")}`;
     }
