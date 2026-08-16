@@ -619,9 +619,23 @@ function renderSignalPane() {
 
 function renderSigSummary(el, symbols) {
   const rows = symbols
-    .map((s) => ({ s, sig: Signals.compute(sigBarsFor(s), state.sigRsiWindow) }))
-    .filter((r) => r.sig)
-    .sort((a, b) => Signals.RANK[a.sig.summary] - Signals.RANK[b.sig.summary]);
+    .map((s) => ({
+      s,
+      sig: Signals.compute(sigBarsFor(s), state.sigRsiWindow),
+      // Khối ngoại chỉ có trên quote đã warm (VN30 + watchlist); mã ngoài đó thì
+      // null, và `momentum` tự hạ thang tối đa xuống 11 rồi khai báo.
+      mom: Signals.momentum(
+        sigBarsFor(s),
+        state.quotes[s] ? state.quotes[s].netForeignVal : null
+      ),
+    }))
+    .filter((r) => r.sig);
+
+  // Hạng A–F là phân vị TRONG RỔ — phải có điểm cả rổ trước khi gán cho từng mã.
+  const gradeOf = Signals.grader(rows.map((r) => (r.mom ? r.mom.score : NaN)));
+  rows.forEach((r) => (r.grade = r.mom ? gradeOf(r.mom.score) : null));
+
+  rows.sort((a, b) => Signals.RANK[a.sig.summary] - Signals.RANK[b.sig.summary]);
 
   if (rows.length === 0) {
     el.innerHTML = `<div class="sig-empty">Chưa đủ nến để tính (cần tối thiểu ${Signals.MIN_BARS}).</div>`;
@@ -634,6 +648,7 @@ function renderSigSummary(el, symbols) {
         <th>Mã</th><th class="num">Giá</th><th class="num">MA(5)</th><th>TB Động</th>
         <th class="num">RSI(14)</th><th class="num">CMF(20)</th><th class="num">ROC(9)</th>
         <th>Chỉ tiêu</th><th>Tổng hợp</th>
+        <th class="num" title="Momentum Score — phân vị trong rổ đang chọn">Đà</th>
       </tr></thead>
       <tbody>${rows.map((r) => `
         <tr data-sym="${r.s}" style="cursor:pointer">
@@ -646,6 +661,11 @@ function renderSigSummary(el, symbols) {
           <td class="num ${trendClass(r.sig.roc)}">${fmt(r.sig.roc, 2)}</td>
           <td><span class="sig ${SIG_GROUP_CLASS[r.sig.indSig]}">${r.sig.indSig}</span></td>
           <td><span class="sig ${SIG_CLASS[r.sig.summary]}">${r.sig.summary}</span></td>
+          <td class="num">${
+            r.mom
+              ? `<span class="mom-grade mom-${r.grade}" title="${r.mom.score}/${r.mom.max} điểm — RSI ${r.mom.parts.rsi}, SMA ${r.mom.parts.sma}, giá ${r.mom.parts.price}, KL ${r.mom.parts.vol}${r.mom.parts.ngoai === null ? ", khối ngoại: chưa có" : ", ngoại " + r.mom.parts.ngoai}">${r.grade}</span>`
+              : "—"
+          }</td>
         </tr>`).join("")}
       </tbody>
     </table></div>
@@ -655,6 +675,9 @@ function renderSigSummary(el, symbols) {
       · Cửa sổ tín hiệu RSI: <input type="number" id="sigRsiWin" min="1" max="10" value="${state.sigRsiWindow}" />
       phiên — RSI cắt lên 30 / cắt xuống 70 trong N phiên gần nhất vẫn tính là tín hiệu.
       ROC dùng ngưỡng 0 (tài liệu FiinTrade ghi 30/70 là chép nhầm từ dòng RSI).
+      <br>Cột <b>Đà</b>: Momentum Score xếp hạng A–F theo <b>phân vị trong rổ đang
+      chọn</b> — A là nhóm dẫn đầu rổ, không phải điểm tuyệt đối. Rê chuột để xem
+      điểm thành phần. Đổi rổ thì hạng tính lại.
     </div>`;
 
   el.querySelectorAll("tr[data-sym]").forEach((tr) => {

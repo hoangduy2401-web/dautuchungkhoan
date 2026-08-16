@@ -791,3 +791,16 @@ tr:hover td { background: var(--surface-hover); }
   flex-basis: 100%; margin-top: 4px;
   color: var(--accent-orange); font-size: var(--text-xs); line-height: 1.5;
 }
+
+/* Momentum Score A-F o tab Tin hieu. Thang mau A xanh -> F do, doc nhanh. */
+.mom-grade {
+  display: inline-block; min-width: 20px; text-align: center;
+  padding: 1px 6px; border-radius: var(--radius-sm);
+  font-weight: 700; font-size: var(--text-xs);
+}
+.mom-A { background: var(--positive-soft); color: var(--positive); }
+.mom-B { background: var(--positive-soft); color: var(--positive); opacity: 0.8; }
+.mom-C { background: var(--surface-inset); color: var(--text-secondary); }
+.mom-D { background: var(--surface-inset); color: var(--text-secondary); }
+.mom-E { background: var(--negative-soft); color: var(--negative); opacity: 0.8; }
+.mom-F { background: var(--negative-soft); color: var(--negative); }

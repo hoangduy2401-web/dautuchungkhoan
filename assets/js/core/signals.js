@@ -230,8 +230,98 @@ const Signals = (function () {
     return s.length ? s.reduce((a, b) => a + b.volume, 0) / s.length : 0;
   }
 
+  /* ---------------- Momentum Score (FiinTrade Tầng 2) ---------------- */
+  //
+  // 5 tiêu chí, tối đa 13 điểm (docs/YTUONG.md). Trả ĐIỂM THÔ + chi tiết từng
+  // phần; hạng A–F là phân vị TRONG RỔ nên phải tính ở trang, không tính được
+  // cho một mã đứng lẻ.
+  //
+  // Phân bổ điểm để TỔNG = 13, mỗi điều kiện con hiện riêng ở `parts` để người
+  // đọc thấy điểm đến từ đâu, không phải một con số từ trên trời:
+  //   RSI     2đ = (RSI < 80) + (RSI tăng 3 phiên liên tiếp)
+  //   SMA     3đ = giá > SMA5 + giá > SMA20 + giá > SMA100
+  //   Giá     3đ = tăng qua 2 phiên (D) + qua ~4 tuần (W) + qua ~4 tháng (M)
+  //   K.lượng 3đ = KLTB tháng: ≥500k→3 · ≥300k→2 · ≥200k→1 · <200k→0
+  //   Ngoại   2đ = khối ngoại mua ròng (netForeignVal > 0)
+  //
+  // `netForeign` truyền từ ngoài (đã có sẵn trên quote đã warm). Không có nó thì
+  // tiêu chí khối ngoại tính 0 và max hạ xuống 11 — nói ra ở `parts`, không âm
+  // thầm coi như bán ròng.
+  function momentum(bars, netForeign) {
+    if (!Array.isArray(bars) || bars.length < MIN_BARS) return null;
+    const n = bars.length;
+    const closes = bars.map((b) => b.close);
+    const price = closes[n - 1];
+
+    // --- RSI (2đ) ---
+    const r = rsi(closes, 14);
+    const rNow = r[n - 1];
+    const rUp3 =
+      r[n - 1] != null && r[n - 2] != null && r[n - 3] != null && r[n - 4] != null &&
+      r[n - 1] > r[n - 2] && r[n - 2] > r[n - 3] && r[n - 3] > r[n - 4];
+    const pRsi = (rNow != null && rNow < 80 ? 1 : 0) + (rUp3 ? 1 : 0);
+
+    // --- SMA (3đ) ---
+    const s5 = sma(closes, 5)[n - 1];
+    const s20 = sma(closes, 20)[n - 1];
+    const s100 = sma(closes, 100)[n - 1];
+    const pSma =
+      (s5 != null && price > s5 ? 1 : 0) +
+      (s20 != null && price > s20 ? 1 : 0) +
+      (s100 != null && price > s100 ? 1 : 0);
+
+    // --- Giá tăng qua 3 khung (3đ) ---
+    const dRet = periodReturn(bars, "D");
+    const wRet = periodReturn(bars, "W");
+    const mRet = periodReturn(bars, "M");
+    const pPrice =
+      (dRet != null && dRet > 0 ? 1 : 0) +
+      (wRet != null && wRet > 0 ? 1 : 0) +
+      (mRet != null && mRet > 0 ? 1 : 0);
+
+    // --- Khối lượng TB tháng (3đ) ---
+    const vol = avgVolume(bars, 21);
+    const pVol = vol >= 500000 ? 3 : vol >= 300000 ? 2 : vol >= 200000 ? 1 : 0;
+
+    // --- Khối ngoại (2đ) ---
+    const coNgoai = netForeign != null && Number.isFinite(Number(netForeign));
+    const pNgoai = coNgoai && Number(netForeign) > 0 ? 2 : 0;
+
+    const score = pRsi + pSma + pPrice + pVol + pNgoai;
+    const max = coNgoai ? 13 : 11; // thiếu dữ liệu khối ngoại thì thang tối đa hạ
+
+    return {
+      score, max,
+      parts: {
+        rsi: pRsi, sma: pSma, price: pPrice, vol: pVol,
+        ngoai: coNgoai ? pNgoai : null, // null = không có dữ liệu, khác 0
+      },
+      detail: { rsi: rNow, rsiUp3: rUp3, avgVol: vol, dRet, wRet, mRet },
+    };
+  }
+
+  // Điểm thô -> hạng A–F theo PHÂN VỊ trong rổ. Nhận mảng điểm của cả rổ, trả
+  // hàm tra hạng cho một điểm. 6 bậc chia đều theo phân vị: top ~17% = A.
+  //
+  // Phân vị chứ không phải ngưỡng tuyệt đối: "13 điểm = A" nghe gọn nhưng cả rổ
+  // cùng lên điểm trong phiên tăng thì hạng mất hết ý nghĩa phân loại. Phân vị
+  // luôn giữ A cho nhóm dẫn đầu RỔ, dù thị trường chung thế nào.
+  function grader(scores) {
+    const sorted = scores.filter((s) => Number.isFinite(s)).sort((a, b) => a - b);
+    const GRADES = ["F", "E", "D", "C", "B", "A"];
+    return function gradeOf(score) {
+      if (!sorted.length || !Number.isFinite(score)) return null;
+      // Phần trăm số mã có điểm THẤP HƠN mình (0..1).
+      let below = 0;
+      while (below < sorted.length && sorted[below] < score) below++;
+      const pct = below / sorted.length;
+      return GRADES[Math.min(5, Math.floor(pct * 6))];
+    };
+  }
+
   return {
     BULL, NEU, BEAR, RANK, MIN_BARS,
+    momentum, grader,
     sma, rsi, cmf, roc,
     toWeekly, compute, streaks,
     volRatio, pctChange, extremes, periodReturn, avgVolume,
