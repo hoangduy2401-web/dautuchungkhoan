@@ -682,7 +682,9 @@ trả bảng hôm nay, nên không dựng được lịch sử bán lẻ từ đ
 
 1. `/api/price/index-history` trả `{date, close, volume}` — **không có OHLC** vì
    `DailyIndex` không có. `chartModule` tự nhận ra và vẽ đường.
-2. **Chunk 30 ngày là bắt buộc**, không phải chọn lựa (xem "Format SSI thật").
+2. **Chunk 30 ngày là bắt buộc** cho `index-history`, không phải chọn lựa (xem
+   "Format SSI thật" ở `docs/BAIHOC-CU.md`). Lưu ý: giới hạn này CHỈ còn ở
+   `DailyIndex`; `DailyOhlc` (cổ phiếu) đã bỏ chunk 30 từ 15/08 — mục 7.
 3. **Timeout của chỉ số phải riêng**, đừng gộp với `getHistory` (mục ngay dưới).
 
 Khảo sát gốc + ước lượng của bước A/B: `docs/BAIHOC-CU.md`.
@@ -715,143 +717,15 @@ dài, thay vì 12s/30s/75s của `getHistory`. Kèm hai lớp chống nhiễu:
   không để lịch sử giá của mã này nằm dưới tên mã kia (luật vàng mục 3). Hỏng
   mà **cùng key** (nhịp làm mới 45s) thì giữ nguyên chart.
 
-### Format SSI thật (đã xác nhận 22/07/2026 — hết mơ hồ)
+### Tín hiệu FiinTrade — 5 chỗ CỐ Ý làm khác tài liệu → `docs/BAIHOC-CU.md`
 
-- Rows luôn ở `raw.data` (mảng), **PascalCase**, giá trị là chuỗi → phải
-  `Number()`. Không thấy `dataList` hay lowercase đâu.
-- `PageSize` **chỉ nhận 10 / 20 / 50 / 100 / 1000** — số khác trả lỗi
-  `"Size of a page must 10, 20, 50, 100 or 1000"`.
-- `DailyOhlc`: `{Symbol, Market, TradingDate:"dd/mm/yyyy", Time, Open, High, Low,
-  Close, Volume, Value}` — trả **giảm dần theo ngày**.
-- `DailyIndex`: **`IndexId=ALL` trả `NoDataFound`** → phải gọi từng mã một.
-  Dùng `RatioChange` làm `changePct`; **`Change` bị scale sai** (-0.6203 cho cú
-  giảm -62.03 điểm) — đừng dùng.
-
-#### `DailyIndex` — dump thật 04/08/2026 (VNINDEX, giữa phiên)
-
-21 trường, không thiếu trường nào:
-```
-IndexId IndexName IndexValue TradingDate Time Change RatioChange
-TotalTrade TotalMatchVol TotalMatchVal TotalDealVol TotalDealVal
-TotalVol TotalVal Advances NoChanges Declines Ceilings Floors
-TypeIndex TradingSession
-```
-
-- **KHÔNG có OHLC** — chỉ `IndexValue`, một giá trị mỗi ngày. Hệ quả: **không
-  vẽ nến được cho chỉ số**, phải dùng biểu đồ đường. Đừng đi tìm endpoint khác:
-  `DailyStockPrice` chỉ có snapshot cuối ngày (mục 11 tầng 4).
-- **Giới hạn cứng 30 ngày mỗi call.** Vượt là trả `data: []`, `totalRecord: 0`,
-  `status 200` (KHÔNG phải lỗi HTTP) kèm `message`:
-  `"Date time format dd/MM/yyyy and ('from date' <= 'to date') < now , max range 30 days"`.
-  Đo 04/08: `days=90/400/1825` đều ra 0 dòng. Nên lịch sử chỉ số **phải chunk 30
-  ngày** y như `fetchOhlcChunked` — 1Y ≈ 13 call, 5Y ≈ 61 call, tuần tự.
-  Phân trang `PageSize: 1000` **không cứu được**: rào chắn nằm ở khoảng ngày,
-  không phải số dòng.
-- **Độ rộng thị trường (`Advances`/`Declines`/`NoChanges`) chỉ có theo SÀN,
-  không theo rổ.** Đo cùng một lượt gọi: VNINDEX 124/95/64, HNX 45/30/34,
-  UPCoM 61/30/49, **VN30 = 0/0/0**. `computeIndices` gom bộ ba toàn-0 thành
-  `null` để UI hiện `—` — "0 mã tăng" trên 30 mã là số bịa (mục 3).
-  `TotalVol`/`TotalVal` của VN30 thì có thật, vẫn dùng được.
-- **`TotalVol`/`TotalVal` LÀ số trực tiếp trong phiên**, kể cả khi
-  `IndexValue = 0`. Xác nhận: row 04/08 có `IndexValue "0"`,
-  `TradingSession "LO"`, mà `TotalVol 76.720.564` và `Advances 128`. Nên lấy
-  thống kê từ row MỚI NHẤT, đừng lấy từ row prev-close như cách chữa
-  `IndexValue` — độ rộng của hôm qua dán nhãn hôm nay là số bịa.
-- Dùng `TotalVol`/`TotalVal` (khớp + thỏa thuận) chứ không phải `TotalMatchVol`
-  /`TotalMatchVal` — chỉ lấy phần khớp sẽ thấp hơn con số "GTGD toàn sàn" mà sàn
-  công bố.
-- Độ trễ đo được: 90–230ms mỗi call `DailyIndex`.
-  - **QUAN TRỌNG — intraday `IndexValue=0` (fix 24/07/2026):** trong phiên
-    (`TradingSession` = `LO`/`ATO`) SSI trả row hôm nay với `IndexValue="0"`
-    nhưng `RatioChange` LÀ SỐ LIVE. Giá trị điểm thật chỉ có sau đóng cửa
-    (`TradingSession="C"`). → `computeIndices` tái tạo giá trị intraday =
-    **đóng cửa hôm qua × (1 + RatioChange/100)** (đã verify 30.85/1668.53=1.85%).
-    **Đừng chỉ lấy "row mới nhất có value>0"** — trong phiên nó trả số đóng cửa
-    hôm qua, đứng im, trông như "không cập nhật".
-- `DailyStockPrice` (dùng ở `computeQuote`) trả **cả khối ngoại trong cùng row**:
-  `ForeignBuyValTotal`, `ForeignSellValTotal` (VND), `ForeignBuyVolTotal`,
-  `ForeignSellVolTotal`, `ForeignCurrentRoom`, `NetBuySellVal/Vol`. Mua ròng ngoại
-  = `ForeignBuyValTotal − ForeignSellValTotal` (verify VNM 24/07: 73.93 − 50.36 =
-  +23,57 tỷ, khớp `NetBuySellVal`) → tab Khối ngoại **0 call SSI thêm**.
-- `IndexList` chỉ trả `{IndexCode, IndexName, Exchange}`, không có giá trị.
-  Mã thật: HOSE = `VNINDEX, VN30, VN100, VNMIDCAP, VNSMALLCAP, VNDIAMOND,
-  VNFINLEAD, VNX50...`; HNX = `HNXIndex, HNX30, HNXUpcomIndex`.
-- `DailyOhlc` giới hạn **tối đa 30 ngày/lần gọi** (chỉ ghi trong PDF v2.2) → phải
-  chia đoạn (`fetchOhlcChunked`), phân trang `PageIndex/PageSize`.
-- Token TTL **8 giờ** (không phải 6h như một số nguồn ghi), xác nhận qua
-  `/api/debug/token`.
-- Giá SSI là VND thô → chia 1000. Giá trị chỉ số thì **không** chia.
-- `extractRows()`/`pickField()` giữ dù format đã rõ: ngắn, rẻ, lớp đệm phòng SSI
-  đổi version.
-- **TCBS đã bỏ**: chặn request server-to-server (404) kể cả có header giả trình duyệt.
-- SSI **FCData lẫn FCTrading đều không có** fundamentals. FCTrading chỉ đặt/sửa/
-  hủy lệnh + truy vấn tài khoản (orderBook, stockPosition, cashAcctBal...).
-- Fundamentals dùng **VNDirect finfo** (public, không cần key, cho gọi
-  server-to-server), ghép từ 2 nguồn:
-  - `/v4/ratios/latest` — chỉ 8 ratioCode dùng được: `MARKETCAP,
-    PRICE_TO_EARNINGS, PRICE_TO_BOOK, DIVIDEND_YIELD, ROAE_TR_AVG5Q (ROE),
-    ROAA_TR_AVG5Q (ROA), EPS_TR, BVPS_CR`. Tên kiểu `ROE`, `EPS`, `DEBT_EQUITY`,
-    `*_GROWTH` đều trả rỗng.
-  - `/v4/financial_statements` — tự tính `revenueYoY`, `netProfitYoY` (ANNUAL,
-    năm mới nhất vs năm trước) và `debtToEquity` (QUARTER mới nhất).
-- Catalog itemCode nằm ở `/v4/financial_models?q=codeList:<mã>`. Code đang dùng:
-  `21001` Doanh thu thuần (NON_FINANCE), `421701` Tổng thu nhập hoạt động (BANK),
-  `23000` LNST công ty mẹ, `13000` Nợ phải trả, `14000` Vốn CSH.
-  **`13000/14000/23000` giống nhau ở mọi companyForm**, chỉ dòng doanh thu khác.
-
-### Lightweight Charts — 4 cạm bẫy (phát hiện 25/07/2026)
-
-- **Đừng `fitContent()` rồi mới đổi width.** Bar spacing tính theo width tại lúc
-  fit; đổi width sau đó để nến dồn sát mép phải, chừa khoảng trắng bên trái.
-  → `resize()` trước, `fitContent()` sau; và fit lại trong mỗi `resize()`.
-- **Callback `subscribeVisibleLogicalRangeChange` chạy BẤT ĐỒNG BỘ.** Cờ
-  `syncing = true/false` bao quanh lời gọi `setVisibleLogicalRange` là vô dụng
-  (cờ đã reset trước khi pane kia trả lời) → 2 pane ghi đè lẫn nhau, **trục thời
-  gian khóa cứng**: `fitContent`, `setVisibleLogicalRange`, zoom, pan đều không
-  ăn. Sửa: chỉ ghi khi range 2 bên thực sự khác (`sameRange` sai số 0.005).
-- **Canvas overlay `pointer-events: auto` cố định nuốt hết chuột** → chart không
-  zoom/pan được. Chỉ bật `auto` khi đang bật công cụ vẽ/đo, còn lại `none`.
-- **Chart tạo lúc container width = 0** (tab nền, panel chưa layout) hỏng vĩnh
-  viễn — `applyOptions({width})` sau đó không cứu được. Luôn cho width fallback
-  (`clientWidth || 600`).
-- Đo số nến chính xác: dùng `timeScale().coordinateToLogical(x)` (làm tròn +
-  clamp vào `[0, bars.length-1]`) thay vì `coordinateToTime`, rồi neo lại bằng
-  `logicalToCoordinate(index)` để bám nến khi pan/zoom.
-- **RSI dùng whitespace point `{time}` cho 14 nến null đầu** (thay vì
-  `.filter(Boolean)`) để 2 chart cùng số nến — trước đó logical-range lệch 14
-  nến, RSI hụt mép phải, không tới ngày mới nhất.
-- Ghim `rightPriceScale.minimumWidth: 58` cho cả 2 chart → vùng vẽ khớp, trục
-  thời gian song song. Ẩn trục thời gian pane RSI (`timeScale.visible: false`).
-
-### Tín hiệu FiinTrade — 5 chỗ CỐ Ý làm khác tài liệu (user chốt 25/07/2026)
-
-Nằm trong `signals.js`. **Đừng "sửa lại cho đúng tài liệu"** — cả 5 đều đã cân
-nhắc và user duyệt từng cái:
-
-1. **ROC(9) dùng ngưỡng 0**, không phải 30/70. Tài liệu chép nhầm từ dòng RSI
-   ngay trên: ROC không bị chặn 0–100, nó dao động quanh 0. Để 30 thì gần như
-   không mã nào ra tín hiệu.
-2. **RSI cắt 30/70 có cửa sổ 3 phiên** (chỉnh được ở UI). Đúng nghĩa đen thì tín
-   hiệu chỉ sống 1 phiên, cả bảng luôn Trung tính. Hệ quả nhìn thấy được: một mã
-   RSI 26,9 vẫn có thể gắn nhãn "Tăng" vì nó vừa cắt lên 30 rồi tụt lại.
-3. **Không có khối lượng ước lượng trong phiên.** FiinTrade quy đổi KL hiện tại
-   ra cả phiên (`KL × tổng giờ / giờ đã trôi`). `DailyStockPrice` chỉ có snapshot
-   cuối ngày → mọi so sánh KL dùng phiên gần nhất ĐÃ đóng cửa.
-4. **"Thủng đáy" dùng `giá < đáy`.** Tài liệu viết `giá > đáy` — mâu thuẫn với
-   chính định nghĩa của nó ở đoạn trên ("xuống dưới đáy").
-5. **Đỉnh/đáy so theo GIÁ ĐÓNG CỬA**, không phải giá cao/thấp nhất trong phiên.
-   Đo thật trên VN30 khung 1 tháng (bỏ lọc KL): theo đóng cửa ra 10 mã thủng đáy,
-   theo giá thấp nhất phiên chỉ ra 1 mã.
-
-Ba ràng buộc kiến trúc đi kèm, đừng phá:
-- **Cửa sổ tính tín hiệu cố định `SIG_DAYS = 180`, KHÔNG dùng `state.range`.**
-  RSI(14)/CMF(20) cho số khác nhau ở 1M vs 6M — cùng một mã cùng một ngày mà ra 2
-  badge khác nhau thì user mất niềm tin vào cả tính năng.
-- **Quét cả rổ KHÔNG nằm trong `refreshAll()`.** Vòng 45s nạp lại 30–50 mã sẽ
-  dựng lại đúng vòng xoáy throttle đã sửa hôm 23/07 (`docs/BAIHOC-CU.md`). Fetch phải lazy + do user
-  bấm nút, tuần tự (limiter concurrency=1), cache theo phiên trong `state.sigBars`.
-- Badge của mã đang chọn gọi **sau** khi chart có dữ liệu và không `await` — đặt
-  trước sẽ chen hàng ở limiter và làm chậm đúng thứ user đang nhìn.
+`signals.js` cố ý làm khác tài liệu FiinTrade 5 chỗ (ROC ngưỡng 0 không phải
+30/70; RSI cắt có cửa sổ 3 phiên; không có KL ước lượng trong phiên; "thủng đáy"
+dùng `giá < đáy`; đỉnh/đáy theo giá đóng cửa). **Đừng "sửa lại cho đúng tài
+liệu"** — cả 5 đã cân nhắc, user duyệt, và đo thật. Ba ràng buộc kiến trúc kèm
+theo (SIG_DAYS=180 cố định; quét rổ lazy ngoài `refreshAll`; badge gọi sau chart)
+cũng ở đó. **Chi tiết + số đo: `docs/BAIHOC-CU.md`. Đọc trước khi động vào
+`signals.js`.**
 
 ---
 
@@ -981,9 +855,9 @@ quy hoạch vẫn nguyên ở `docs/QUYHOACH.md`.
 1. **Sizing bản đồ nhiệt VN30 theo vốn hóa** — cần endpoint marketcap ở
    `server/` (1 endpoint warmed thay 30 call). Việc DUY NHẤT còn lại phải deploy
    lại Render, nên để dành gộp chung nếu có đợt sửa server khác.
-2. Mục 7 giờ có ~16 bài học. Vài cái tháng 7 (`Format SSI thật`, `Lightweight
-   Charts 4 cạm bẫy`, `Tín hiệu FiinTrade`) đã ổn định đủ lâu để đẩy sang
-   `docs/BAIHOC-CU.md` nếu file thấy nặng.
+2. ~~Dọn bài học tháng 7~~ — **ĐÃ LÀM 16/08.** `Format SSI thật` và `Lightweight
+   Charts 4 cạm bẫy` chuyển sạch sang `docs/BAIHOC-CU.md`; `Tín hiệu FiinTrade`
+   giữ con trỏ ở mục 7 (vì tính "đừng sửa lại"), bản đầy đủ ở BAIHOC-CU.
 
 #### Nếu làm GĐ 7: đồng bộ số dư Binance
 
