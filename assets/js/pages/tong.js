@@ -131,6 +131,33 @@ function renderAllocation(res) {
     `<ul class="nw-alloc-legend">${legend}</ul></div>`;
 }
 
+// Nhãn nguồn + giả định định giá của cả 5 kênh, gom một chỗ ở cuối trang.
+//
+// Mục 1.5 bắt buộc mọi con số phải nói rõ đến từ đâu — nhưng KHÔNG bắt buộc nó
+// phải nằm sát con số. Đặt dưới từng tên kênh thì cột đầu phình ra và đẩy cột
+// Lãi/lỗ khỏi khung nhìn (đã dính 16/08). Gom xuống đây: bảng đọc thoáng, nhãn
+// vẫn còn nguyên. **Đừng bỏ khối này đi cho gọn.**
+function renderSources(res) {
+  const host = document.getElementById("nwSources");
+  if (!host) return;
+
+  const rows = res.channels
+    .filter((c) => c.source || c.note)
+    .map(
+      (c) =>
+        `<li><strong>${esc(c.label)}</strong>` +
+        (c.source ? ` — nguồn: ${esc(c.source)}` : "") +
+        (c.note ? `<br><span class="nw-src-note">${esc(c.note)}</span>` : "") +
+        `</li>`
+    )
+    .join("");
+
+  host.innerHTML = rows
+    ? `<details class="nw-sources"><summary>Nguồn dữ liệu &amp; cách định giá từng kênh</summary>` +
+      `<ul>${rows}</ul></details>`
+    : "";
+}
+
 function renderChannels(res) {
   const body = document.getElementById("nwTableBody");
   if (!body) return;
@@ -152,11 +179,12 @@ function renderChannels(res) {
         );
       }
       const tyTrong = tong ? (c.value / tong) * 100 : null;
-      const ghiChu = [c.source ? `nguồn: ${c.source}` : "", c.note || ""]
-        .filter(Boolean)
-        .join(" · ");
+      // Nhãn nguồn + giả định định giá KHÔNG nằm ở đây nữa mà gom xuống cuối
+      // trang (`renderSources`). Chúng dài, và đặt dưới từng tên kênh thì đẩy
+      // cột Lãi/lỗ khỏi khung nhìn. Nhãn nguồn vẫn BẮT BUỘC có mặt (mục 1.5),
+      // chỉ đổi chỗ — đừng bỏ hẳn cho gọn.
       return (
-        `<tr><td>${esc(c.label)}<div class="nw-note">${esc(ghiChu)}</div></td>` +
+        `<tr><td>${esc(c.label)}</td>` +
         `<td class="num">${c.count}</td>` +
         `<td class="num"><span class="money">${fmtVnd(c.value)}</span></td>` +
         `<td class="num">${tyTrong === null ? "—" : fmtPct(tyTrong).replace("+", "")}</td>` +
@@ -166,6 +194,8 @@ function renderChannels(res) {
       );
     })
     .join("");
+
+  renderSources(res);
 
   // Lãi tiết kiệm đứng riêng, KHÔNG nằm trong tổng — xem chú thích ở networth.js.
   const sav = res.channels.find((c) => c.key === "savings");
@@ -178,6 +208,80 @@ function renderChannels(res) {
           `<strong>chưa cộng vào tổng</strong>, vì rút trước hạn thì gần như mất phần này.</p>`
         : "";
   }
+}
+
+// ---- Khoá chế độ riêng tư bằng mã 6 số ------------------------------------
+//
+// Phần logic (băm, hỏi mã, chặn chiều hiện số) nằm ở `nav.js` vì nút con mắt có
+// mặt trên cả 6 trang. Đây chỉ là chỗ đặt/đổi/gỡ mã.
+//
+// Nói thẳng mức bảo vệ ngay trên giao diện: đây là trang tĩnh, người biết mở
+// DevTools gỡ được lớp này. Nó chặn người đứng cạnh nhìn màn hình, không chặn
+// được kẻ có kỹ thuật. Viết ra để không ai nhầm nó là lớp bảo vệ dữ liệu.
+async function renderPinPanel() {
+  const host = document.getElementById("pinPanel");
+  if (!host) return;
+
+  const daDatMa = !!(await Nav.getPinHash());
+
+  host.innerHTML =
+    `<div class="panel"><div class="panel-head"><h2>Khoá chế độ riêng tư</h2></div>` +
+    `<div class="panel-body">` +
+    `<p class="build-note">` +
+    (daDatMa
+      ? `Đang bật. Bấm nút con mắt để <strong>hiện</strong> lại số tiền sẽ phải nhập mã 6 số. ` +
+        `Bấm để <strong>che</strong> thì không hỏi gì — che luôn được phép.`
+      : `Chưa đặt mã. Nút con mắt hiện che/hiện tự do. Đặt mã 6 số để người khác ` +
+        `cầm máy không bỏ che được.`) +
+    `</p>` +
+    `<p class="build-note nw-src-note">Mức bảo vệ: lớp này chặn <strong>người đứng cạnh</strong>, ` +
+    `không chặn được người biết mở công cụ lập trình của trình duyệt. Lớp chặn thật ` +
+    `cho dữ liệu vẫn là đăng nhập + phân quyền trên Supabase.</p>` +
+    `<div class="watchlist-add">` +
+    (daDatMa
+      ? `<button type="button" class="btn-outline" id="pinChange">Đổi mã</button> ` +
+        `<button type="button" class="btn-outline" id="pinClear">Gỡ mã</button>`
+      : `<input type="password" id="pinNew" class="edit-input" inputmode="numeric" ` +
+        `maxlength="6" placeholder="6 chữ số" autocomplete="off" />` +
+        `<input type="password" id="pinNew2" class="edit-input" inputmode="numeric" ` +
+        `maxlength="6" placeholder="nhập lại" autocomplete="off" />` +
+        `<button type="button" id="pinSave">Đặt mã</button>`) +
+    `</div>` +
+    `<p class="build-note" id="pinMsg"></p>` +
+    `</div></div>`;
+
+  const msg = document.getElementById("pinMsg");
+
+  if (!daDatMa) {
+    document.getElementById("pinSave").addEventListener("click", async () => {
+      const a = document.getElementById("pinNew").value.trim();
+      const b = document.getElementById("pinNew2").value.trim();
+      if (!/^\d{6}$/.test(a)) return (msg.textContent = "Mã phải gồm đúng 6 chữ số.");
+      if (a !== b) return (msg.textContent = "Hai lần nhập không khớp.");
+      await Nav.setPin(a);
+      await renderPinPanel();
+      document.getElementById("pinMsg").textContent =
+        "Đã đặt mã. Từ giờ muốn hiện lại số tiền phải nhập mã này.";
+    });
+    return;
+  }
+
+  // Đổi và gỡ đều phải qua mã hiện tại. Không có thì ai cầm máy cũng gỡ được,
+  // và lớp khoá thành trang trí.
+  document.getElementById("pinChange").addEventListener("click", async () => {
+    if (!(await Nav.askPin())) return;
+    await Nav.setPin(null);
+    await renderPinPanel();
+    document.getElementById("pinMsg").textContent = "Mã cũ đã gỡ. Đặt mã mới ở ô trên.";
+  });
+
+  document.getElementById("pinClear").addEventListener("click", async () => {
+    if (!(await Nav.askPin())) return;
+    await Nav.setPin(null);
+    await renderPinPanel();
+    document.getElementById("pinMsg").textContent =
+      "Đã gỡ mã. Nút con mắt che/hiện tự do trở lại.";
+  });
 }
 
 async function loadNetWorth() {
@@ -211,6 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
   Auth.render(); // đăng nhập magic link (GĐ 5.3)
   Backup.render(); // nút xuất JSON (GĐ 5.6)
   Migrate.render(); // màn hình nhập dữ liệu cũ (GĐ 5.5)
+  renderPinPanel(); // khoá mã 6 số cho nút con mắt
 
   loadNetWorth();
   const btn = document.getElementById("nwReload");

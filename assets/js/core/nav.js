@@ -45,8 +45,104 @@ const Nav = (function () {
     }
   }
 
+  // ---- Khoá mã 6 số cho chế độ riêng tư ------------------------------------
+  //
+  // NÓI THẲNG VỀ MỨC BẢO VỆ, đừng để ai hiểu nhầm: đây là trang tĩnh, mọi thứ
+  // chạy trong trình duyệt. Người biết mở DevTools gỡ được lớp này trong mười
+  // giây. Nó chặn NGƯỜI ĐỨNG CẠNH nhìn màn hình, không chặn được kẻ có ý đồ và
+  // có kỹ thuật. Lớp chặn thật cho dữ liệu vẫn là đăng nhập + RLS.
+  //
+  // Vì vậy: **chỉ hỏi mã khi HIỆN số, không hỏi khi ẩn số.** Che thì luôn cho
+  // phép — nếu bắt nhập mã mới che được thì lúc cần che gấp lại loay hoay, mà
+  // che có hại gì đâu. Hỏi mã lúc ẩn cũng vô nghĩa: người lạ chỉ cần bấm con
+  // mắt lần nữa là hiện lại.
+  //
+  // Mã lưu dạng BĂM SHA-256 kèm chuỗi muối, không lưu số trần. Không phải vì
+  // nó chống được tấn công (6 chữ số thì dò hết trong tích tắc) mà vì mã này
+  // đồng bộ lên Supabase — không có lý do gì để nó nằm đó ở dạng đọc được.
+  const PIN_SETTING = "privacyPinHash";
+  const PIN_SALT = "vn_gs_privacy_v1:";
+
+  async function hashPin(pin) {
+    const buf = new TextEncoder().encode(PIN_SALT + pin);
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function getPinHash() {
+    return Store.getSetting(PIN_SETTING, null);
+  }
+
+  async function setPin(pin) {
+    await Store.setSetting(PIN_SETTING, pin ? await hashPin(pin) : null);
+  }
+
+  async function checkPin(pin) {
+    const saved = await getPinHash();
+    if (!saved) return true;
+    return (await hashPin(pin)) === saved;
+  }
+
+  // Hộp nhập mã. Tự dựng thay vì `prompt()`: prompt() bị chặn trong nhiều
+  // trình duyệt trên điện thoại, và không đặt được inputmode số.
+  function askPin() {
+    return new Promise((resolve) => {
+      const wrap = document.createElement("div");
+      wrap.className = "pin-overlay";
+      wrap.innerHTML =
+        `<div class="pin-box" role="dialog" aria-modal="true" aria-label="Nhập mã mở khoá">` +
+        `<div class="pin-title">Nhập mã 6 số để hiện lại số tiền</div>` +
+        `<input type="password" id="pinInput" class="edit-input" inputmode="numeric" ` +
+        `autocomplete="off" maxlength="6" placeholder="••••••" />` +
+        `<div class="pin-err" id="pinErr"></div>` +
+        `<div class="pin-actions">` +
+        `<button type="button" class="btn-outline" id="pinCancel">Thôi</button>` +
+        `<button type="button" class="btn" id="pinOk">Mở</button>` +
+        `</div></div>`;
+      document.body.appendChild(wrap);
+
+      const input = wrap.querySelector("#pinInput");
+      const err = wrap.querySelector("#pinErr");
+      input.focus();
+
+      const done = (ok) => {
+        wrap.remove();
+        resolve(ok);
+      };
+
+      const submit = async () => {
+        const pin = input.value.trim();
+        if (!/^\d{6}$/.test(pin)) {
+          err.textContent = "Mã gồm đúng 6 chữ số.";
+          return;
+        }
+        if (await checkPin(pin)) return done(true);
+        err.textContent = "Mã không đúng.";
+        input.value = "";
+        input.focus();
+      };
+
+      wrap.querySelector("#pinOk").addEventListener("click", submit);
+      wrap.querySelector("#pinCancel").addEventListener("click", () => done(false));
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") submit();
+        if (e.key === "Escape") done(false);
+      });
+      wrap.addEventListener("click", (e) => {
+        if (e.target === wrap) done(false);
+      });
+    });
+  }
+
   async function togglePrivacy() {
     const next = !document.documentElement.classList.contains("privacy");
+
+    // Chỉ chặn ở chiều HIỆN số. Chiều ẩn đi luôn cho qua.
+    if (!next && (await getPinHash())) {
+      const ok = await askPin();
+      if (!ok) return; // giữ nguyên trạng thái đang che
+    }
+
     applyPrivacy(next);
     await Store.setSetting(PRIVACY_SETTING, next);
   }
@@ -110,5 +206,9 @@ const Nav = (function () {
 
   document.addEventListener("DOMContentLoaded", render);
 
-  return { render, applyPrivacy, currentPage, renderLoginWarning, PAGES };
+  return {
+    render, applyPrivacy, currentPage, renderLoginWarning, PAGES,
+    // Trang Tổng gia sản dùng để đặt / đổi / gỡ mã.
+    getPinHash, setPin, checkPin, askPin,
+  };
 })();

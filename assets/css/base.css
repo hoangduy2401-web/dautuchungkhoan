@@ -748,3 +748,32 @@ tr:hover td { background: var(--surface-hover); }
    thi bang phinh ra va cot Lai/lo bi day khoi khung nhin. Ep xuong dong. */
 #nwTableBody td:first-child { max-width: 340px; white-space: normal; }
 #nwTableBody .nw-note { white-space: normal; line-height: 1.4; }
+
+/* ---- Khoa ma 6 so cho che do rieng tu ----
+   Hop nhap ma tu dung thay cho prompt(): prompt() bi chan tren nhieu trinh
+   duyet dien thoai va khong dat duoc inputmode so. */
+.pin-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.pin-box {
+  background: var(--surface-card); border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg); padding: 20px; width: 100%; max-width: 320px;
+  box-shadow: var(--shadow-card);
+}
+.pin-title {
+  font-size: var(--text-sm); font-weight: 600; color: var(--text-primary);
+  margin-bottom: 12px;
+}
+.pin-box .edit-input {
+  width: 100%; text-align: center; letter-spacing: 6px; font-size: 20px;
+}
+.pin-err { color: var(--negative); font-size: var(--text-xs); min-height: 18px; margin-top: 6px; }
+.pin-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+
+/* Khoi nguon du lieu cuoi trang tong (GD 6, doi cho tu duoi tung ten kenh). */
+.nw-sources { margin-top: 10px; font-size: var(--text-xs); color: var(--text-secondary); }
+.nw-sources summary { cursor: pointer; color: var(--text-tertiary); }
+.nw-sources ul { margin: 10px 0 0; padding-left: 18px; line-height: 1.6; }
+.nw-src-note { color: var(--text-tertiary); }
