@@ -467,12 +467,35 @@ async function loadNetWorth() {
   }
 }
 
+// Accordion "Tài khoản & công cụ dữ liệu": mở sẵn khi CHƯA đăng nhập (lúc đó
+// việc chính là đăng nhập), đóng khi đã đăng nhập (trang chỉ còn tài sản).
+// Tiêu đề mang email để không phải mở ra mới biết đang đăng nhập tài khoản nào.
+async function updateToolsPanel() {
+  const det = document.getElementById("toolsPanel");
+  const sum = document.getElementById("toolsSummary");
+  if (!det || !sum) return;
+
+  const s = typeof Auth !== "undefined" ? await Auth.session() : null;
+  if (s) {
+    sum.textContent = `Tài khoản & công cụ dữ liệu · ${s.user.email}`;
+    det.open = false;
+  } else {
+    // Chưa đăng nhập: mở sẵn và nói thẳng việc cần làm.
+    sum.textContent = "Đăng nhập & công cụ dữ liệu — bấm để mở";
+    det.open = true;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initChrome(); // theme toggle + glass slider + clock
   Auth.render(); // đăng nhập magic link (GĐ 5.3)
   Backup.render(); // nút xuất JSON (GĐ 5.6)
   Migrate.render(); // màn hình nhập dữ liệu cũ (GĐ 5.5)
   renderPinPanel(); // khoá mã 6 số cho nút con mắt
+  updateToolsPanel(); // mở/đóng accordion công cụ theo trạng thái đăng nhập
+
+  // Đăng nhập/đăng xuất giữa chừng thì accordion đổi trạng thái theo.
+  if (typeof Auth !== "undefined" && Auth.onChange) Auth.onChange(updateToolsPanel);
 
   loadNetWorth();
   const btn = document.getElementById("nwReload");

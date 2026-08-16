@@ -804,3 +804,32 @@ tr:hover td { background: var(--surface-hover); }
 .mom-D { background: var(--surface-inset); color: var(--text-secondary); }
 .mom-E { background: var(--negative-soft); color: var(--negative); opacity: 0.8; }
 .mom-F { background: var(--negative-soft); color: var(--negative); }
+
+/* ---- Accordion "Tai khoan & cong cu du lieu" o cuoi trang tong ----
+   Gom 4 panel nen (dang nhap, khoa ma, sao luu, chuyen du lieu) vao mot cho de
+   trang tong chi con tap trung vao TAI SAN. Xem tong.js. */
+.tools-panel { padding: 0; }
+.tools-panel > summary {
+  list-style: none; cursor: pointer;
+  padding: 14px var(--space-6);
+  font: var(--type-label); color: var(--text-secondary);
+  display: flex; align-items: center; gap: 8px;
+}
+.tools-panel > summary::-webkit-details-marker { display: none; }
+.tools-panel > summary::before {
+  content: "▸"; color: var(--text-tertiary); transition: transform var(--duration-fast) var(--ease-standard);
+}
+.tools-panel[open] > summary::before { transform: rotate(90deg); }
+.tools-panel > summary:hover { color: var(--text-primary); }
+.tools-body {
+  padding: 0 var(--space-6) var(--space-6);
+  display: flex; flex-direction: column; gap: 14px;
+}
+/* Panel con trong accordion: lam phang de khong long hop-trong-hop. Bo nen/vien/
+   bong, chi giu duong ke mong ngan cach. */
+.tools-body .panel {
+  background: none; border: none; box-shadow: none;
+  padding: 0; border-top: 1px solid var(--border-subtle);
+  padding-top: 14px; border-radius: 0;
+}
+.tools-body > div:first-child .panel { border-top: none; padding-top: 0; }

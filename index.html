@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260816l" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260816m" />
 </head>
 <body>
 
@@ -33,15 +33,9 @@
   </header>
 
   <main class="main-grid-single">
-    <!-- Đăng nhập (GĐ 5.3) + Sao lưu (GĐ 5.6) — đặt trên trang tổng vì đây là
-         nơi màn hình nhập dữ liệu lên Supabase (5.5) sẽ vào, ba việc phải nằm
-         cạnh nhau. -->
-    <div id="authPanel"></div>
-    <div id="backupPanel"></div>
-    <div id="migratePanel"></div>
-    <div id="pinPanel"></div>
-
-    <!-- Tổng gia sản (GĐ 6). Thứ tự trong panel là CÓ CHỦ Ý: dải cảnh báo
+    <!-- Tổng gia sản (GĐ 6) LÊN ĐẦU — trang này trả lời một câu hỏi: có bao
+         nhiêu tài sản. Mọi công cụ (đăng nhập, sao lưu, chuyển dữ liệu, khoá mã)
+         gom vào accordion cuối trang. Thứ tự trong panel CÓ CHỦ Ý: dải cảnh báo
          "chưa tính được kênh X" đứng TRÊN con số tổng. Xem tong.js. -->
     <div class="panel" id="nwPanel">
       <div class="panel-head">
@@ -81,6 +75,19 @@
     <!-- Dòng tiền vào/ra (GĐ 6.4). Đặt SAU panel tổng vì nó giải thích con số
          ở trên: phần nào tăng do giá, phần nào chỉ là nạp thêm tiền. -->
     <div id="cfPanel"></div>
+
+    <!-- Công cụ dữ liệu — gom 4 panel nền vào một accordion đóng sẵn. tong.js
+         mở sẵn khi CHƯA đăng nhập (cần thấy ô đăng nhập) và đóng khi đã đăng
+         nhập (trang sạch). Thứ tự bên trong: tài khoản trước, rồi các công cụ. -->
+    <details class="panel tools-panel" id="toolsPanel">
+      <summary id="toolsSummary">Tài khoản &amp; công cụ dữ liệu</summary>
+      <div class="tools-body">
+        <div id="authPanel"></div>
+        <div id="pinPanel"></div>
+        <div id="backupPanel"></div>
+        <div id="migratePanel"></div>
+      </div>
+    </details>
   </main>
 
   <footer class="app-footer">
@@ -91,20 +98,20 @@
   <!-- supabase-js: nạp từ unpkg với version ghim, y như lightweight-charts ở
        các trang biểu đồ. Đặt TRƯỚC auth.js — auth.js đọc window.supabase. -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
-  <script src="assets/js/core/config.js?v=20260816l"></script>
-  <script src="assets/js/core/store.js?v=20260816l"></script>
-  <script src="assets/js/core/theme.js?v=20260816l"></script>
-  <script src="assets/js/core/nav.js?v=20260816l"></script>
-  <script src="assets/js/core/auth.js?v=20260816l"></script>
-  <script src="assets/js/core/store-supabase.js?v=20260816l"></script>
-  <script src="assets/js/core/backup.js?v=20260816l"></script>
-  <script src="assets/js/core/migrate.js?v=20260816l"></script>
+  <script src="assets/js/core/config.js?v=20260816m"></script>
+  <script src="assets/js/core/store.js?v=20260816m"></script>
+  <script src="assets/js/core/theme.js?v=20260816m"></script>
+  <script src="assets/js/core/nav.js?v=20260816m"></script>
+  <script src="assets/js/core/auth.js?v=20260816m"></script>
+  <script src="assets/js/core/store-supabase.js?v=20260816m"></script>
+  <script src="assets/js/core/backup.js?v=20260816m"></script>
+  <script src="assets/js/core/migrate.js?v=20260816m"></script>
   <!-- Trang tổng cần đúng bộ nạp dữ liệu như các trang kênh: mockData ->
        dataService -> portfolio, rồi networth đứng trên cùng gom lại. -->
-  <script src="assets/js/core/mockData.js?v=20260816l"></script>
-  <script src="assets/js/core/dataService.js?v=20260816l"></script>
-  <script src="assets/js/core/portfolio.js?v=20260816l"></script>
-  <script src="assets/js/core/networth.js?v=20260816l"></script>
-  <script src="assets/js/pages/tong.js?v=20260816l"></script>
+  <script src="assets/js/core/mockData.js?v=20260816m"></script>
+  <script src="assets/js/core/dataService.js?v=20260816m"></script>
+  <script src="assets/js/core/portfolio.js?v=20260816m"></script>
+  <script src="assets/js/core/networth.js?v=20260816m"></script>
+  <script src="assets/js/pages/tong.js?v=20260816m"></script>
 </body>
 </html>
