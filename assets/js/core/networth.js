@@ -90,16 +90,89 @@ const NetWorth = (function () {
   }
 
   // ---- Cổ phiếu ------------------------------------------------------------
+  //
+  // HAI nguồn cho cùng một tài sản, không được cộng cả hai (đếm trùng — cùng
+  // bẫy với GĐ 7 Binance):
+  //   • Danh mục THẬT SSI  — /api/account/portfolio, cần khóa dashboard đã lưu.
+  //     Chính xác nhất: giá real-time, đủ vị thế, có cả tiền mặt trong tài khoản.
+  //   • Danh mục TAY       — tx_stock, user tự nhập giao dịch.
+  //
+  // User chốt (16/08): ưu tiên SSI thật. Có khóa thì DÙNG SSI; nếu SSI lỗi thì
+  // báo ra, KHÔNG lặng lẽ tụt về danh mục tay (con số tay có thể cũ hoặc rỗng,
+  // và lặng lẽ đổi nguồn là đúng loại sai mà mục 6.5 cấm). Chỉ khi CHƯA từng có
+  // khóa mới coi danh mục tay là nguồn.
+  const API_KEY_STORAGE = "vn_dashboard_api_key_v1";
+
   async function stock() {
     const out = shell("stock", "Chứng khoán");
-    out.source = "SSI FCData";
 
+    const apiKey = (() => {
+      try { return localStorage.getItem(API_KEY_STORAGE); } catch { return null; }
+    })();
+
+    if (apiKey) return stockFromSSI(out, apiKey);
+    return stockFromManual(out);
+  }
+
+  // Danh mục THẬT từ tài khoản SSI. Mọi số backend trả về đơn vị TRIỆU ĐỒNG
+  // (xem server/index.js /api/account/portfolio) — quy về VND bằng ×1e6.
+  async function stockFromSSI(out, apiKey) {
+    out.source = "SSI FCTrading (tài khoản thật)";
+    let data;
+    try {
+      data = await DataService.getAccountPortfolio(apiKey);
+    } catch (err) {
+      // 428 = phiên PIN/OTP hết hạn. TUYỆT ĐỐI không bung prompt PIN ở trang
+      // tổng — người dùng ra trang Chứng khoán bấm Đồng bộ để nhập mã. Ở đây
+      // chỉ báo, và để kênh này `ok:false` nên nó không lẫn vào tổng.
+      out.error =
+        err.status === 428
+          ? "Phiên tài khoản SSI hết hạn — ra trang Chứng khoán bấm Đồng bộ để nhập lại PIN/OTP"
+          : err.status === 401
+          ? "Khóa truy cập sai — đồng bộ lại ở trang Chứng khoán"
+          : `Không lấy được tài khoản SSI: ${err.message}`;
+      return out;
+    }
+
+    const positions = (data && data.positions) || [];
+    const cash = (data && data.cash) || {};
+    out.note =
+      "tài khoản thật SSI, gồm cả tiền mặt trong tài khoản; giá real-time trong phiên";
+
+    // Giá trị kênh = TỔNG TÀI SẢN tài khoản (cổ phiếu + tiền mặt) — đúng con số
+    // user thấy khi mở app SSI. Lãi/lỗ chỉ tính trên phần cổ phiếu (tiền mặt
+    // không sinh lãi/lỗ), nên giá vốn = tổng tài sản − lãi/lỗ cổ phiếu.
+    const value = has(cash.totalAssets) ? Number(cash.totalAssets) * 1e6 : null;
+    const pl = positions.reduce(
+      (a, p) => a + (has(p.unrealizedPL) ? Number(p.unrealizedPL) * 1e6 : 0),
+      0
+    );
+
+    if (value === null) {
+      // Đăng nhập được nhưng backend không trả tổng tài sản — không bịa.
+      out.error = "Tài khoản SSI không trả tổng tài sản";
+      return out;
+    }
+
+    out.ok = true;
+    out.count = positions.length;
+    out.value = value;
+    out.cost = value - pl;
+    out.pl = pl;
+    out.plPct = out.cost ? (pl / out.cost) * 100 : null;
+    return out;
+  }
+
+  // Danh mục TAY — chỉ dùng khi CHƯA từng nhập khóa SSI. Hỏi giá từng mã;
+  // KHÔNG dùng `marketValue` của computeHoldings vì nó rơi về giá vốn khi thiếu
+  // quote (lặng lẽ tính sai).
+  async function stockFromManual(out) {
+    out.source = "danh mục tay";
     await Portfolio.load();
     const holds = Portfolio.computeHoldings({}).filter((h) => h.qty > 0);
     if (!holds.length) return sum(out, []);
 
-    // Hỏi giá từng mã đang giữ. KHÔNG dùng `marketValue` của computeHoldings:
-    // nó rơi về giá vốn khi thiếu quote, và đó chính là kiểu lặng lẽ tính sai.
+    out.note = "giao dịch tự nhập; chưa kết nối tài khoản SSI thật";
     const quotes = await Promise.all(
       holds.map((h) =>
         DataService.getQuote(h.symbol)
