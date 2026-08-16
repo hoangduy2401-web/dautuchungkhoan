@@ -5,6 +5,23 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**08/08/2026 (phiên 9) — đổi theme mặc định + sửa lỗi so sánh khối lượng ngày nghỉ.**
+Bump `?v=20260808a` → **`?v=20260808b`**. **Có đụng `server/`** (thêm 1 trường),
+Render đã deploy lại, đã kiểm live.
+
+- **Theme mặc định đổi TỐI → SÁNG** theo yêu cầu user. Mặc định nằm ở
+  `data-theme` của thẻ `<html>` **trong từng trang** nên phải sửa cả 6 file HTML;
+  `theme.js` chỉ là lưới an toàn khi thẻ đó thiếu. Sửa mỗi `theme.js` thì mỗi
+  trang mở ra một màu. Nút Sáng/Tối vẫn đổi được như cũ.
+- **Lỗi số liệu phát hiện khi kiểm theme:** tab Tổng quan hiện "Khối lượng phiên
+  +0,0%" với hai con số y hệt — chi tiết ở mục 7. Đã sửa: `/api/price/indices`
+  trả thêm `tradingDate`, client so theo ngày đó thay vì theo đồng hồ máy.
+  Đo lại: VNINDEX 647,7 triệu vs 578,9 triệu = **+11,9%**, nhãn "phiên 07-08 so
+  với 06-08", ghi chú đổi thành "Thị trường đang nghỉ".
+
+Đã kiểm mắt cả trang chứng khoán, tiết kiệm và coin ở nền sáng: bảng, biểu đồ,
+logo, thanh độ rộng thị trường đều đọc được; bản live cũng đã kiểm.
+
 **08/08/2026 (phiên 8) — GĐ 4 trang Gửi tiết kiệm: XONG CẢ 8 ĐẦU VIỆC.**
 Bump `?v=20260807c` → **`?v=20260808a`** (56 chỗ trong 6 file HTML). **Có đụng
 `server/`** → Render đã deploy lại, đã kiểm live. **Website giờ đủ 6 trang.**

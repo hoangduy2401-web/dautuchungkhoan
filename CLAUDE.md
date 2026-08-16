@@ -348,6 +348,87 @@ Actions bấm *Enable workflow*.
 - Regex `\b` **không hoạt động với tiếng Việt** → dùng lookaround Unicode
   `(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])` với cờ `u`.
 
+### Chế độ riêng tư để lọt GIÁ VỐN ở cả 4 trang danh mục (16/08/2026)
+
+**Triệu chứng.** Không ai báo — tìm ra khi rà soát 6.6.
+
+**Cách rà, phần đáng tái sử dụng.** Đừng nhìn mắt. Nạp dữ liệu với mọi con số
+đều chứa một chuỗi nhận dạng (`777`), bật riêng tư, rồi với TỪNG Ô trong bảng
+danh mục kiểm xem nó có nằm trong `.money` không:
+```js
+[...document.querySelectorAll('.hold-table tbody tr td, #holdTableBody tr td')]
+  .map(td => ({ txt: td.textContent.trim(),
+                money: !!td.querySelector('.money') || td.classList.contains('money') }))
+```
+Cách này bắt được cả ô mà mắt lướt qua, và bắt được đều trên mọi trang.
+
+**Nguyên nhân.** Cột giá vốn chưa bao giờ được bọc `.money`, ở CẢ BỐN trang:
+`vang.js` "77,7 tr/lượng" · `ngoai-te.js` "24.777,00" · `coin.js`
+"1.777.000.000" · `chung-khoan.js` "Giá vốn TB" (2 chỗ). Số lượng, giá trị và
+lãi/lỗ đều che đúng — sót đúng một cột, và sót giống nhau ở mọi trang vì các
+trang chép khuôn của nhau.
+
+**Vì sao đó là lỗi.** Giá vốn là dữ liệu giao dịch riêng, không phải giá thị
+trường. Mục đích nút con mắt là mở trang cho người khác xem mà không lộ tài
+chính cá nhân; lộ điểm mua vào là hỏng đúng phần đó. Giá THỊ TRƯỜNG thì vẫn phải
+hiện (141.000.000 bảng vàng, 25.950 tỷ giá VCB, 68,30 của FPT) — mục 3.5.
+
+**Cố ý KHÔNG che, đừng "sửa nốt":** ô `<input>` khi bấm Sửa một dòng vẫn hiện số
+thật. `.money` che nội dung văn bản, không che `value` của input. Người bấm Sửa
+chính là chủ máy; che ô đang sửa thì không nhập được.
+
+### Khoá mã 6 số KHÔNG phải bảo mật — biết trước kẻo hiểu nhầm (16/08/2026)
+
+User yêu cầu thêm lớp mã cho nút con mắt. Đã làm, nhưng phải nói rõ mức bảo vệ
+và đã viết câu này ngay trên giao diện: **đây là trang tĩnh, người biết mở
+DevTools gỡ lớp này trong mười giây** (xoá một class trên `<html>`). Nó chặn
+NGƯỜI ĐỨNG CẠNH, không chặn kẻ có kỹ thuật. Lớp chặn thật cho dữ liệu vẫn là
+đăng nhập + RLS.
+
+**Chỉ hỏi mã khi HIỆN số, không hỏi khi ẩn — đừng đổi thành hỏi cả hai chiều.**
+Hỏi lúc ẩn vừa vô dụng (người lạ bấm con mắt lần nữa là hiện lại) vừa có hại
+(cần che gấp thì lại loay hoay gõ 6 số).
+
+Mã lưu dạng **băm SHA-256 + chuỗi muối**, không lưu số trần. Không phải vì băm
+chống được dò — 6 chữ số dò hết tức thì — mà vì mã đồng bộ lên Supabase, không
+có lý do gì để nó nằm đó ở dạng đọc được. Quên mã thì xoá khoá `privacyPinHash`
+trong bảng `settings` trên Supabase.
+
+### Part-to-whole: thanh xếp chồng, KHÔNG phải biểu đồ tròn (16/08/2026)
+
+`docs/QUYHOACH.md` 6.3 ghi "biểu đồ tròn phân bổ tài sản". **Đã làm thanh xếp
+chồng ngang thay thế — đừng đổi ngược lại mà không đọc đoạn này.** Lý do: 5 kênh,
+tên tiếng Việt dài, và mắt người đọc CHIỀU DÀI chính xác hơn đọc GÓC nhiều. Đổi
+lại hình tròn chỉ cần sửa `renderAllocation()`, phần tính toán không dính gì.
+
+**Bảng màu đã chạy qua validator ở đúng hai nền của dự án, đừng đổi bằng mắt:**
+
+| | Sáng `#ffffff` | Tối `#121212` |
+|---|---|---|
+| Màu | `#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4` | `#3987e5 #d95926 #199e70 #c98500 #d55181` |
+| ΔE mù màu (≥8) | 9,1 | 8,4 |
+| ΔE mắt thường (≥15) | 19,6 | 19,3 |
+
+Nền sáng có cảnh báo tương phản < 3:1 — **được phép vì đã có cả chú giải có nhãn
+lẫn bảng số ngay dưới**, không phụ thuộc màu để phân biệt. Bỏ một trong hai thứ
+đó đi là cảnh báo thành lỗi thật.
+
+Màu gán **cố định theo kênh, không theo thứ hạng**: giá biến động thì bảng màu
+vẫn đứng yên. Gán theo thứ hạng là mỗi lần tính lại màu nhảy lung tung.
+
+### `Portfolio.computeHoldings()` lấy giá vốn làm giá hiện tại khi thiếu quote
+
+Không phải lỗi mới, nhưng là bẫy sẽ cắn lại ở GĐ 7. `portfolio.js` khi không có
+quote cho một mã thì dùng `avgCost` làm `currentPrice` → lãi/lỗ ra đúng 0 và
+`marketValue` trông vẫn hợp lý. Tổng tài sản vì thế SAI mà không có dấu hiệu gì.
+
+`core/networth.js` **cố ý không dùng đường đó**: nó tự hỏi quote từng mã, mã nào
+không có thì đếm riêng và khai báo vào `partial`. Đừng "tối ưu" bằng cách gọi lại
+`computeHoldings` cho gọn.
+
+Lưu ý đơn vị: `computeHoldings` trả `marketValue` theo **triệu đồng**, còn
+`networth.js` làm việc bằng **VND**. Trộn hai cái là sai một triệu lần.
+
 ### SSI đã bỏ giới hạn 30 ngày/lần của DailyOhlc — chú thích cũ sai (15/08/2026)
 
 **Triệu chứng.** User báo biểu đồ "khá chậm". Lấy mẫu 24 lần trong 6 phút: nền
@@ -755,17 +836,15 @@ và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260815a`. Nhánh `main` sạch, đã push, backend đã deploy bản
+Cache busting `?v=20260816g`. Nhánh `main` sạch, đã push, backend đã deploy bản
 mới nhất (đã kiểm 15/08 trên Render: `/api/price/history` sau khi bỏ chunk 30
 ngày, job snapshot ghi được vào Supabase).
 
-**Dữ liệu vẫn đang đọc từ localStorage.** GĐ 5 đã đưa dữ liệu LÊN Supabase
-(watchlist 5 mã + `settings` + 1 dòng vàng) nhưng `STORE_ENABLED: false` nên mọi
-trang vẫn đọc bản trong trình duyệt. Bật cờ đó là việc 5.8 — xem mục 10.
+**Dữ liệu đọc từ Supabase** (`STORE_ENABLED: true` từ 15/08). Mỗi thiết bị đăng
+nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm đường lui — chưa xoá.
 
-Website hiện có **đủ 6 trang**. Năm trang kênh đầu tư đã đầy đủ:
-`/chung-khoan.html`, `/ngoai-te.html`, `/vang.html`, `/coin.html`,
-`/tiet-kiem.html`. Riêng `/` (tổng gia sản) vẫn là khung — chờ GĐ 5+6.
+**Website đủ 6 trang chạy thật**, kể cả `/` (tổng gia sản) từ 16/08.
+
 
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
@@ -796,9 +875,36 @@ Website hiện có **đủ 6 trang**. Năm trang kênh đầu tư đã đầy đ
 | Keep-alive | pinger ngoài 5 phút + Actions dự phòng | xem mục 6 |
 | **Đăng nhập** | Supabase Auth, magic link | PKCE; tài khoản tạo sẵn trong dashboard, đã tắt tự đăng ký |
 | **Cảnh báo đơn vị giá vốn** | `costGuard.js` | 3 trang tài sản; so với giá thị trường đang hiện, không ngưỡng cứng; hai nhịp |
+| **Tổng gia sản** (`/`) | `core/networth.js` | gom 5 kênh về VND; kênh lỗi nguồn **không cộng vào tổng** và phải nói tên ra |
+| **Phân bổ tài sản** | — | thanh xếp chồng ngang (không phải biểu đồ tròn — mục 7); màu cố định theo kênh |
+| **Dòng tiền vào/ra** | `Store` (`cash_flows`) | tách "tăng do giá" khỏi "nạp thêm tiền" |
+| **Khoá mã 6 số** | `nav.js` + `settings` | chỉ hỏi mã khi HIỆN số; **không phải bảo mật thật** — mục 7 |
 | **Snapshot giá hàng ngày** | job trong `server/index.js` | ghi `price_snapshots` mỗi giờ, upsert 1 hàng/ngày/loại; cần `SUPABASE_SECRET_KEY` trong env Render |
 
 ### Nhật ký theo phiên
+
+**16/08/2026 (phiên 11) — GĐ 6 XONG CẢ 7 ĐẦU VIỆC. Trang tổng chạy thật.**
+Bump `?v=20260815e` → **`?v=20260816g`** (bump 7 lần trong phiên, mỗi lần deploy
+một lần). **KHÔNG đụng `server/`** — toàn bộ là frontend.
+
+- `core/networth.js` mới: gom định giá 5 kênh về VND. **Mục 6.5 là linh hồn của
+  file, không phải phép cộng** — `Promise.allSettled`, kênh chết không kéo kênh
+  khác chết, kênh không định giá được thì không cộng và phải nói tên ra.
+- 6.3: **thanh xếp chồng ngang, KHÔNG phải biểu đồ tròn** như quy hoạch ghi —
+  lý do + bảng màu đã validate ở mục 7.
+- 6.4: dòng tiền vào/ra, tách "tăng do giá" khỏi "nạp thêm tiền".
+- 6.6: rà riêng tư cả 6 trang, **tìm ra lỗi thật** — mục 7.
+- 6.7: gần như miễn phí nhờ `.money` có sẵn.
+
+**Hai việc user thêm ngoài quy hoạch:**
+- **Khoá mã 6 số** cho nút con mắt (`nav.js`). Chỉ hỏi mã khi HIỆN số, không hỏi
+  khi ẩn. Mức bảo vệ thật ghi ở mục 7 — đọc trước khi ai đó tưởng nó là bảo mật.
+- **Nhãn nguồn dồn xuống cuối trang tổng** thay vì dưới từng tên kênh (mục 1.5
+  bắt buộc có nhãn, không bắt buộc đặt sát con số).
+
+Đối chiếu tay toàn bộ phép cộng: vàng 2 lượng = 20 chỉ × 14.100 × 1000 =
+282.000.000; FPT 1.000 cp × 68,30 = 68.300.000; tổng 1.701.659.517 với giá vốn
+1.745.000.000 ra −2,48%. Khớp.
 
 **15/08/2026 (phiên 10) — GĐ 5 xong 7/8 đầu việc + biểu đồ nhanh gấp 2.**
 Bump `?v=20260811a` → **`?v=20260815a`**. **Có đụng `server/` hai lần** (bỏ giới
@@ -848,73 +954,66 @@ Việc chen ngang (phiên nền riêng): `costGuard.js` — cảnh báo nhập s
 giá vốn 3 trang tài sản, hai nhịp, so với **giá thị trường đang hiển thị** chứ
 không phải ngưỡng cứng.
 
-**08/08/2026 (phiên 9) — đổi theme mặc định + sửa lỗi so sánh khối lượng ngày nghỉ.**
-Bump `?v=20260808a` → **`?v=20260808b`**. **Có đụng `server/`** (thêm 1 trường),
-Render đã deploy lại, đã kiểm live.
-
-- **Theme mặc định đổi TỐI → SÁNG** theo yêu cầu user. Mặc định nằm ở
-  `data-theme` của thẻ `<html>` **trong từng trang** nên phải sửa cả 6 file HTML;
-  `theme.js` chỉ là lưới an toàn khi thẻ đó thiếu. Sửa mỗi `theme.js` thì mỗi
-  trang mở ra một màu. Nút Sáng/Tối vẫn đổi được như cũ.
-- **Lỗi số liệu phát hiện khi kiểm theme:** tab Tổng quan hiện "Khối lượng phiên
-  +0,0%" với hai con số y hệt — chi tiết ở mục 7. Đã sửa: `/api/price/indices`
-  trả thêm `tradingDate`, client so theo ngày đó thay vì theo đồng hồ máy.
-  Đo lại: VNINDEX 647,7 triệu vs 578,9 triệu = **+11,9%**, nhãn "phiên 07-08 so
-  với 06-08", ghi chú đổi thành "Thị trường đang nghỉ".
-
-Đã kiểm mắt cả trang chứng khoán, tiết kiệm và coin ở nền sáng: bảng, biểu đồ,
-logo, thanh độ rộng thị trường đều đọc được; bản live cũng đã kiểm.
-
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
 
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
-Cây làm việc sạch, đã push, backend đã deploy, bản live đã kiểm.
-**GĐ 5 XONG HẾT 8/8 (15/08).** Dữ liệu tài sản nay sống trên Supabase, đọc được
-từ mọi thiết bị sau khi đăng nhập — đã đối chiếu thật giữa máy tính và điện thoại.
+Cây làm việc sạch, đã push, bản live đã kiểm. **GĐ 6 XONG CẢ 7 ĐẦU VIỆC (16/08).**
+Website giờ chạy đủ 6 trang, kể cả trang tổng.
 
-`STORE_ENABLED: true`. **localStorage vẫn chưa xoá** và không cần vội xoá: nó là
-đường lui, đổi cờ về `false` là quay lại ngay. Xoá được sau khi đã dùng DB ổn
-định vài tuần và có bản sao lưu JSON trong tay.
+Còn đúng **GĐ 7** là hết quy hoạch.
 
-#### Việc kế tiếp: GĐ 6 — Trang tổng gia sản
+#### Việc kế tiếp: GĐ 7 — đồng bộ số dư Binance
 
-Đọc `docs/QUYHOACH.md` bảng GĐ 6 (7 đầu việc). Giờ mới làm được vì `Store` đã đọc
-từ một nguồn duy nhất cho cả 5 kênh.
+Đọc `docs/QUYHOACH.md` bảng GĐ 7 (3 đầu việc). Khuôn bảo mật đã có sẵn: làm y
+như `/api/account/*` đang chạy (mục 8) — header `x-dashboard-key` so bằng
+`timingSafeEqual`, origin allowlist, không set env là tắt hẳn 503.
 
-**6.5 là mục quan trọng nhất cả giai đoạn**, không phải 6.1: kênh nào lỗi nguồn
-thì trang phải ghi rõ *"chưa tính được kênh vàng"*, **không lặng lẽ cộng thiếu**.
-Một trang tổng cộng thiếu một kênh mà không báo gì sẽ đưa ra con số tài sản sai —
-mà đây là con số user dùng để ra quyết định.
+**⚠ USER TỰ LÀM TRƯỚC KHI BẮT ĐẦU:**
+1. Tạo API key trên Binance, **CHỈ bật "Enable Reading"**. Tắt Spot Trading, tắt
+   Withdrawals. Bật khoá IP về IP tĩnh của Render nếu Binance cho.
+2. Đặt key vào **env của Render**, không bao giờ vào repo, không bao giờ ra
+   frontend. Tên biến sẽ chốt khi làm 7.2.
 
-**Việc còn nợ từ trước, phải làm trong GĐ 6:** định giá ngoại tệ và vàng hiện chỉ
-tính trong trang của chúng. Logic quy đổi nằm ở `ngoai-te.js` và `vang.js`, **cùng
-tên `holdRow` nhưng là hai bản khác nhau**. Cần dùng ở nơi thứ ba thì tách sang
-`assets/js/core/`, đừng chép bản thứ ba.
+**Cạm bẫy đã biết của GĐ 7 — đọc trước khi code:** số dư đọc từ sàn và danh mục
+nhập tay ở trang Coin là HAI NGUỒN CHO CÙNG MỘT TÀI SẢN. Cộng cả hai vào tổng là
+đếm trùng, và trang tổng sẽ báo tài sản gấp đôi. Quy hoạch 7.3 nói rõ phải xử lý;
+`core/networth.js` hiện chỉ đọc `holdings_crypto`, nên khi thêm nguồn sàn phải
+sửa ở đó chứ không phải cộng thêm một kênh thứ sáu.
 
-Chế độ riêng tư: 6.6 bắt buộc rà **cả 6 trang**, và 6.7 yêu cầu biểu đồ tròn bỏ
-nhãn số tuyệt đối khi bật (xem mục 3b).
+#### Ba chỗ của GĐ 6 — đừng "sửa lại cho đúng quy hoạch"
 
-#### Cạm bẫy `?v=` — đã dính một lần 15/08, đưa vào quy trình handoff
+1. **Thanh xếp chồng thay biểu đồ tròn** (6.3) — lý do + bảng màu đã validate ở
+   mục 7. Đổi màu thì phải chạy lại validator, đừng chỉnh bằng mắt.
+2. **Tiết kiệm tính theo TIỀN GỐC**, không cộng lãi dự kiến vào tổng tài sản.
+   Lãi chưa nhận không phải tài sản đã có, và rút trước hạn thì gần như mất sạch
+   phần đó. Lãi dự kiến vẫn hiện riêng dưới bảng.
+3. **"Tăng do giá" (6.4) KHÁC "Lãi/lỗ" (6.2)** — đừng sửa cho khớp nhau. Lãi/lỗ
+   so với giá vốn của phần ĐANG nắm giữ; tăng do giá so với TIỀN THẬT đã bỏ vào
+   kênh, nên tính cả phần đã bán, đã rút, phí. Hai câu hỏi khác nhau.
 
-Chuỗi `20260815a` được đặt ở commit `346ae45`, rồi ba commit sau đó vẫn sửa asset
-mà không bump. Trình duyệt đã tải giữa các lần deploy sẽ dùng bản cũ. Lệnh soát:
+Thêm: **vàng định giá theo giá tiệm MUA VÀO**, ngoại tệ theo giá NH **mua chuyển
+khoản** — tức số thực nhận nếu bán ngay, không phải giá niêm yết bán ra.
+
+#### Cạm bẫy `?v=` — đã dính một lần 15/08, giữ trong quy trình handoff
+
 ```bash
 git diff --name-only <commit-bump-cuoi>..HEAD -- 'assets/**' | grep -E '\.(js|css)$'
 ```
 Ra file nào tức là file đó đang phục vụ dưới một chuỗi `?v=` đã cũ. Phiên 15/08
-phải bump 5 lần (`a`→`e`) vì sửa nhiều đợt — bump mỗi lần deploy, đừng gộp.
+phải bump 5 lần, phiên 16/08 bump 7 lần — **bump mỗi lần deploy, đừng gộp**.
 
 #### Đăng nhập — hai điều phải nhớ
 
 1. **Bấm "Gửi liên kết đăng nhập" từ chính trình duyệt sẽ mở link đó** (PKCE —
    mục 7). Gửi từ máy tính rồi mở trên điện thoại là hỏng, và mất một lượt.
 2. **Hạn mức 2 thư/giờ**, SMTP dựng sẵn của Supabase, chỉ gửi tới địa chỉ thuộc
-   dự án. Đủ dùng: mỗi thiết bị chỉ đăng nhập một lần rồi ở lại rất lâu. Đã thử
-   SMTP riêng qua Brevo rồi **tắt** (mục 9). `Auth → Rate Limits` chỉ có tác dụng
-   khi đang bật SMTP riêng — chỉnh lúc khác là vô ích.
+   dự án. Đã thử SMTP riêng qua Brevo rồi **tắt** — gắn vào báo lỗi gửi, và khi
+   nguyên nhân thật (hai origin) lộ ra thì nó cũng không còn cần. Tài khoản Brevo
+   vẫn còn, muốn bật lại thì các ô trong Supabase vẫn nguyên. `Auth → Rate Limits`
+   chỉ có tác dụng khi đang bật SMTP riêng.
 
 **Bảng chẩn đoán trong panel Tài khoản** (`auth.js`, `renderDiag`) in ra origin ·
 phiên bản JS · driver đang dùng · watchlist đọc thẳng từ Supabase. Hai thiết bị
@@ -990,14 +1089,17 @@ bước B của chart chỉ số. Không ảnh hưởng thứ tự GĐ 1–7.
 | 3 | **Coin** — giá VND, danh sách theo dõi, biểu đồ, danh mục | ✅ 07/08 (4/4) |
 | 4 | **Gửi tiết kiệm** — bảng lãi suất, so sánh, sổ + cảnh báo đáo hạn | ✅ 08/08 (8/8) |
 | 5 | **Supabase + đăng nhập** — khó nhất | ✅ 15/08 (8/8) |
-| **6** | **Tổng gia sản** — gom 5 kênh về VND, biểu đồ tròn, dòng tiền | ▶ kế tiếp |
-| 7 | **Đồng bộ số dư Binance** — key chỉ-đọc, ký HMAC, tránh đếm trùng | chờ |
+| 6 | **Tổng gia sản** — gom 5 kênh về VND, phân bổ, dòng tiền | ✅ 16/08 (7/7) |
+| **7** | **Đồng bộ số dư Binance** — key chỉ-đọc, ký HMAC, tránh đếm trùng | ▶ **kế tiếp — hết quy hoạch** |
 
 Chi tiết GĐ 5: cả 8 đầu việc 5.1–5.8 đã xong và đã kiểm trên 2 thiết bị.
+Chi tiết GĐ 6: 6.1 gom định giá ✅ · 6.2 tổng + lãi/lỗ ✅ · 6.3 phân bổ ✅ ·
+6.4 dòng tiền ✅ · 6.5 kênh lỗi nguồn ✅ · 6.6 rà riêng tư ✅ · 6.7 ẩn số tuyệt đối ✅.
 
 Việc chen ngang đã làm ngoài quy hoạch: reskin Fey (03/08), chart chỉ số
 (04/08), tab Tổng quan thị trường (07/08), theme mặc định Sáng (08/08),
-biểu đồ nhanh gấp 2 + cảnh báo đơn vị giá vốn (15/08).
+biểu đồ nhanh gấp 2 + cảnh báo đơn vị giá vốn (15/08), khoá mã 6 số cho nút con
+mắt + dồn nhãn nguồn xuống cuối trang tổng (16/08).
 
 ### Tính năng chứng khoán chưa làm
 1. **Theo dõi dòng tiền** (user đã chọn từ 24/07, chưa làm): phát hiện đột biến
