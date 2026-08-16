@@ -1479,7 +1479,7 @@ function renderPortfolio() {
             (h) => `<tr>
               <td>${h.symbol}</td>
               <td class="num"><span class="money">${fmt(h.qty, 0)}</span></td>
-              <td class="num">${fmt(h.avgCost)}</td>
+              <td class="num"><span class="money">${fmt(h.avgCost)}</span></td>
               <td class="num">${fmt(h.currentPrice)}</td>
               <td class="num ${trendClass(h.unrealizedPL)}"><span class="money">${fmt(h.unrealizedPL, 1)}</span> (${fmtPct(h.unrealizedPLPct)})</td>
             </tr>`
@@ -1638,7 +1638,7 @@ function renderAccount({ positions, cash, fetchedAt }) {
               <td data-label="Mã">${p.symbol}</td>
               <td class="num" data-label="KL"><span class="money">${fmt(p.qty, 0)}</span></td>
               <td class="num" data-label="Bán được"><span class="money">${fmt(p.sellableQty, 0)}</span></td>
-              <td class="num" data-label="Giá vốn">${fmt(p.avgCost)}</td>
+              <td class="num" data-label="Giá vốn"><span class="money">${fmt(p.avgCost)}</span></td>
               <td class="num" data-label="Giá TT">${fmt(p.marketPrice)}</td>
               <td class="num" data-label="Giá trị"><span class="money">${fmt(p.marketValue, 1)}</span></td>
               <td class="num ${trendClass(p.unrealizedPL)}" data-label="Lãi/lỗ"><span class="money">${fmt(p.unrealizedPL, 1)}</span> (${fmtPct(p.unrealizedPLPct)})</td>

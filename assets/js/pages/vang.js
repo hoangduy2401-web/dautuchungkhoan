@@ -377,7 +377,7 @@ function viewRowHtml(r) {
   return `<tr data-hid="${r.id}">
     <td class="gold-name">${escapeHtml(r.name || r.code)}</td>
     <td class="num"><span class="money">${fmtQty(r.qty)}</span> ${UNIT_LABEL[r.unit] || ""}</td>
-    <td class="num muted">${r.cost === null ? "—" : fmtMoney(r.cost, 1) + " tr/lượng"}</td>
+    <td class="num muted"><span class="money">${r.cost === null ? "—" : fmtMoney(r.cost, 1) + " tr/lượng"}</span></td>
     <td class="num muted col-rate">${r.buy === null ? "—" : fmtMoney(r.buy * 10 * 1000)}</td>
     <td class="num">${r.value === null ? "—" : `<span class="money">${fmtMoney(r.value)}</span>`}</td>
     <td class="num ${plCls}">${plText}</td>
