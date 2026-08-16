@@ -1459,15 +1459,33 @@ function renderPortfolio() {
   const currentPrices = {};
   Object.entries(state.quotes).forEach(([s, q]) => (currentPrices[s] = q.price));
 
+  // `loadHoldingQuotes()` ở trên đã đi lấy quote cho mã ngoài watchlist + VN30,
+  // nên tới đây thường đủ giá. Còn thiếu nghĩa là lần gọi đó THẤT BẠI (mã lạ,
+  // SSI không trả) — và đó mới là chỗ cũ bị hổng: `computeHoldings` rơi về giá
+  // vốn, P&L ra 0, tổng vẫn cộng. Nay nó trả null và chỗ này xử tử tế.
   const holdings = Portfolio.computeHoldings(currentPrices);
-  const totalValue = holdings.reduce((a, h) => a + h.marketValue, 0);
-  const totalUnrealized = holdings.reduce((a, h) => a + h.unrealizedPL, 0);
-  const totalRealized = holdings.reduce((a, h) => a + h.realizedPL, 0);
+  const coGia = holdings.filter((h) => h.marketValue !== null);
+  const thieuGia = holdings.filter((h) => h.qty > 0 && h.marketValue === null);
+
+  // Chỉ cộng mã có giá thật. Mã thiếu giá được nói ra ở dải ghi chú bên dưới
+  // chứ không âm thầm cộng bằng giá vốn.
+  const totalValue = coGia.reduce((a, h) => a + h.marketValue, 0);
+  const totalUnrealized = coGia.reduce((a, h) => a + h.unrealizedPL, 0);
+  const totalRealized = holdings.reduce((a, h) => a + (h.realizedPL || 0), 0);
+
+  const nhan = thieuGia.length ? "Giá trị danh mục (chưa đủ)" : "Giá trị danh mục";
 
   document.getElementById("holdingsSummary").innerHTML = `
-    <div class="stat"><div class="label">Giá trị danh mục</div><div class="val"><span class="money">${fmt(totalValue, 1)} tr đ</span></div></div>
+    <div class="stat"><div class="label">${nhan}</div><div class="val"><span class="money">${fmt(totalValue, 1)} tr đ</span></div></div>
     <div class="stat"><div class="label">Lãi/lỗ tạm tính</div><div class="val ${trendClass(totalUnrealized)}"><span class="money">${fmt(totalUnrealized, 1)} tr đ</span></div></div>
     <div class="stat"><div class="label">Lãi/lỗ đã chốt</div><div class="val ${trendClass(totalRealized)}"><span class="money">${fmt(totalRealized, 1)} tr đ</span></div></div>
+    ${
+      thieuGia.length
+        ? `<div class="hold-warn">Chưa lấy được giá của ${thieuGia
+            .map((h) => h.symbol)
+            .join(", ")} — <strong>chưa tính vào hai số trên</strong>.</div>`
+        : ""
+    }
   `;
 
   const holdEl = document.getElementById("holdingsTable");
@@ -1480,8 +1498,12 @@ function renderPortfolio() {
               <td>${h.symbol}</td>
               <td class="num"><span class="money">${fmt(h.qty, 0)}</span></td>
               <td class="num"><span class="money">${fmt(h.avgCost)}</span></td>
-              <td class="num">${fmt(h.currentPrice)}</td>
-              <td class="num ${trendClass(h.unrealizedPL)}"><span class="money">${fmt(h.unrealizedPL, 1)}</span> (${fmtPct(h.unrealizedPLPct)})</td>
+              <td class="num">${h.currentPrice === null ? "—" : fmt(h.currentPrice)}</td>
+              <td class="num ${trendClass(h.unrealizedPL)}">${
+                h.unrealizedPL === null
+                  ? `<span class="muted">chưa có giá</span>`
+                  : `<span class="money">${fmt(h.unrealizedPL, 1)}</span> (${fmtPct(h.unrealizedPLPct)})`
+              }</td>
             </tr>`
           )
           .join("")}</tbody>

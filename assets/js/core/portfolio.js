@@ -93,10 +93,30 @@ const Portfolio = (function () {
     return Object.values(bySymbol)
       .filter((s) => s.qty > 0 || s.realizedPL !== 0)
       .map((s) => {
-        const currentPrice = (currentPrices && currentPrices[s.symbol]) || s.avgCost;
-        const marketValue = (s.qty * currentPrice) / 1000; // -> triệu đồng
-        const unrealizedPL = (s.qty * (currentPrice - s.avgCost)) / 1000;
-        const unrealizedPLPct = s.avgCost > 0 ? ((currentPrice - s.avgCost) / s.avgCost) * 100 : 0;
+        // THIẾU GIÁ THÌ TRẢ null, KHÔNG rơi về giá vốn.
+        //
+        // Bản cũ dùng `|| s.avgCost`: mã không có quote (ngoài watchlist và
+        // VN30) được định giá bằng chính giá vốn, nên lãi/lỗ ra đúng 0 và giá
+        // trị danh mục trông vẫn hợp lý. Con số tổng vì thế SAI mà không có
+        // một dấu hiệu nào — đúng loại lỗi mà "luật vàng" ở mục 3 cấm.
+        //
+        // Chỗ gọi phải tự xử null: hiện "—" và loại khỏi phép cộng.
+        // GIÁ 0 CŨNG LÀ "KHÔNG CÓ GIÁ", không phải giá bằng không.
+        //
+        // SSI trả `{price: 0, changePct: 0, volume: 0}` cho mã không tồn tại
+        // thay vì báo lỗi — đã đo với mã bịa "ZZZ" (16/08). Nhận 0 làm giá thật
+        // thì mã đó hiện lỗ -100% và kéo tụt tổng danh mục đúng bằng giá vốn.
+        // Cổ phiếu đang giao dịch không bao giờ có giá 0.
+        const raw = currentPrices ? currentPrices[s.symbol] : undefined;
+        const n = raw === undefined || raw === null ? NaN : Number(raw);
+        const currentPrice = Number.isFinite(n) && n > 0 ? n : null;
+        const marketValue = currentPrice === null ? null : (s.qty * currentPrice) / 1000; // -> triệu đồng
+        const unrealizedPL =
+          currentPrice === null ? null : (s.qty * (currentPrice - s.avgCost)) / 1000;
+        const unrealizedPLPct =
+          currentPrice === null || !(s.avgCost > 0)
+            ? null
+            : ((currentPrice - s.avgCost) / s.avgCost) * 100;
         return {
           symbol: s.symbol,
           qty: s.qty,

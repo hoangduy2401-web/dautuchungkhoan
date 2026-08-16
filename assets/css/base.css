@@ -784,3 +784,10 @@ tr:hover td { background: var(--surface-hover); }
 .cf-form .edit-input { min-width: 120px; }
 .cf-form input[type="date"] { min-width: 155px; }
 .cf-form #cfNote { flex: 1 1 200px; min-width: 200px; }
+
+/* Canh bao "chua lay duoc gia ma X" o danh muc chung khoan. Cam chu khong do:
+   du lieu khong sai, chi la thieu - va da noi ro thieu cai gi. */
+.hold-warn {
+  flex-basis: 100%; margin-top: 4px;
+  color: var(--accent-orange); font-size: var(--text-xs); line-height: 1.5;
+}
