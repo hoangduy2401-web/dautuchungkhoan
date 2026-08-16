@@ -656,3 +656,42 @@ tr:hover td { background: var(--surface-hover); }
   font-size: var(--text-sm); line-height: 1.5;
 }
 .login-warn a { color: inherit; font-weight: 600; text-decoration: underline; }
+
+/* ============================================================
+   TRANG TONG GIA SAN (GD 6)
+   ============================================================ */
+/* Dai canh bao 6.5. Do va cam KHAC BAN CHAT chu khong phai khac muc do:
+   do  = kenh KHONG duoc cong vao tong, so duoi thieu han mot mang
+   cam = co cong nhung thieu vai dong, so gan dung
+   Dat TREN con so tong, khong thu gon duoc - xem tong.js. */
+.nw-alert {
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 12px;
+  font-size: var(--text-sm); line-height: 1.55;
+}
+.nw-alert-error {
+  background: var(--negative-soft); color: var(--negative);
+  border: 1px solid var(--negative);
+}
+.nw-alert-warn {
+  background: var(--accent-soft); color: var(--accent-orange);
+  border: 1px solid var(--accent-orange);
+}
+.nw-alert-detail { opacity: 0.85; font-size: var(--text-xs); }
+
+.nw-totals { display: flex; gap: 32px; flex-wrap: wrap; margin: 16px 0 20px; }
+.nw-total .label {
+  font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.nw-total .val { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.nw-total .val small { font-size: var(--text-sm); font-weight: 500; }
+
+.nw-note { font-size: var(--text-2xs); color: var(--text-tertiary); margin-top: 2px; }
+.nw-status { font-size: var(--text-2xs); color: var(--text-tertiary); }
+.nw-row-bad td { color: var(--negative); }
+.nw-row-empty td { color: var(--text-tertiary); }
+
+@media (max-width: 640px) {
+  .nw-totals { gap: 18px; }
+  .nw-total .val { font-size: 21px; }
+}

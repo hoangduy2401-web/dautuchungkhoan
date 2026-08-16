@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260815e" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260816a" />
 </head>
 <body>
 
@@ -40,33 +40,40 @@
     <div id="backupPanel"></div>
     <div id="migratePanel"></div>
 
-    <div class="panel">
-      <div class="panel-head"><h2>Trang tổng — đang xây dựng</h2></div>
-      <div class="panel-body">
-        <p class="build-note">
-          Trang này sẽ gom giá trị của cả 5 kênh về một chỗ: tổng tài sản ròng,
-          tỷ trọng từng kênh, lãi/lỗ, và dòng tiền vào/ra.
-        </p>
-        <p class="build-note">
-          Nó cần đọc danh mục của cả 5 kênh từ một nguồn duy nhất, nên chỉ làm được
-          sau khi xong phần đồng bộ dữ liệu (giai đoạn 5 của quy hoạch).
-          Hiện <a href="chung-khoan.html">trang chứng khoán</a> đã chạy đầy đủ.
-        </p>
-        <p class="build-note">
-          Thử <strong>nút con mắt</strong> ở góc phải thanh điều hướng — nó ẩn mọi số tiền
-          trên toàn bộ website, để mở trang cho người khác xem mà không lộ tài sản.
-          Số dưới đây là số giả, chỉ để xem nút hoạt động thế nào.
-        </p>
-        <div class="demo-stats">
-          <div class="stat">
-            <div class="label">Tổng tài sản ròng</div>
-            <div class="val"><span class="money">1.234.567.890 ₫</span></div>
-          </div>
-          <div class="stat">
-            <div class="label">Lãi/lỗ hôm nay</div>
-            <div class="val up">+2,35%</div>
-          </div>
+    <!-- Tổng gia sản (GĐ 6). Thứ tự trong panel là CÓ CHỦ Ý: dải cảnh báo
+         "chưa tính được kênh X" đứng TRÊN con số tổng. Xem tong.js. -->
+    <div class="panel" id="nwPanel">
+      <div class="panel-head">
+        <h2>Tổng tài sản</h2>
+        <div class="controls">
+          <span class="nw-status" id="nwStatus"></span>
+          <button type="button" class="btn-outline" id="nwReload">Tính lại</button>
         </div>
+      </div>
+      <div class="panel-body">
+        <div id="nwAlerts"></div>
+        <div class="nw-totals" id="nwTotals"></div>
+        <!-- .asset-table-wrap = khuôn dùng chung cho bảng rộng (base.css), y như
+             trang Tiết kiệm và Coin. Thiếu nó là mobile 375px tràn ngang. -->
+        <div class="asset-table-wrap">
+          <table class="asset-table">
+            <thead>
+              <tr>
+                <th>Kênh</th>
+                <th class="num">Số dòng</th>
+                <th class="num">Giá trị</th>
+                <th class="num">Tỷ trọng</th>
+                <th class="num">Lãi/lỗ</th>
+              </tr>
+            </thead>
+            <tbody id="nwTableBody"></tbody>
+          </table>
+        </div>
+        <div id="nwFoot"></div>
+        <p class="build-note">
+          Còn thiếu so với quy hoạch: biểu đồ tròn phân bổ (6.3) và bảng dòng tiền
+          vào/ra (6.4).
+        </p>
       </div>
     </div>
   </main>
@@ -79,14 +86,20 @@
   <!-- supabase-js: nạp từ unpkg với version ghim, y như lightweight-charts ở
        các trang biểu đồ. Đặt TRƯỚC auth.js — auth.js đọc window.supabase. -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
-  <script src="assets/js/core/config.js?v=20260815e"></script>
-  <script src="assets/js/core/store.js?v=20260815e"></script>
-  <script src="assets/js/core/theme.js?v=20260815e"></script>
-  <script src="assets/js/core/nav.js?v=20260815e"></script>
-  <script src="assets/js/core/auth.js?v=20260815e"></script>
-  <script src="assets/js/core/store-supabase.js?v=20260815e"></script>
-  <script src="assets/js/core/backup.js?v=20260815e"></script>
-  <script src="assets/js/core/migrate.js?v=20260815e"></script>
-  <script src="assets/js/pages/tong.js?v=20260815e"></script>
+  <script src="assets/js/core/config.js?v=20260816a"></script>
+  <script src="assets/js/core/store.js?v=20260816a"></script>
+  <script src="assets/js/core/theme.js?v=20260816a"></script>
+  <script src="assets/js/core/nav.js?v=20260816a"></script>
+  <script src="assets/js/core/auth.js?v=20260816a"></script>
+  <script src="assets/js/core/store-supabase.js?v=20260816a"></script>
+  <script src="assets/js/core/backup.js?v=20260816a"></script>
+  <script src="assets/js/core/migrate.js?v=20260816a"></script>
+  <!-- Trang tổng cần đúng bộ nạp dữ liệu như các trang kênh: mockData ->
+       dataService -> portfolio, rồi networth đứng trên cùng gom lại. -->
+  <script src="assets/js/core/mockData.js?v=20260816a"></script>
+  <script src="assets/js/core/dataService.js?v=20260816a"></script>
+  <script src="assets/js/core/portfolio.js?v=20260816a"></script>
+  <script src="assets/js/core/networth.js?v=20260816a"></script>
+  <script src="assets/js/pages/tong.js?v=20260816a"></script>
 </body>
 </html>
