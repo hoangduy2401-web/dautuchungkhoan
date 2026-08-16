@@ -5,6 +5,29 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**16/08/2026 (phiên 11) — GĐ 6 XONG CẢ 7 ĐẦU VIỆC. Trang tổng chạy thật.**
+Bump `?v=20260815e` → **`?v=20260816g`** (bump 7 lần trong phiên, mỗi lần deploy
+một lần). **KHÔNG đụng `server/`** — toàn bộ là frontend.
+
+- `core/networth.js` mới: gom định giá 5 kênh về VND. **Mục 6.5 là linh hồn của
+  file, không phải phép cộng** — `Promise.allSettled`, kênh chết không kéo kênh
+  khác chết, kênh không định giá được thì không cộng và phải nói tên ra.
+- 6.3: **thanh xếp chồng ngang, KHÔNG phải biểu đồ tròn** như quy hoạch ghi —
+  lý do + bảng màu đã validate ở mục 7.
+- 6.4: dòng tiền vào/ra, tách "tăng do giá" khỏi "nạp thêm tiền".
+- 6.6: rà riêng tư cả 6 trang, **tìm ra lỗi thật** — mục 7.
+- 6.7: gần như miễn phí nhờ `.money` có sẵn.
+
+**Hai việc user thêm ngoài quy hoạch:**
+- **Khoá mã 6 số** cho nút con mắt (`nav.js`). Chỉ hỏi mã khi HIỆN số, không hỏi
+  khi ẩn. Mức bảo vệ thật ghi ở mục 7 — đọc trước khi ai đó tưởng nó là bảo mật.
+- **Nhãn nguồn dồn xuống cuối trang tổng** thay vì dưới từng tên kênh (mục 1.5
+  bắt buộc có nhãn, không bắt buộc đặt sát con số).
+
+Đối chiếu tay toàn bộ phép cộng: vàng 2 lượng = 20 chỉ × 14.100 × 1000 =
+282.000.000; FPT 1.000 cp × 68,30 = 68.300.000; tổng 1.701.659.517 với giá vốn
+1.745.000.000 ra −2,48%. Khớp.
+
 **15/08/2026 (phiên 10) — GĐ 5 xong 7/8 đầu việc + biểu đồ nhanh gấp 2.**
 Bump `?v=20260811a` → **`?v=20260815a`**. **Có đụng `server/` hai lần** (bỏ giới
 hạn chunk 30 ngày, thêm job snapshot) → Render đã deploy lại, đã kiểm live.

@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260816k`** (73 chỗ trong 6 file HTML).
+Cache busting hiện **`?v=20260816m`** (73 chỗ trong 6 file HTML).
 
 ---
 
@@ -736,10 +736,21 @@ Bảo mật riêng (`x-dashboard-key` + origin allowlist), 5 cạm bẫy FCTradi
 và lý do GĐ2 (đặt lệnh) cố ý chưa làm: **`docs/SSI-TRADING.md`**.
 **Đọc file đó trước khi động vào phần tài khoản SSI.**
 
+**`/api/account/portfolio` — đơn vị TRIỆU ĐỒNG, không phải VND.** Backend chia
+`1e3` (giá nghìn ₫/cp) rồi `1e6` (tiền mặt), nên `positions[].marketValue`,
+`unrealizedPL`, `cash.totalAssets/cashBal/...` đều là triệu đồng. `networth.js`
+làm việc bằng VND nên **×1e6** — trộn hai đơn vị là sai một triệu lần.
+
+**Trang tổng (`networth.js` `stockFromSSI`) đọc endpoint này** làm nguồn chứng
+khoán, ưu tiên hơn danh mục tay. Giá trị kênh = `cash.totalAssets` (gồm cả tiền
+mặt trong tài khoản); lãi/lỗ = Σ `unrealizedPL` (chỉ cổ phiếu); giá vốn =
+totalAssets − lãi/lỗ. Lỗi 428 (hết phiên PIN/OTP): **KHÔNG bung prompt PIN ở
+trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kênh `ok:false`.
+
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260816k`. Nhánh `main` sạch, đã push, backend đã deploy bản
+Cache busting `?v=20260816m`. Nhánh `main` sạch, đã push, backend đã deploy bản
 mới nhất (đã kiểm 15/08 trên Render: `/api/price/history` sau khi bỏ chunk 30
 ngày, job snapshot ghi được vào Supabase).
 
@@ -761,7 +772,7 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | Tin tức theo mã | CafeF RSS | đã sửa regex tiếng Việt |
 | Watchlist | **`Store`** (driver localStorage) | kéo thả sắp xếp, sparkline SVG |
 | Lịch sử giao dịch tay | **`Store`** (driver localStorage) | giá vốn bình quân gia quyền |
-| Danh mục thật SSI (chỉ đọc) | SSI FCTrading | GĐ1, xem mục 8 |
+| Danh mục thật SSI (chỉ đọc) | SSI FCTrading | GĐ1, xem mục 8. **Trang tổng cũng đọc nguồn này** (ưu tiên hơn danh mục tay) |
 | **Bảng tỷ giá** (trang Ngoại tệ) | Vietcombank XML | 20 mã, bán lẻ; ô VCB không niêm yết hiện `—` và luôn xuống cuối khi sắp xếp |
 | **Chart tỷ giá** (trang Ngoại tệ) | FXRatesAPI | đường, **chỉ 1M/3M/6M/1Y** — nguồn free hết lịch sử ở 366 ngày |
 | Ghim mã ngoại tệ / quy đổi 2 chiều | `Store` + bảng VCB | quy đổi dùng giá mua chuyển khoản (bán cho NH) và giá bán (mua từ NH) |
@@ -781,12 +792,29 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Tổng gia sản** (`/`) | `core/networth.js` | gom 5 kênh về VND; kênh lỗi nguồn **không cộng vào tổng** và phải nói tên ra |
 | **Phân bổ tài sản** | — | thanh xếp chồng ngang (không phải biểu đồ tròn — mục 7); màu cố định theo kênh |
 | **Dòng tiền vào/ra** | `Store` (`cash_flows`) | tách "tăng do giá" khỏi "nạp thêm tiền" |
+| **Bố cục trang tổng** | — | Tổng tài sản LÊN ĐẦU; công cụ (đăng nhập/sao lưu/chuyển dữ liệu/khoá mã) gom vào accordion cuối, mở khi chưa đăng nhập |
 | **Khoá mã 6 số** | `nav.js` + `settings` | chỉ hỏi mã khi HIỆN số; **không phải bảo mật thật** — mục 7 |
 | **Momentum Score A–F** | `signals.js` `momentum` | tab Tín hiệu, cột "Đà"; phân vị TRONG RỔ, không phải ngưỡng tuyệt đối |
 | **Đột biến khối lượng** | `signals.js` `volSpike` | tab Giá–KL; KL phiên cuối ≥2× TB 20 phiên; tách giá lên/xuống |
 | **Snapshot giá hàng ngày** | job trong `server/index.js` | ghi `price_snapshots` mỗi giờ, upsert 1 hàng/ngày/loại; cần `SUPABASE_SECRET_KEY` trong env Render |
 
 ### Nhật ký theo phiên
+
+**16/08/2026 (phiên 13) — trang tổng đọc tài khoản SSI thật + quy hoạch lại bố cục.**
+Bump `?v=20260816k` → **`?v=20260816m`** (2 lần). **KHÔNG đụng `server/`.**
+
+- **Trang tổng đọc danh mục THẬT SSI** (`networth.js`), không phải danh mục tay.
+  User báo "đồng bộ SSI mà trang tổng không thấy" — vì hai nguồn tách biệt cho
+  cùng tài sản (danh mục thật `/api/account/portfolio` KHÔNG lưu Store; danh mục
+  tay `tx_stock`). User chốt: ưu tiên SSI thật. Chi tiết + đơn vị ở mục 8.
+- **Đây là lần đầu bẫy ĐẾM TRÙNG (ghi sẵn cho GĐ 7 Binance) gặp thật.** Cùng bản
+  chất: hai nguồn cho một tài sản, không cộng cả hai. Khi làm Binance theo đúng
+  khuôn `stockFromSSI`/`stockFromManual`.
+- **Quy hoạch lại trang tổng** (user báo "bừa"): Tổng tài sản LÊN ĐẦU, rồi Dòng
+  tiền, rồi accordion "Tài khoản & công cụ dữ liệu" ở cuối gom 4 panel nền (đăng
+  nhập, khoá mã, sao lưu, chuyển dữ liệu). `migrate.js` là công cụ dùng-một-lần
+  của GĐ 5.8 đã xong việc; `backup.js` dùng định kỳ — cả hai không cần chình ình
+  trên trang chính nữa. Accordion mở sẵn khi chưa đăng nhập, đóng khi đã.
 
 **16/08/2026 (phiên 12) — 3 việc treo của trang Chứng khoán: XONG HẾT.**
 Bump `?v=20260816g` → **`?v=20260816k`** (4 lần trong phiên). **KHÔNG đụng
@@ -806,29 +834,6 @@ hằng ngày và việc 3 là một lỗi đang chạy.
   tách ra, còn nợ.
 
 Cả 3 đều cùng một tinh thần với GĐ 6.5: thiếu dữ liệu thì nói ra, không bịa.
-
-**16/08/2026 (phiên 11) — GĐ 6 XONG CẢ 7 ĐẦU VIỆC. Trang tổng chạy thật.**
-Bump `?v=20260815e` → **`?v=20260816g`** (bump 7 lần trong phiên, mỗi lần deploy
-một lần). **KHÔNG đụng `server/`** — toàn bộ là frontend.
-
-- `core/networth.js` mới: gom định giá 5 kênh về VND. **Mục 6.5 là linh hồn của
-  file, không phải phép cộng** — `Promise.allSettled`, kênh chết không kéo kênh
-  khác chết, kênh không định giá được thì không cộng và phải nói tên ra.
-- 6.3: **thanh xếp chồng ngang, KHÔNG phải biểu đồ tròn** như quy hoạch ghi —
-  lý do + bảng màu đã validate ở mục 7.
-- 6.4: dòng tiền vào/ra, tách "tăng do giá" khỏi "nạp thêm tiền".
-- 6.6: rà riêng tư cả 6 trang, **tìm ra lỗi thật** — mục 7.
-- 6.7: gần như miễn phí nhờ `.money` có sẵn.
-
-**Hai việc user thêm ngoài quy hoạch:**
-- **Khoá mã 6 số** cho nút con mắt (`nav.js`). Chỉ hỏi mã khi HIỆN số, không hỏi
-  khi ẩn. Mức bảo vệ thật ghi ở mục 7 — đọc trước khi ai đó tưởng nó là bảo mật.
-- **Nhãn nguồn dồn xuống cuối trang tổng** thay vì dưới từng tên kênh (mục 1.5
-  bắt buộc có nhãn, không bắt buộc đặt sát con số).
-
-Đối chiếu tay toàn bộ phép cộng: vàng 2 lượng = 20 chỉ × 14.100 × 1000 =
-282.000.000; FPT 1.000 cp × 68,30 = 68.300.000; tổng 1.701.659.517 với giá vốn
-1.745.000.000 ra −2,48%. Khớp.
 
 Các phiên trước đó: **`docs/NHATKY.md`**.
 
