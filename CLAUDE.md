@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260816m`** (73 chỗ trong 6 file HTML).
+Cache busting hiện **`?v=20260817a`** (77 chỗ trong 6 file HTML).
 
 ---
 
@@ -347,6 +347,49 @@ Actions bấm *Enable workflow*.
 
 - Regex `\b` **không hoạt động với tiếng Việt** → dùng lookaround Unicode
   `(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])` với cờ `u`.
+
+### SSI trả giá THÔ trên chart, cột "adjusted" vô dụng — tự làm điều chỉnh cổ tức (17/08/2026)
+
+**Triệu chứng.** SSI (mã SSI) chia cổ tức tiền 1.000đ + cổ phiếu thưởng 20% ngày
+17/08. Chart hiện **vách -19% giả** (24.500→19.800), quote đổi % ghi -19,2%.
+Thực tế phiên đó gần đi ngang sau khi điều chỉnh.
+
+**Đo với SSI API (đừng dò lại):**
+- `DailyOhlc` trả giá THÔ, KHÔNG back-adjust lịch sử.
+- `DailyStockPrice.ClosePriceAdjusted` cũng KHÔNG back-adjust: đo factor =
+  adjusted/close = **1.0000 mọi ngày** quanh sự kiện. Cột này vô dụng ở đây.
+- Trường `RefPrice` ngày ex-div vẫn ghi **24.500** (giá thô hôm qua) → server
+  cũ tính (19800−24500)/24500 = −19,2%.
+- `DailyStockPrice` KHÔNG trả range dài: 365 ngày/PageSize 1000 → **0 dòng** (chỉ
+  hợp cửa sổ ngắn cho quote). Vì vậy **chart bắt buộc vẫn nguồn từ `DailyOhlc`**,
+  không chuyển sang DailyStockPrice được.
+
+**Chìa khóa dự phòng.** Giá tham chiếu điều chỉnh thật = **(CeilingPrice +
+FloorPrice)/2**: vì ceiling = ref×(1+biên), floor = ref×(1−biên), tổng = 2×ref —
+đúng mọi biên (HOSE 7 / HNX 10 / UPCoM 15), bắt CẢ cổ tức tiền LẪN cổ phiếu tự
+động. Đo 17/08: (20950+18250)/2 = **19.600**, khớp (24500−1000)/1,2 = 19.583.
+
+**Cách sửa — hai đường TÁCH BIỆT (đừng gộp):**
+1. Quote %: `computeQuote` dùng `(ceiling+floor)/2`, fallback `RefPrice` khi
+   thiếu biên. Ngày thường hai số bằng nhau nên vô hại. → SSI +1,02%.
+2. Chart: `computeHistory` back-adjust `DailyOhlc` theo **VNDirect `/v4/events`**
+   (cùng nguồn fundamentals; `effectiveDate` = ngày GDKHQ). Factor mỗi ex-date:
+   KINDDIV `1/(1+r)`, DIVIDEND `(ref−tiền)/ref`; nhân dồn mọi nến TRƯỚC ex-date.
+   → 14/08 24,5 → **19,58**, liền mạch 19,8. Events cache 12h, `/api/events/:sym`
+   cho tab lịch cổ tức.
+
+**Ba chỗ CỐ Ý, đừng "sửa lại":**
+- **Rights (ISSUE) KHÔNG back-adjust** — chỉ hiện trong tab. Đo SSI rights
+  08/12/2025 (100:20 @15.000): giá thô gần như không rớt (gap 1,021) trong khi
+  TERP đòi factor 0,918 → adjust sẽ TẠO vọt **+11% giả**, tệ hơn bệnh ban đầu.
+  Cơ chế giá ex-rights quá nhiễu (cổ đông phải nộp tiền mua).
+- **Sanity gate**: mỗi factor **gộp theo ex-date** đối chiếu gap giá thật
+  (open/prevClose) ngày ex-date, lệch >12% thì BỎ (event bị hủy/sai ngày → chart
+  về raw). PHẢI gộp cùng ex-date RỒI mới gate — cash + bonus cùng ngày 17/08,
+  factor lẻ (0,959) không khớp gap gộp (0,808), gate lẻ sẽ loại nhầm cash div
+  (đã cắn 1 lần lúc test: 14/08 ra 20,42 thay vì 19,58).
+- Events lỗi → chart fallback raw (như cũ), quote % vẫn đúng vì độc lập VNDirect.
+  Escape hatch **`?raw=1`** cho giá thô.
 
 ### Chế độ riêng tư để lọt GIÁ VỐN ở cả 4 trang danh mục (16/08/2026)
 
@@ -750,9 +793,10 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260816m`. Nhánh `main` sạch, đã push, backend đã deploy bản
-mới nhất (đã kiểm 15/08 trên Render: `/api/price/history` sau khi bỏ chunk 30
-ngày, job snapshot ghi được vào Supabase).
+Cache busting `?v=20260817a`. Nhánh `main` sạch, đã push (commit `a254ddf`),
+backend deploy lại 17/08 (đụng `server/` — chart back-adjust cổ tức + endpoint
+`/api/events`). **Sau deploy nhớ kiểm `/api/events/SSI` trả 12 sự kiện và
+`/api/price/quote?symbol=SSI` ra ~+1% chứ không -19%.**
 
 **Dữ liệu đọc từ Supabase** (`STORE_ENABLED: true` từ 15/08). Mỗi thiết bị đăng
 nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm đường lui — chưa xoá.
@@ -763,6 +807,9 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | Tính năng | Nguồn | Ghi chú |
 |---|---|---|
 | Giá / nến / chỉ số | SSI FCData | chunk **365 ngày** (đổi 15/08, xem mục 7); index intraday tái tạo từ RatioChange |
+| **Nến đã điều chỉnh cổ tức** | DailyOhlc + VNDirect events | back-adjust cổ tức tiền + cổ phiếu thưởng (17/08, mục 7). `?raw=1` = giá thô. Rights KHÔNG adjust |
+| **Đổi % quote** | DailyStockPrice | ref = **(ceiling+floor)/2**, KHÔNG dùng trường RefPrice (sai ngày ex-div) — mục 7 |
+| **Lịch cổ tức & sự kiện quyền** | VNDirect `/v4/events` → `/api/events/:sym` | panel mỗi mã: cổ tức tiền/cổ phiếu thưởng/phát hành quyền, badge màu |
 | **Chart chỉ số** | SSI `DailyIndex` | bấm thẻ chỉ số = vẽ **đường** (không có OHLC); 5 ô thống kê toàn sàn |
 | Chart khung thời gian | — | 1M / 3M / 6M / 1Y / 5Y (30/90/180/365/1825 ngày) |
 | Ticker tape | rổ VN30 | tách khỏi watchlist; backend warm cả 30 mã |
@@ -800,6 +847,24 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 
 ### Nhật ký theo phiên
 
+**17/08/2026 (phiên 14) — chart điều chỉnh cổ tức + tab lịch cổ tức.**
+Bump `?v=20260816m` → **`?v=20260817a`** (1 lần, 77 chỗ). **ĐỤNG `server/`** —
+Render deploy lại. Commit `a254ddf`.
+
+- User báo: SSI hôm nay chia cổ tức tiền + cổ phiếu, chart hiện **vách -19% giả**
+  và quote sai -19,2%. Kiểm với SSI API: `DailyOhlc` trả giá THÔ, cột
+  `ClosePriceAdjusted` KHÔNG back-adjust (đo factor 1.0), trường `RefPrice` ex-div
+  vẫn ghi giá thô hôm qua. Chi tiết + cách sửa: **mục 7**.
+- Sửa `computeQuote`: ref = `(ceiling+floor)/2`. Back-adjust `DailyOhlc` theo
+  VNDirect events (cổ tức tiền + cổ phiếu thưởng, KHÔNG rights). Endpoint mới
+  `/api/events/:symbol` + panel "Lịch cổ tức & sự kiện quyền" mỗi mã.
+- File: `server/index.js`, `config.js` (thêm `eventsProvider`), `dataService.js`
+  (`getEvents`), `chung-khoan.js` (`renderEvents`), `base.css` (badge),
+  `chung-khoan.html` (panel). User yêu cầu tab lịch cổ tức — đã làm.
+- Đo sau sửa: SSI quote +1,02% (trước -19,2%); 14/08 24,5 → **19,58** (liền mạch
+  19,8 hôm nay); rights 08/12/2025 giữ nguyên (không adjust). Verify trên browser
+  local: chart liền mạch, tab đủ 12 sự kiện.
+
 **16/08/2026 (phiên 13) — trang tổng đọc tài khoản SSI thật + quy hoạch lại bố cục.**
 Bump `?v=20260816k` → **`?v=20260816m`** (2 lần). **KHÔNG đụng `server/`.**
 
@@ -816,26 +881,7 @@ Bump `?v=20260816k` → **`?v=20260816m`** (2 lần). **KHÔNG đụng `server/`
   của GĐ 5.8 đã xong việc; `backup.js` dùng định kỳ — cả hai không cần chình ình
   trên trang chính nữa. Accordion mở sẵn khi chưa đăng nhập, đóng khi đã.
 
-**16/08/2026 (phiên 12) — 3 việc treo của trang Chứng khoán: XONG HẾT.**
-Bump `?v=20260816g` → **`?v=20260816k`** (4 lần trong phiên). **KHÔNG đụng
-`server/`** — cả 3 việc tính được từ dữ liệu đã có.
-
-Quyết định mở phiên: **hoãn GĐ 7 (Binance)**, làm 3 việc trang Chứng khoán
-trước. Lý do: user xác nhận mới chỉ dùng trang chứng khoán, chưa giữ coin nào —
-GĐ 7 tự động hoá một việc chưa từng làm, còn 3 việc này nằm trên trang dùng
-hằng ngày và việc 3 là một lỗi đang chạy.
-
-- **Việc 3** (`portfolio.js` + `chung-khoan.js`): mã thiếu quote không còn được
-  định giá bằng giá vốn. HAI lỗi chồng nhau — xem mục 7.
-- **Việc 2** (`signals.js`): Momentum Score A–F, phân vị trong rổ. Không thêm
-  lần gọi mạng nào.
-- **Việc 1** (`signals.js`): `volSpike()` — đột biến KL vs TB 20 phiên. Hoá ra
-  KHÔNG cần `server/` như mục 10 cũ ghi; phần cần server (marketcap heatmap) đã
-  tách ra, còn nợ.
-
-Cả 3 đều cùng một tinh thần với GĐ 6.5: thiếu dữ liệu thì nói ra, không bịa.
-
-Các phiên trước đó: **`docs/NHATKY.md`**.
+Các phiên trước đó (kể cả phiên 12): **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
 

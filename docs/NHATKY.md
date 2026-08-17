@@ -5,6 +5,25 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**16/08/2026 (phiên 12) — 3 việc treo của trang Chứng khoán: XONG HẾT.**
+Bump `?v=20260816g` → **`?v=20260816k`** (4 lần trong phiên). **KHÔNG đụng
+`server/`** — cả 3 việc tính được từ dữ liệu đã có.
+
+Quyết định mở phiên: **hoãn GĐ 7 (Binance)**, làm 3 việc trang Chứng khoán
+trước. Lý do: user xác nhận mới chỉ dùng trang chứng khoán, chưa giữ coin nào —
+GĐ 7 tự động hoá một việc chưa từng làm, còn 3 việc này nằm trên trang dùng
+hằng ngày và việc 3 là một lỗi đang chạy.
+
+- **Việc 3** (`portfolio.js` + `chung-khoan.js`): mã thiếu quote không còn được
+  định giá bằng giá vốn. HAI lỗi chồng nhau — xem mục 7.
+- **Việc 2** (`signals.js`): Momentum Score A–F, phân vị trong rổ. Không thêm
+  lần gọi mạng nào.
+- **Việc 1** (`signals.js`): `volSpike()` — đột biến KL vs TB 20 phiên. Hoá ra
+  KHÔNG cần `server/` như mục 10 cũ ghi; phần cần server (marketcap heatmap) đã
+  tách ra, còn nợ.
+
+Cả 3 đều cùng một tinh thần với GĐ 6.5: thiếu dữ liệu thì nói ra, không bịa.
+
 **16/08/2026 (phiên 11) — GĐ 6 XONG CẢ 7 ĐẦU VIỆC. Trang tổng chạy thật.**
 Bump `?v=20260815e` → **`?v=20260816g`** (bump 7 lần trong phiên, mỗi lần deploy
 một lần). **KHÔNG đụng `server/`** — toàn bộ là frontend.
