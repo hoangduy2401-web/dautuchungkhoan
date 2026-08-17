@@ -95,6 +95,10 @@ const APP_CONFIG = {
   // BACKEND = "https://dashboard-chung-khoan.onrender.com"
   priceProvider:        { name: "SSI FCData", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/price" },
   fundamentalsProvider: { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/fundamentals" },
+  // Corporate actions (cổ tức tiền/cổ phiếu, phát hành quyền) — VNDirect finfo.
+  // Drives the dividend-history tab; the chart back-adjusts from the same data
+  // server-side (see server computeHistory / backAdjustHistory).
+  eventsProvider:       { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/events" },
   newsProvider:         { name: "CafeF RSS",  baseUrl: "https://dashboard-chung-khoan.onrender.com/api/news" },
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;
   // never mocked — an empty account panel is better than fake holdings.

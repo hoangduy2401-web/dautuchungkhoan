@@ -1347,10 +1347,11 @@ async function loadSelectedSymbol() {
   // sổ hẹp hơn. Xin đúng một lần cửa sổ rộng nhất rồi cắt ra dùng là đủ cả hai,
   // và cắt ở trình duyệt thì không tốn gì.
   const fetchDays = Math.max(state.range, SIG_DAYS);
-  const [full, fundamentals, news] = await Promise.all([
+  const [full, fundamentals, news, events] = await Promise.all([
     DataService.getHistory(sym, fetchDays).catch(() => null),
     DataService.getFundamentals(sym),
     DataService.getNews(state.watchlist),
+    DataService.getEvents(sym),
   ]);
 
   // Backend cắt lịch sử theo `end - days`; lặp lại đúng công thức đó ở đây để
@@ -1367,6 +1368,7 @@ async function loadSelectedSymbol() {
     if (state.marketTab === "overview") renderOverview();
   }
   renderFundamentals(fundamentals);
+  renderEvents(events);
   renderNews(news);
 
   // Nạp sẵn cửa sổ 180 phiên cho huy hiệu từ chính dữ liệu vừa tải. Nhờ vậy
@@ -1412,6 +1414,10 @@ async function loadSelectedIndex(code) {
   if (state.selected !== code || state.range !== range) return;
   drawChartOrClear(history, key);
   renderIndexStats(ix);
+  // Indices have no company events — hide the dividend panel left over from any
+  // previously selected stock.
+  const ep = document.getElementById("eventsPanel");
+  if (ep) ep.hidden = true;
 }
 
 // Draw, or clear when there is nothing to draw AND the pane currently shows a
@@ -1484,6 +1490,62 @@ function renderNews(items) {
       </div>`;
     })
     .join("");
+}
+
+// Corporate-action history for the selected symbol. Cash + stock dividends
+// listed here are exactly what the chart is back-adjusted for (server-side);
+// rights issues (Phát hành quyền) are shown for reference but NOT chart-adjusted
+// — their ex-price mechanics are too noisy (see server backAdjustHistory).
+const EVENT_TYPES = {
+  DIVIDEND: { label: "Cổ tức tiền", cls: "ev-cash" },
+  KINDDIV: { label: "Cổ phiếu thưởng", cls: "ev-stock" },
+  ISSUE: { label: "Phát hành quyền", cls: "ev-issue" },
+};
+
+function eventDetail(e) {
+  if (e.type === "DIVIDEND") return e.cash != null ? `${fmt(e.cash / 1000, 1)} nghìn đ/cp` : e.note || "—";
+  if (e.type === "KINDDIV") return e.ratio != null ? `Tỷ lệ 100:${fmt(e.ratio, 0)}` : e.note || "—";
+  if (e.type === "ISSUE")
+    return e.ratio != null
+      ? `100:${fmt(e.ratio, 0)}${e.issuePrice != null ? ` · giá ${fmt(e.issuePrice / 1000, 1)} nghìn đ` : ""}`
+      : e.note || "—";
+  return e.note || "—";
+}
+
+// dd/mm/yyyy from a YYYY-MM-DD string; string split avoids Date() timezone drift.
+function fmtEventDate(d) {
+  return d ? d.split("-").reverse().join("/") : "—";
+}
+
+function renderEvents(events) {
+  const panel = document.getElementById("eventsPanel");
+  const el = document.getElementById("eventsList");
+  if (!panel || !el) return;
+  panel.hidden = false;
+  if (!Array.isArray(events) || !events.length) {
+    el.innerHTML = `<div class="empty-state">Chưa có dữ liệu cổ tức / sự kiện quyền.</div>`;
+    return;
+  }
+  const rows = events
+    .map((e) => {
+      const t = EVENT_TYPES[e.type] || { label: escapeHtml(e.typeDesc || e.type), cls: "" };
+      return `
+      <tr>
+        <td class="ev-date">${fmtEventDate(e.exDate)}</td>
+        <td><span class="ev-badge ${t.cls}">${t.label}</span></td>
+        <td>${escapeHtml(eventDetail(e))}</td>
+        <td class="ev-rec">${fmtEventDate(e.recordDate)}</td>
+      </tr>`;
+    })
+    .join("");
+  el.innerHTML = `
+    <div class="asset-table-wrap">
+      <table class="asset-table ev-table">
+        <thead><tr><th>Ngày GDKHQ</th><th>Loại</th><th>Chi tiết</th><th>ĐK cuối</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="ev-note">Biểu đồ đã điều chỉnh giá theo cổ tức tiền &amp; cổ phiếu thưởng. Phát hành quyền chỉ hiển thị tham khảo, không điều chỉnh giá.</div>`;
 }
 
 /* ============================================================

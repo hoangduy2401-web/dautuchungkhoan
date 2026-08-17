@@ -329,7 +329,7 @@ function mapOhlcRow(d) {
   };
 }
 
-async function computeHistory(symbol, days) {
+async function computeHistory(symbol, days, { raw = false } = {}) {
   const rows = await fetchOhlcChunked(symbol, days);
   // Dedupe by date (chunk boundaries / paging can overlap) and sort ascending.
   const byDate = new Map();
@@ -337,13 +337,20 @@ async function computeHistory(symbol, days) {
     const item = mapOhlcRow(r);
     if (item.date) byDate.set(item.date, item);
   }
-  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const series = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  if (raw) return series;
+  // Back-adjust for dividends/splits so the chart is continuous. Events failing
+  // must NOT fail the chart — fall back to the raw series (the pre-17/08/2026
+  // behaviour), just without smoothing.
+  const events = await fetchCorporateEventsCached(symbol).catch(() => []);
+  return backAdjustHistory(series, events);
 }
 
-// GET /api/price/history?symbol=VNM&days=90
+// GET /api/price/history?symbol=VNM&days=90   (add &raw=1 for unadjusted prices)
 app.get("/api/price/history", async (req, res) => {
   const symbol = String(req.query.symbol || "").toUpperCase();
   const days = Number(req.query.days) || 90;
+  const raw = req.query.raw === "1"; // escape hatch: unadjusted traded prices
   if (!symbol) return res.status(400).json({ error: "missing symbol" });
 
   try {
@@ -352,7 +359,11 @@ app.get("/api/price/history", async (req, res) => {
     // fresh, but long ranges (1Y/5Y = ~13/42 SSI calls to rebuild) get a much
     // longer TTL so stale-while-revalidate doesn't re-hammer SSI every minute.
     const ttlMs = days > 270 ? 30 * 60_000 : 60_000;
-    const items = await withCache(`history:${symbol}:${days}`, ttlMs, () => computeHistory(symbol, days));
+    const items = await withCache(
+      `history:${symbol}:${days}:${raw ? "raw" : "adj"}`,
+      ttlMs,
+      () => computeHistory(symbol, days, { raw })
+    );
     res.json(items);
   } catch (err) {
     console.error("[/api/price/history]", err.message);
@@ -585,7 +596,21 @@ async function computeQuote(symbol) {
 
   const d = rows[0]?.row || {};
   const price = toThousandVnd(pickField(d, ["ClosePrice", "MatchPrice", "MatchedPrice", "Close"]));
-  const refPrice = toThousandVnd(pickField(d, ["RefPrice", "BasicPrice", "PriorClosePrice"]));
+
+  // Change% must be measured against the ADJUSTED reference price, not SSI's
+  // RefPrice field. On an ex-dividend day SSI leaves RefPrice at the raw prior
+  // close (measured 17/08/2026: SSI RefPrice 24,500 while the board's ceiling/
+  // floor implied 19,600), so (price - RefPrice)/RefPrice prints a fake -19%
+  // cliff for what was really a flat session after a dividend.
+  //
+  // The exchange's true adjusted reference is exactly the midpoint of the daily
+  // band: ceiling = ref*(1+band), floor = ref*(1-band) -> (ceiling+floor)/2 = ref
+  // for ANY band width (HOSE 7% / HNX 10% / UPCoM 15%). On a normal day this
+  // equals RefPrice, so nothing changes; on an ex-right day it is correct.
+  const ceiling = toThousandVnd(pickField(d, ["CeilingPrice", "Ceiling"]));
+  const floor = toThousandVnd(pickField(d, ["FloorPrice", "Floor"]));
+  const refField = toThousandVnd(pickField(d, ["RefPrice", "BasicPrice", "PriorClosePrice"]));
+  const refPrice = ceiling > 0 && floor > 0 ? (ceiling + floor) / 2 : refField;
 
   // Foreign flow is already in the same DailyStockPrice row — no extra SSI call.
   // Net foreign value (buy - sell) in raw VND, exposed to the client in tỷ đồng
@@ -741,6 +766,148 @@ app.get("/api/fundamentals/:symbol", async (req, res) => {
     res.json(fundamentals);
   } catch (err) {
     console.error("[/api/fundamentals]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
+// Corporate actions (cổ tức / cổ phiếu thưởng / phát hành quyền) — VNDirect
+// finfo /v4/events, the same source as fundamentals. Two consumers:
+//   1. back-adjusting the price chart (below), and
+//   2. the dividend-history tab (GET /api/events/:symbol).
+//
+// WHY THIS EXISTS: SSI DailyOhlc returns RAW traded prices and its
+// ClosePriceAdjusted column does NOT back-adjust (measured 17/08/2026 on the
+// SSI stock+cash dividend: factor 1.0 on every historical row). So a dividend
+// draws a fake cliff on the chart (SSI 24,500 -> 19,800, -19%, when the session
+// was actually flat after the adjustment). We derive the adjustment ourselves.
+// ============================================================
+const VNDIRECT_EVENTS = "https://api-finfo.vndirect.com.vn/v4/events";
+
+const numOrNull = (v) =>
+  v === undefined || v === null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
+
+// `effectiveDate` is the ex-right date (ngày GDKHQ) — the first session priced
+// after the adjustment. `expiredDate` is the last registration date. locale:VN
+// drops the EN twin row VNDirect returns for every event.
+async function fetchCorporateEvents(symbol) {
+  const url =
+    `${VNDIRECT_EVENTS}?q=code:${symbol}~locale:VN~type:DIVIDEND,KINDDIV,ISSUE` +
+    `&size=200&sort=effectiveDate:desc` +
+    `&fields=type,typeDesc,note,ratio,dividend,price,effectiveDate,expiredDate,divYear`;
+  const rows = await vndirectJson(url);
+  return rows
+    .map((r) => ({
+      type: r.type, // DIVIDEND (cash) | KINDDIV (bonus shares) | ISSUE (rights)
+      typeDesc: r.typeDesc || null,
+      note: r.note || null,
+      exDate: r.effectiveDate || null, // ngày GDKHQ
+      recordDate: r.expiredDate || null, // ngày đăng ký cuối cùng
+      ratio: numOrNull(r.ratio), // percent: 20 == tỷ lệ 100:20
+      cash: numOrNull(r.dividend), // đồng/cp (cash dividend)
+      issuePrice: numOrNull(r.price), // đồng/cp (rights subscription price)
+      year: r.divYear ? Math.round(Number(r.divYear)) : null,
+    }))
+    .filter((e) => e.exDate)
+    .sort((a, b) => b.exDate.localeCompare(a.exDate)); // newest first
+}
+
+function fetchCorporateEventsCached(symbol) {
+  // Corporate actions change a few times a year; 12h TTL keeps VNDirect load
+  // negligible and the chart adjustment stable within a session.
+  return withCache(`events:${symbol}`, 12 * 3600_000, () => fetchCorporateEvents(symbol));
+}
+
+// Back-adjust a raw ascending OHLC series (thousand VND) for corporate actions.
+// Every candle BEFORE an ex-date is multiplied by that event's factor; multiple
+// events compound. Factor, where `ref` = raw close of the last day before exDate:
+//   KINDDIV (bonus r%):   1 / (1 + r/100)
+//   DIVIDEND (cash d/cp): (ref - d) / ref
+//   ISSUE (rights p, r%): (ref + (r/100)*p) / (ref * (1 + r/100))   [TERP]
+//
+// SANITY GATE: each factor is checked against the ACTUAL open/prev-close gap on
+// the ex-date in the raw series. If they disagree (event cancelled, mis-dated,
+// or SSI already adjusted upstream someday), the event is skipped — the chart
+// falls back to raw rather than being distorted. This is the fallback the task
+// asked for ("phương án dự phòng cho trường hợp tương tự").
+function backAdjustHistory(rows, events) {
+  if (!Array.isArray(rows) || rows.length < 2 || !events.length) return rows;
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Group by ex-date: same-day events (e.g. today's SSI cash 1,000đ + bonus 20%)
+  // compound into ONE factor. Grouping matters for the sanity gate below — each
+  // event's factor alone won't match the combined price gap, only their product.
+  const byDate = new Map();
+  for (const e of events) {
+    if (!e.exDate || e.exDate > today) continue; // ignore future / not-yet-effective
+    if (!byDate.has(e.exDate)) byDate.set(e.exDate, []);
+    byDate.get(e.exDate).push(e);
+  }
+
+  const factors = [];
+  for (const [exDate, evs] of byDate) {
+    // ref = raw close of the last candle strictly before the ex-date.
+    let refIdx = -1;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].date < exDate) { refIdx = i; break; }
+    }
+    if (refIdx < 0) continue; // event older than our data window
+    const ref = rows[refIdx].close;
+    if (!(ref > 0)) continue;
+
+    // Only cash dividends and bonus/stock dividends are back-adjusted. Rights
+    // issues (ISSUE) are deliberately NOT: their ex-price mechanics are noisy
+    // (the shareholder must pay to subscribe, so the market rarely drops by the
+    // full TERP). Measured on SSI's 2025-12-08 rights (100:20 @ 15,000): the raw
+    // price barely moved (gap 1.021) while TERP implies a 0.918 factor —
+    // adjusting there would MANUFACTURE a fake +11% jump, worse than the raw
+    // cliff we set out to fix. ISSUE still shows in the events tab as history.
+    let f = 1;
+    for (const e of evs) {
+      const r = (e.ratio || 0) / 100;
+      const cashK = (e.cash || 0) / 1000; // đồng -> nghìn đồng
+      if (e.type === "KINDDIV") f *= 1 / (1 + r);
+      else if (e.type === "DIVIDEND") f *= (ref - cashK) / ref;
+    }
+    if (!(f > 0 && f < 5) || Math.abs(1 - f) < 1e-4) continue; // no-op / nonsensical
+
+    // Cross-check the COMBINED factor against the real price gap on the ex-date
+    // (first candle on/after exDate). open/prevClose should be within ~12%.
+    const exIdx = rows.findIndex((row) => row.date >= exDate);
+    if (exIdx > 0 && rows[exIdx].open > 0) {
+      const gap = rows[exIdx].open / rows[exIdx - 1].close;
+      if (Math.abs(gap - f) > 0.12) continue; // real prices don't back this up
+    }
+    factors.push({ exDate, factor: f });
+  }
+  if (!factors.length) return rows;
+
+  return rows.map((row) => {
+    let m = 1;
+    for (const { exDate, factor } of factors) if (row.date < exDate) m *= factor;
+    if (Math.abs(1 - m) < 1e-9) return row;
+    const adj = (x) => Math.round(x * m * 100) / 100; // 2 dp, thousand VND
+    return {
+      date: row.date,
+      open: adj(row.open),
+      high: adj(row.high),
+      low: adj(row.low),
+      close: adj(row.close),
+      volume: row.volume, // left raw on purpose
+    };
+  });
+}
+
+// GET /api/events/SSI -> corporate-action history, newest first:
+// [{ type, typeDesc, note, exDate, recordDate, ratio, cash, issuePrice, year }]
+app.get("/api/events/:symbol", async (req, res) => {
+  const symbol = String(req.params.symbol || "").toUpperCase();
+  if (!symbol) return res.status(400).json({ error: "missing symbol" });
+  try {
+    const events = await fetchCorporateEventsCached(symbol);
+    res.json(events);
+  } catch (err) {
+    console.error("[/api/events]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
   }
 });

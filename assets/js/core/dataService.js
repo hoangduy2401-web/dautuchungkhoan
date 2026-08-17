@@ -165,6 +165,14 @@ const DataService = (function () {
     );
   }
 
+  // ---- Corporate actions: [{type, typeDesc, note, exDate, recordDate, ratio,
+  //      cash, issuePrice, year}] newest first. type: DIVIDEND | KINDDIV | ISSUE.
+  // Best-effort history for the dividend tab; empty array on failure so the
+  // panel just shows "no data", never blocks the page.
+  function getEvents(symbol) {
+    return fetchJson(`${cfg.eventsProvider.baseUrl}/${encodeURIComponent(symbol)}`, T_FAST).catch(() => []);
+  }
+
   // ---- News: [{symbol, title, source, time, url}] ----
   function getNews(symbols) {
     const q = (symbols || []).join(",");
@@ -272,6 +280,7 @@ const DataService = (function () {
     getHistory,
     getIndexHistory,
     getFundamentals,
+    getEvents,
     getNews,
     getFxRates,
     getFxHistory,
