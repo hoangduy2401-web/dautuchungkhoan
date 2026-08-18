@@ -223,10 +223,26 @@
    MAIN GRID
    ============================================================ */
 .main-grid {
-  display: grid; grid-template-columns: 260px minmax(420px, 1fr) 260px;
+  display: grid; grid-template-columns: 300px minmax(380px, 1fr) 320px;
   gap: 16px; align-items: start;
 }
-@media (max-width: 1180px) { .main-grid { grid-template-columns: 1fr; } }
+/* No symbol selected, or an index (no company events): drop the 3rd column so
+   the chart takes its width. Toggled from chung-khoan.js. */
+.main-grid.no-events { grid-template-columns: 300px minmax(380px, 1fr); }
+.main-grid.no-events .col-events { display: none; }
+/* Each column stacks its panels vertically. min-width:0 lets the chart column
+   shrink instead of overflowing. */
+.col-side, .col-main, .col-events { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (max-width: 1180px) {
+  .main-grid, .main-grid.no-events { grid-template-columns: 1fr; }
+}
+
+/* "Watchlist full" hint under the add form */
+.watch-hint {
+  margin: -2px 0 10px; padding: 7px 10px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-orange);
+  font-size: var(--text-2xs); line-height: 1.4;
+}
 
 /* Watchlist — hang la the bo tron, khong con duong ke ngang */
 .watchlist-add { display: flex; gap: 8px; margin-bottom: 10px; }

@@ -30,6 +30,11 @@ function saveWatchlist() {
 const INDEX_CODES = new Set(["VNINDEX", "VN30", "HNXINDEX", "UPCOM"]);
 const isIndexCode = (s) => INDEX_CODES.has(s);
 
+// Watchlist is capped so a long list never pushes the News panel (stacked right
+// below it) down the page. Existing lists longer than this keep their rows until
+// trimmed — the cap only blocks ADDING beyond it.
+const MAX_WATCHLIST = 5;
+
 const state = {
   watchlist: [...APP_CONFIG.DEFAULT_WATCHLIST],
   selected: null, // set right below, once the watchlist is known
@@ -1135,7 +1140,22 @@ async function loadSparklines() {
   renderWatchlist();
 }
 
+// Disable the add form and show a hint once the watchlist hits the cap.
+function syncWatchlistCap() {
+  const atCap = state.watchlist.length >= MAX_WATCHLIST;
+  const input = document.getElementById("newSymbol");
+  const btn = document.querySelector("#addSymbolForm button");
+  const hint = document.getElementById("watchlistHint");
+  if (input) input.disabled = atCap;
+  if (btn) btn.disabled = atCap;
+  if (hint) {
+    hint.hidden = !atCap;
+    hint.textContent = `Tối đa ${MAX_WATCHLIST} mã theo dõi. Bỏ bớt một mã rồi thêm.`;
+  }
+}
+
 function renderWatchlist() {
+  syncWatchlistCap();
   const el = document.getElementById("watchlist");
   if (state.watchlist.length === 0) {
     el.innerHTML = `<div class="empty-state">Chưa có mã theo dõi.<br>Thêm mã ở ô phía trên.</div>`;
@@ -1259,7 +1279,27 @@ function wireForms() {
     const sym = input.value.trim().toUpperCase();
     input.value = "";
     if (!sym) return;
-    if (!state.watchlist.includes(sym)) state.watchlist.push(sym);
+    if (!state.watchlist.includes(sym)) {
+      // At the cap: don't grow the list (keeps News right beneath it). Select the
+      // symbol so its chart still loads, but leave the watchlist unchanged.
+      if (state.watchlist.length >= MAX_WATCHLIST) {
+        const hint = document.getElementById("watchlistHint");
+        if (hint) {
+          hint.hidden = false;
+          hint.textContent = `Tối đa ${MAX_WATCHLIST} mã theo dõi. Bỏ bớt một mã rồi thêm.`;
+        }
+        state.selected = sym;
+        DataService.getQuote(sym)
+          .then((q) => (state.quotes[sym] = q))
+          .catch(() => {})
+          .finally(() => {
+            renderWatchlist();
+            loadSelectedSymbol();
+          });
+        return;
+      }
+      state.watchlist.push(sym);
+    }
     state.selected = sym;
     saveWatchlist();
     DataService.getQuote(sym)
@@ -1414,10 +1454,11 @@ async function loadSelectedIndex(code) {
   if (state.selected !== code || state.range !== range) return;
   drawChartOrClear(history, key);
   renderIndexStats(ix);
-  // Indices have no company events — hide the dividend panel left over from any
-  // previously selected stock.
+  // Indices have no company events — hide the dividend panel and collapse its
+  // column so the chart takes the full width.
   const ep = document.getElementById("eventsPanel");
   if (ep) ep.hidden = true;
+  document.querySelector(".main-grid")?.classList.add("no-events");
 }
 
 // Draw, or clear when there is nothing to draw AND the pane currently shows a
@@ -1522,30 +1563,33 @@ function renderEvents(events) {
   const el = document.getElementById("eventsList");
   if (!panel || !el) return;
   panel.hidden = false;
+  // Reveal the right-hand events column (collapsed by default / for indices).
+  document.querySelector(".main-grid")?.classList.remove("no-events");
   if (!Array.isArray(events) || !events.length) {
     el.innerHTML = `<div class="empty-state">Chưa có dữ liệu cổ tức / sự kiện quyền.</div>`;
     return;
   }
+  // Compact 2-line rows instead of a wide table — this panel lives in a narrow
+  // column beside the chart, so a 4-column table would overflow and scroll.
   const rows = events
     .map((e) => {
       const t = EVENT_TYPES[e.type] || { label: escapeHtml(e.typeDesc || e.type), cls: "" };
+      const rec = e.recordDate ? `<span class="ev-rec">ĐK ${fmtEventDate(e.recordDate)}</span>` : "";
       return `
-      <tr>
-        <td class="ev-date">${fmtEventDate(e.exDate)}</td>
-        <td><span class="ev-badge ${t.cls}">${t.label}</span></td>
-        <td>${escapeHtml(eventDetail(e))}</td>
-        <td class="ev-rec">${fmtEventDate(e.recordDate)}</td>
-      </tr>`;
+      <div class="ev-item">
+        <div class="ev-row1">
+          <span class="ev-date">${fmtEventDate(e.exDate)}</span>
+          <span class="ev-badge ${t.cls}">${t.label}</span>
+        </div>
+        <div class="ev-row2">
+          <span class="ev-detail">${escapeHtml(eventDetail(e))}</span>${rec}
+        </div>
+      </div>`;
     })
     .join("");
   el.innerHTML = `
-    <div class="asset-table-wrap">
-      <table class="asset-table ev-table">
-        <thead><tr><th>Ngày GDKHQ</th><th>Loại</th><th>Chi tiết</th><th>ĐK cuối</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-    <div class="ev-note">Biểu đồ đã điều chỉnh giá theo cổ tức tiền &amp; cổ phiếu thưởng. Phát hành quyền chỉ hiển thị tham khảo, không điều chỉnh giá.</div>`;
+    <div class="ev-list">${rows}</div>
+    <div class="ev-note">Ngày GDKHQ = ngày giao dịch không hưởng quyền. Biểu đồ đã điều chỉnh giá theo cổ tức tiền &amp; cổ phiếu thưởng; phát hành quyền chỉ tham khảo, không điều chỉnh.</div>`;
 }
 
 /* ============================================================

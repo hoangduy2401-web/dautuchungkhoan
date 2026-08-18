@@ -44,7 +44,9 @@ const APP_CONFIG = {
   // refresh cycles into a self-inflicted slowdown.
   REFRESH_INTERVAL_MS: 45000,
 
-  DEFAULT_WATCHLIST: ["VNM", "FPT", "SSI", "VCB", "HPG", "MWG"],
+  // Seed for first run only; watchlist is capped at 5 (see MAX_WATCHLIST in
+  // chung-khoan.js) so a growing list never pushes the News panel down.
+  DEFAULT_WATCHLIST: ["VNM", "FPT", "SSI", "VCB", "HPG"],
 
   // Rổ coin seed cho lần mở trang đầu tiên; sau đó đọc/ghi qua `Store`
   // (setting `coinWatch`), y như watchlist chứng khoán. Đây là id của

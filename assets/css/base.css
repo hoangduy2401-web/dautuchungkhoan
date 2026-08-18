@@ -539,9 +539,18 @@ tr:hover td { background: var(--surface-hover); }
 .asset-table td.muted { color: var(--text-secondary); }
 .asset-table td.warn { color: var(--accent-orange); font-weight: 600; }
 
-/* ---- Corporate-action (dividend) table ---- */
-.ev-table td.ev-date { font-weight: 700; font-variant-numeric: tabular-nums; }
-.ev-table td.ev-rec { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+/* ---- Corporate-action (dividend) list — compact, fits a narrow column ---- */
+.ev-item { padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
+.ev-item:first-child { padding-top: 2px; }
+.ev-item:last-child { border-bottom: none; }
+.ev-row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ev-row1 .ev-date { font-weight: 700; font-variant-numeric: tabular-nums; font-size: var(--text-xs); }
+.ev-row2 {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  margin-top: 3px; font-size: var(--text-2xs);
+}
+.ev-row2 .ev-detail { color: var(--text-secondary); min-width: 0; }
+.ev-row2 .ev-rec { color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ev-badge {
   display: inline-block; padding: 2px 8px; border-radius: 999px;
   font-size: var(--text-2xs); font-weight: 600; white-space: nowrap;

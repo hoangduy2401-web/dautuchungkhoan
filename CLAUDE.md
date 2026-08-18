@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260817a`** (77 chỗ trong 6 file HTML).
+Cache busting hiện **`?v=20260817c`** (77 chỗ trong 6 file HTML).
 
 ---
 
@@ -793,7 +793,7 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260817a`. Nhánh `main` sạch, đã push (commit `a254ddf`),
+Cache busting `?v=20260817c`. Nhánh `main` sạch, đã push (commit `a254ddf`),
 backend deploy lại 17/08 (đụng `server/` — chart back-adjust cổ tức + endpoint
 `/api/events`). **Sau deploy nhớ kiểm `/api/events/SSI` trả 12 sự kiện và
 `/api/price/quote?symbol=SSI` ra ~+1% chứ không -19%.**
