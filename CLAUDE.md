@@ -968,9 +968,9 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 ### Nhật ký theo phiên
 
 **26/09/2026 (phiên 15) — rà soát toàn hệ thống: 4 giai đoạn tốc độ + độ chính xác + animation.**
-Bump `?v=20260817c` → **`?v=20260926h`** (8 lần, 2 lần cuối qua `scripts/bump-v.sh`).
-**ĐỤNG `server/`** 4 lần — Render deploy lại, đã kiểm live. 13 commit
-`0a64999`…`160b006`.
+Bump `?v=20260817c` → **`?v=20260926i`** (9 lần, 3 lần cuối qua `scripts/bump-v.sh`).
+**ĐỤNG `server/`** 4 lần — Render deploy lại, đã kiểm live. 14 commit code
+`0a64999`…`d125419` (+ 2 commit handoff).
 
 - **GĐ1 (CLS + gọi trùng):** thẻ giữ chỗ cho dải chỉ số + panel Tổng quan vẽ
   khung sẵn → CLS 0,387 → 0,010 (desktop) / 0,007 (375px), đo với backend giả
@@ -1069,6 +1069,18 @@ thấy chạy thật**:
 4. "trễ N phút" màu cam chỉ hiện khi quote cũ ≥3' trong giờ.
 
 #### Còn nợ từ phiên 15 (không chặn)
+
+- **Chưa thử trên iPhone thật** — mọi kiểm tra khổ điện thoại (375px) làm
+  bằng trình duyệt giả lập Android Chrome. **User tự làm:** mở bằng Safari
+  trên iPhone, thử (1) vuốt ngang bảng Tiết kiệm/Vàng — cột tên phải đứng yên,
+  (2) nút ✕ cảnh báo đáo hạn, (3) "Xem thêm" watchlist/tin tức, (4) kéo thả
+  watchlist bằng ngón tay (nút ☰). `position: sticky` trong bảng và
+  `mask-image` là hai thứ Safari hay khác Chrome.
+- Nút điều hướng trên điện thoại cao **40px** (chuẩn 44px) — chọn cố ý cho
+  thanh gọn; tăng lên 44 nếu user thấy khó bấm (base.css, khối ≤640px).
+- Trang Vàng **không có biểu đồ lịch sử giá** — user có nhắc "biểu đồ Vàng"
+  khi sửa bộ chọn thời gian. Nếu cần: có sẵn `price_snapshots` (1 dòng/ngày từ
+  15/08) làm nguồn, nhưng mới ~43 ngày.
 
 - **Chưa thử "giảm chuyển động"** (reduced motion) trên máy thật — trình duyệt
   nhúng không giả lập được. Bật trong Cài đặt hệ thống → Trợ năng → Giảm chuyển
