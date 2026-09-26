@@ -4,17 +4,30 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Vàng — Quản lý gia sản</title>
+<meta name="description" content="Giá vàng PNJ/BTMC theo lượng, chỉ, gram; cảnh báo chênh lệch mua–bán bất thường theo từng loại vàng." />
+<!-- Link previews (Zalo, Messenger, Slack...). The image is generic on purpose:
+     no prices or holdings, so sharing a link never leaks numbers. -->
+<meta property="og:type" content="website" />
+<meta property="og:locale" content="vi_VN" />
+<meta property="og:site_name" content="Dashboard Stock" />
+<meta property="og:title" content="Vàng — Quản lý gia sản" />
+<meta property="og:description" content="Giá vàng PNJ/BTMC theo lượng, chỉ, gram; cảnh báo chênh lệch mua–bán bất thường theo từng loại vàng." />
+<meta property="og:url" content="https://dashboardstock.io.vn/vang.html" />
+<meta property="og:image" content="https://dashboardstock.io.vn/assets/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Backend + CDN: open TLS early, the first API call waits on it otherwise -->
 <link rel="preconnect" href="https://dashboard-chung-khoan.onrender.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260926e" />
-<link rel="stylesheet" href="assets/css/vang.css?v=20260926e" />
-<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260926e" />
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=20260926e" />
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=20260926e" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260926f" />
+<link rel="stylesheet" href="assets/css/vang.css?v=20260926f" />
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260926f" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=20260926f" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=20260926f" />
 <meta name="theme-color" content="#e8973a" />
 </head>
 <body>
@@ -152,17 +165,21 @@
     Giá vàng: PNJ (dự phòng: Bảo Tín Minh Châu).
   </footer>
 
-  <script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
-  <script src="assets/js/core/config.js?v=20260926e"></script>
-  <script src="assets/js/core/store.js?v=20260926e"></script>
-  <script src="assets/js/core/auth.js?v=20260926e"></script>
-  <script src="assets/js/core/store-supabase.js?v=20260926e"></script>
-  <script src="assets/js/core/theme.js?v=20260926e"></script>
-  <script src="assets/js/core/nav.js?v=20260926e"></script>
-  <script src="assets/js/core/mockData.js?v=20260926e"></script>
-  <script src="assets/js/core/dataService.js?v=20260926e"></script>
-  <script src="assets/js/core/costGuard.js?v=20260926e"></script>
-  <script src="assets/js/core/numInput.js?v=20260926e"></script>
-  <script src="assets/js/pages/vang.js?v=20260926e"></script>
+  <!-- CDN scripts pinned by version AND by hash (SRI): if unpkg ever served
+       different bytes for this version, the browser refuses to run them.
+       Changing a version = recompute the hash:
+       curl -sL URL | openssl dgst -sha384 -binary | openssl base64 -A -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+  <script src="assets/js/core/config.js?v=20260926f"></script>
+  <script src="assets/js/core/store.js?v=20260926f"></script>
+  <script src="assets/js/core/auth.js?v=20260926f"></script>
+  <script src="assets/js/core/store-supabase.js?v=20260926f"></script>
+  <script src="assets/js/core/theme.js?v=20260926f"></script>
+  <script src="assets/js/core/nav.js?v=20260926f"></script>
+  <script src="assets/js/core/mockData.js?v=20260926f"></script>
+  <script src="assets/js/core/dataService.js?v=20260926f"></script>
+  <script src="assets/js/core/costGuard.js?v=20260926f"></script>
+  <script src="assets/js/core/numInput.js?v=20260926f"></script>
+  <script src="assets/js/pages/vang.js?v=20260926f"></script>
 </body>
 </html>

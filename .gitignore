@@ -4,5 +4,3 @@ server/.env
 .DS_Store
 *.log
 
-# Local pre-redesign CSS backup — never commit
-style.css.pre-glass.bak
