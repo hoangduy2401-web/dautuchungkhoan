@@ -5,6 +5,22 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**16/08/2026 (phiên 13) — trang tổng đọc tài khoản SSI thật + quy hoạch lại bố cục.**
+Bump `?v=20260816k` → **`?v=20260816m`** (2 lần). **KHÔNG đụng `server/`.**
+
+- **Trang tổng đọc danh mục THẬT SSI** (`networth.js`), không phải danh mục tay.
+  User báo "đồng bộ SSI mà trang tổng không thấy" — vì hai nguồn tách biệt cho
+  cùng tài sản (danh mục thật `/api/account/portfolio` KHÔNG lưu Store; danh mục
+  tay `tx_stock`). User chốt: ưu tiên SSI thật. Chi tiết + đơn vị ở mục 8.
+- **Đây là lần đầu bẫy ĐẾM TRÙNG (ghi sẵn cho GĐ 7 Binance) gặp thật.** Cùng bản
+  chất: hai nguồn cho một tài sản, không cộng cả hai. Khi làm Binance theo đúng
+  khuôn `stockFromSSI`/`stockFromManual`.
+- **Quy hoạch lại trang tổng** (user báo "bừa"): Tổng tài sản LÊN ĐẦU, rồi Dòng
+  tiền, rồi accordion "Tài khoản & công cụ dữ liệu" ở cuối gom 4 panel nền (đăng
+  nhập, khoá mã, sao lưu, chuyển dữ liệu). `migrate.js` là công cụ dùng-một-lần
+  của GĐ 5.8 đã xong việc; `backup.js` dùng định kỳ — cả hai không cần chình ình
+  trên trang chính nữa. Accordion mở sẵn khi chưa đăng nhập, đóng khi đã.
+
 **16/08/2026 (phiên 12) — 3 việc treo của trang Chứng khoán: XONG HẾT.**
 Bump `?v=20260816g` → **`?v=20260816k`** (4 lần trong phiên). **KHÔNG đụng
 `server/`** — cả 3 việc tính được từ dữ liệu đã có.

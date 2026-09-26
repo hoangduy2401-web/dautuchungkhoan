@@ -23,7 +23,8 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260817c`** (77 chỗ trong 6 file HTML).
+Cache busting hiện **`?v=20260926g`** (107 chỗ trong 6 file HTML). Bump bằng
+**`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
 
@@ -51,6 +52,10 @@ danh mục SSI thật (chỉ đọc), lịch sử giao dịch cá nhân tính l�
   ↔ `server`).
 - **Sửa JS/CSS xong PHẢI bump `?v=YYYYMMDD<chữ>` ở MỌI trang HTML dùng file đó**,
   không thì user chạy code cũ tới 10 phút do cache GitHub Pages. Xem mục 4.
+  Dùng **`bash scripts/bump-v.sh`**: đổi cả 6 trang một lượt (cùng ngày → chữ kế
+  tiếp, ngày mới → `<ngày>a`), từ chối chạy nếu các trang đang lệch nhau.
+  Kiểm bản live sau deploy nhớ thêm `?fresh=x` vào URL — chính HTML cũng bị
+  trình duyệt cache 10 phút, nên nạp lại thường vẫn chạy `?v=` cũ.
 - **Server chỉ có một bản duy nhất: `server/index.js`.** Sửa xong là xong, KHÔNG
   copy đi đâu cả. (Luật `cp server/index.js index.js` cũ đã bị xoá 31/07 — xem mục 4.)
 - **KHÔNG commit `server/.env`** hay credentials nào. `.gitignore` đã chặn.
@@ -148,9 +153,28 @@ Cây thư mục: `ls` là ra. Chỉ ghi ở đây những thứ nhìn cây thư 
 
 **Thứ tự nạp script (đừng đổi):**
 lightweight-charts → **supabase-js** → `config.js` → `store.js` → `auth.js` →
-`store-supabase.js` → `theme.js` → `nav.js` → `mockData.js` → `dataService.js` →
-`costGuard.js` → `portfolio.js` → `signals.js` → `chartModule.js` →
-`pages/<trang>.js`
+`store-supabase.js` → `theme.js` → `nav.js` → **`motion.js`** → `mockData.js` →
+`dataService.js` → `costGuard.js` → `portfolio.js` → `signals.js` →
+`chartModule.js` → **`numInput.js`** → `pages/<trang>.js`
+
+Hai thư viện unpkg có **`integrity` (SRI)**. Đổi phiên bản thư viện = PHẢI tính
+lại hash, không thì trình duyệt chặn và cả trang chết:
+`curl -sL URL | openssl dgst -sha384 -binary | openssl base64 -A`
+
+**Hai module dùng chung mới (26/09):**
+- `core/motion.js` — mọi animation. Chỉ đổi cách HIỆN, không đổi con số; tắt
+  hết khi hệ điều hành bật "giảm chuyển động". Hàng mới trượt vào tự động qua
+  MutationObserver cho hàng có `[data-hid]` hoặc `.watch-item[data-symbol]` —
+  bảng danh mục mới chỉ cần gắn `data-hid`. **Đừng gắn animation vào thứ vẽ
+  lại mỗi 45s** (thẻ chỉ số, dải giá…) bằng CSS thường — nó sẽ chạy lại mỗi
+  chu kỳ; dùng `Motion.flash()` (chỉ nháy khi giá trị đổi) hoặc cờ "chỉ lần
+  đầu" như `growBreadthOnce()`.
+- `core/numInput.js` — ô nhập số tự chèn dấu chấm nghìn khi gõ. Ô mới chỉ cần
+  `data-num="int"` (tiền VND, số cổ phiếu) hoặc `data-num="dec"` (số lượng,
+  lãi suất, giá). Chuỗi định dạng kiểu Việt `1.234.567,5` là thứ mọi
+  `parseAmount()` đã đọc được. **Code tự điền vào ô `dec` phải ghi kiểu Việt**
+  (`NumInput.formatNumber(v, "dec")`), KHÔNG ghi `String(5.9)` — sửa tiếp "5.9"
+  sẽ bị đọc thành 595 (đã dính ở ô lãi suất tiết kiệm).
 
 `store.js` phải đứng trước `nav.js` và `portfolio.js` — cả hai gọi `Store`.
 supabase-js phải đứng trước `auth.js` — `auth.js` đọc `window.supabase`.
@@ -221,11 +245,27 @@ GET /api/price/indices
 GET /api/price/quote?symbol=X
 → { price, changePct, volume, netForeignVal }
 
+GET /api/price/quotes?symbols=A,B,…     (gom lô, tối đa 60 mã — từ 26/09)
+→ { quotes: { A: <y hệt /quote> }, errors: { X: "msg" }, asOf: ISO }
+   asOf = lúc SSI THẬT SỰ được đọc cho quote CŨ NHẤT trong lô (cache
+   stale-while-revalidate có thể trả bản cũ vài phút). UI in "Giá SSI đọc lúc".
+   Mã lỗi thì vắng khỏi `quotes`, không bao giờ thành 0.
+
+GET /api/price/closes?symbols=A,B&days=40   (sparkline, tối đa 20 mã)
+→ { closes: { A: [c1, c2, …] }, errors }     dùng chung cache với /history
+
+GET /api/marketcaps?symbols=A,B,…           (VNDirect, MỘT lần gọi cả rổ)
+→ { source:"VNDirect", asOf:"YYYY-MM-DD", items: { A: 121.3 } }  nghìn tỷ ₫
+   asOf = reportDate CŨ NHẤT trong các dòng. Mã vắng = VNDirect không có số.
+
 GET /api/fundamentals/:symbol
 → { marketCap, pe, pb, eps, roe, roa, dividendYield, revenueYoY, netProfitYoY, debtToEquity }
 
-GET /api/news?symbols=A,B,C
-→ [{ symbol, title, source, time (ISO), url }, ...]
+GET /api/news?symbols=A,B,C             (tối đa 10 mã; CafeF RSS + VNDirect)
+→ [{ symbol, title, source, time (ISO), url }, ...]   tối đa 60, mới nhất trước
+   source = nơi đăng thật (HOSE, Tạp chí Công Thương, VNDirect, CafeF…).
+   time của VNDirect gắn +07:00; mốc 00:00–00:09 là giờ NHẬP, không phải giờ
+   đăng — UI hiện ngày thay vì "N giờ trước" (xem mục 7).
 
 GET /api/fx/rates                       (Vietcombank — BÁN LẺ, có biên mua-bán)
 → { updatedAt (ISO +07:00), source:"Vietcombank", kind:"retail",
@@ -279,6 +319,11 @@ GET /api/savings/rates                  (CafeF — file JSON tĩnh trên CDN)
 vĩnh viễn** (đo 05/08: liên ngân hàng 26.259 vs VCB mua 26.050 / bán 26.460).
 Mọi chỗ hiển thị phải ghi nhãn nguồn — xem mục 7.
 
+**Header cache trình duyệt** (`cacheFor()` trong server): chỉ cho dữ liệu chậm
+đổi — fundamentals/events 1h, fx/history 30', savings + crypto/history 10',
+marketcaps 1h; chỉ gắn khi thành công. **Giá/chỉ số/quote CỐ Ý không có** —
+quote nằm trong cache trình duyệt sẽ hiện giá cũ như giá hiện tại.
+
 Còn vài endpoint `/api/debug/*` chỉ để dò format SSI, không dùng ở frontend —
 `grep "api/debug" server/index.js` là ra đủ.
 
@@ -320,9 +365,17 @@ Chuyển mock → thật: sửa `config.js` (`USE_MOCK: false` + baseUrl trỏ
 **đo thật ngày 30/07/2026 thấy các lần chạy cách nhau 56–191 phút** (xem mục 7).
 GitHub bóp cron trên runner free rất nặng.
 
-→ Nguồn giữ thức chính là **pinger ngoài** (cron-job.org), 5 phút/lần, URL
-`https://dashboard-chung-khoan.onrender.com/health`. Workflow GitHub giữ làm lớp
-dự phòng, không xoá.
+→ Nguồn giữ thức chính là **pinger ngoài**, URL
+`https://dashboard-chung-khoan.onrender.com/health`:
+- **UptimeRobot 5 phút** (user thêm 26/09) — nguồn chính.
+- **cron-job.org** — khuyên để **10 phút** làm dự phòng (≤10 để một mình nó vẫn
+  giữ thức nếu UptimeRobot chết; >15 là vô dụng). User chưa xác nhận đã đổi.
+- Workflow GitHub giữ làm lớp thứ ba, không xoá.
+
+**Đo 26/09/2026 16:30 (trước khi có UptimeRobot): backend ĐANG NGỦ** —
+`/health` 22,5s, `uptimeSec: 21`. Pinger cron-job.org khi đó không giữ được.
+Ping dày KHÔNG tốn giờ free của Render (tính theo giờ thức, ~744h/tháng cho 1
+dịch vụ luôn thức, hạn mức 750h **chung cho mọi dịch vụ free của tài khoản**).
 
 **Cạm bẫy đã dính:** job đầu tiên đặt URL `http://` → Render trả **301 do lớp
 edge Cloudflare**, request chưa từng chạm tới app, instance vẫn ngủ. Job vẫn báo
@@ -347,6 +400,59 @@ Actions bấm *Enable workflow*.
 
 - Regex `\b` **không hoạt động với tiếng Việt** → dùng lookaround Unicode
   `(?<![\p{L}\p{N}])SYM(?![\p{L}\p{N}])` với cờ `u`.
+
+### Ngưỡng chênh lệch mua–bán vàng phải RIÊNG TỪNG LOẠI, không phải 5% chung (26/09/2026)
+
+**Triệu chứng.** Không ai báo — tìm ra khi soát lại bằng dữ liệu. Ngưỡng 5% đặt
+06/08 từ đúng một lần đo, ghi "mốc tạm".
+
+**Số đo:** 43 ngày `price_snapshots` (15/08–26/09), chênh lệch = (bán−mua)/bán:
+miếng SJC 1,99–2,10% · nhẫn/Kim Bảo/Phúc Lộc Tài 1,99–2,50% · nữ trang 999.9
+3,34–3,53% · 22K 4,53–4,78% · 18K 8,83–9,32% · 8K 19,89–21,00%. Mỗi loại dao
+động rất hẹp quanh mức CỐ ĐỊNH của nó.
+
+**Vì sao 5% sai cả hai chiều:** vàng tuổi thấp ngày nào cũng >5% → ▲ thường
+trực, thành nhiễu; vàng miếng/nhẫn chưa từng chạm 5% → cảnh báo không bao giờ
+bật đúng chỗ cần.
+
+**Cách sửa.** `vang.js`: ▲ khi chênh lệch hôm nay > **trung vị của chính loại
+đó + max(0,5 điểm %, 3×MAD)**, lịch sử đọc thẳng `price_snapshots` qua REST
+(publishable key, bảng ai đọc cũng được). Cần ≥10 ngày; thiếu thì lùi về 5% và
+chú thích nói rõ. **Đừng quay lại ngưỡng chung.** Hôm 26/09 không loại nào
+vượt ngưỡng riêng.
+
+### Tin tức theo mã: RSS chỉ khớp khi tiêu đề ghi đúng mã (26/09/2026)
+
+**Triệu chứng.** `/api/news?symbols=FPT,VNM,HPG,SSI,VCB` trả `[]`. Nguồn chạy
+tốt (2 feed CafeF × 50 bài) — chỉ là tiêu đề RSS hiếm khi viết mã CK; 6 mã thử
+chỉ MWG khớp.
+
+**Cách sửa.** Gộp thêm **VNDirect `/v4/news?q=tagCodes:SYM`** (cùng host
+`api-finfo` với fundamentals/events, đã đo gọi được từ Render). 10 tin/mã,
+cache 15', lọc trùng theo tiêu đề. **Đo từ Render: 5 mã từ 0 → 49 tin**
+(HOSE 25, Tạp chí Công Thương 20, VNDirect 4).
+
+**Bẫy giờ đăng:** tin Tạp chí Công Thương mang giờ `00:00:24`, `00:00:37`… —
+giờ VNDirect NHẬP hàng loạt lúc nửa đêm, không phải giờ đăng. Hiện "17 giờ
+trước" là bịa giờ → UI coi mốc 00:00–00:09 là "chỉ có ngày".
+
+### Đo hiệu năng bằng trình duyệt nhúng: pane BỊ ẨN làm sai số FCP (26/09/2026)
+
+Báo cáo rà soát đầu phiên ghi "chữ đầu tiên hiện lúc 3,34s" — **SAI**:
+`document.visibilityState` lúc đó là `hidden` (pane trình duyệt của Claude bị
+ẩn), trình duyệt hoãn vẽ nên FCP/LCP vô nghĩa. **CLS và thời gian request vẫn
+tin được.** Muốn đo CLS khi máy chủ chậm: tạo trang tạm chèn đoạn bọc `fetch`
+trễ 4–8s cho URL `onrender` vào đầu `<head>` + `PerformanceObserver`
+(`layout-shift`, `buffered: true`) — cách này bắt được nguồn giật (CLS 0,387 →
+0,010 sau khi giữ chỗ).
+
+**Đã loại trừ:** thêm `compression` (gzip) vào Express KHÔNG tăng tốc bản live —
+lớp Cloudflare trước Render vốn đã nén brotli (`content-encoding: br`). Chỉ có
+lợi khi chạy local. Giữ vì vô hại.
+**Cũng đã cân nhắc và KHÔNG làm:** bỏ `mockData.js` (nó chứa `COMPANY_INFO` cho
+tên công ty + mock dự phòng fundamentals/news); `defer` script (script vốn ở
+cuối `<body>`, lợi ~0 mà đụng thứ tự nạp đã chốt); nạp `supabase-js` muộn (phải
+viết lại `auth.js` — cần user quyết).
 
 ### SSI trả giá THÔ trên chart, cột "adjusted" vô dụng — tự làm điều chỉnh cổ tức (17/08/2026)
 
@@ -660,17 +766,24 @@ thử `minMove: 1000`) — giới hạn nằm ở độ lớn giá trị, không
 vị lên nhãn. `pages/coin.js` có `chartScaleFor()`: đưa mọi chuỗi về dưới 1e5 với
 bậc đẹp (1 / nghìn / triệu) và in "trục biểu đồ: triệu ₫" cạnh tiêu đề.
 
-**2. Lần vẽ ĐẦU TIÊN sau khi tải trang.** Ngay cả khi đã chia bậc, lần
-`setData` đầu vẫn không hiện đường; gọi lại **đúng hàm vẽ đó** khi trang đã ổn
-định thì bình thường. **Đã thử và KHÔNG phải nguyên nhân** (đừng thử lại):
-`priceFormat.minMove`; nạp bảng giá trước rồi mới vẽ (tuần tự thay `Promise.all`);
-chờ 2 khung hình (`requestAnimationFrame` lồng nhau); dựng chart lười ngay trước
-lần vẽ đầu. **Căn nguyên vẫn chưa rõ.** Cách duy nhất đã kiểm chứng là chạy: vẽ
-lại một lần sau 400ms — `coin.js` có khối `firstDrawDone` kèm ghi chú
-"đừng xoá".
+**2. Hai điểm CÙNG NGÀY — ĐÃ TÌM RA CĂN NGUYÊN 26/09/2026.** Lỗi "lần vẽ đầu
+không hiện đường" ở trang Coin (treo từ 07/08, vá tạm bằng vẽ lại sau 400ms)
+thực ra là **dữ liệu trùng ngày**: CoinGecko `market_chart?interval=daily` trả
+điểm 00:00 hôm nay + một điểm "giá hiện tại" CÙNG NGÀY. Lightweight Charts ném
+`Value is null` trong vòng vẽ (bất đồng bộ, không ở `setData`) và BỎ đường giá,
+còn MA10/MA20 vẫn vẽ — khớp đúng triệu chứng cũ.
+- **Đo cả hai chiều:** nạp chuỗi 91 điểm có 1 ngày trùng → mất đường giá, MA
+  còn, console `Value is null`. Lọc trùng + gỡ bản vá 400ms → đường hiện ngay
+  lần đầu.
+- **Vì sao 07/08 không ai thấy lỗi console:** lỗi ném trong vòng render của
+  thư viện, dễ lẫn; và 5 "thử và không phải nguyên nhân" hồi đó (minMove, chờ
+  2 khung hình, tuần tự nạp, dựng lười, chia bậc) đều đúng là không phải.
+- **Đã sửa hai lớp:** server giữ 1 điểm/ngày (điểm cuối), `coin.js` lọc lại lần
+  nữa. Production đang chạy Binance (không trùng) nên lỗi này ẩn cho tới khi
+  CoinGecko hết chặn IP Render. **Luật chung: mọi chuỗi đưa vào chart phải duy
+  nhất theo ngày.**
 
-Trang chứng khoán và ngoại tệ không dính lỗi 2 (đã kiểm lại 07/08), nên đừng
-thêm cách vá đó vào chúng khi chưa thấy triệu chứng.
+Trang chứng khoán và ngoại tệ không dính (nguồn SSI/FXRatesAPI một điểm/ngày).
 
 ### CoinGecko chặn IP Render — nguồn chạy ở máy local không có nghĩa là chạy ở production (07/08/2026)
 
@@ -793,10 +906,10 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260817c`. Nhánh `main` sạch, đã push (commit `a254ddf`),
-backend deploy lại 17/08 (đụng `server/` — chart back-adjust cổ tức + endpoint
-`/api/events`). **Sau deploy nhớ kiểm `/api/events/SSI` trả 12 sự kiện và
-`/api/price/quote?symbol=SSI` ra ~+1% chứ không -19%.**
+Cache busting `?v=20260926g`. Nhánh `main` sạch, đã push (commit `13d3467`),
+backend deploy lại 26/09 (endpoint gom lô, tin VNDirect, lọc trùng ngày coin,
+header cache). Bản live đã kiểm sau deploy: 9 request lúc tải trang Chứng
+khoán, CLS 0,004, 0 lỗi console.
 
 **Dữ liệu đọc từ Supabase** (`STORE_ENABLED: true` từ 15/08). Mỗi thiết bị đăng
 nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm đường lui — chưa xoá.
@@ -813,10 +926,10 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Chart chỉ số** | SSI `DailyIndex` | bấm thẻ chỉ số = vẽ **đường** (không có OHLC); 5 ô thống kê toàn sàn |
 | Chart khung thời gian | — | 1M / 3M / 6M / 1Y / 5Y (30/90/180/365/1825 ngày) |
 | Ticker tape | rổ VN30 | tách khỏi watchlist; backend warm cả 30 mã |
-| Bản đồ nhiệt VN30 | quote đã warm | 30 ô alpha tint, có vòng accent cho mã đang chọn; chưa sizing theo vốn hóa |
+| Bản đồ nhiệt VN30 | quote đã warm + `/api/marketcaps` | **treemap diện tích theo vốn hoá** (26/09); thiếu vốn hoá mã nào → về ô bằng nhau, có chú thích |
 | Theo ngành / Top tăng-giảm / Khối ngoại / Tín hiệu | quote + history | 5 tab, thuần client-side |
 | Chỉ số cơ bản (10 ô) | VNDirect finfo | ratios + tự tính YoY & nợ/VCSH |
-| Tin tức theo mã | CafeF RSS | đã sửa regex tiếng Việt |
+| Tin tức theo mã | CafeF RSS + **VNDirect theo mã** | tối đa 3 tin/mã ở lượt đầu; tin cũ hiện ngày (mục 7) |
 | Watchlist | **`Store`** (driver localStorage) | kéo thả sắp xếp, sparkline SVG |
 | Lịch sử giao dịch tay | **`Store`** (driver localStorage) | giá vốn bình quân gia quyền |
 | Danh mục thật SSI (chỉ đọc) | SSI FCTrading | GĐ1, xem mục 8. **Trang tổng cũng đọc nguồn này** (ưu tiên hơn danh mục tay) |
@@ -843,9 +956,43 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Khoá mã 6 số** | `nav.js` + `settings` | chỉ hỏi mã khi HIỆN số; **không phải bảo mật thật** — mục 7 |
 | **Momentum Score A–F** | `signals.js` `momentum` | tab Tín hiệu, cột "Đà"; phân vị TRONG RỔ, không phải ngưỡng tuyệt đối |
 | **Đột biến khối lượng** | `signals.js` `volSpike` | tab Giá–KL; KL phiên cuối ≥2× TB 20 phiên; tách giá lên/xuống |
-| **Snapshot giá hàng ngày** | job trong `server/index.js` | ghi `price_snapshots` mỗi giờ, upsert 1 hàng/ngày/loại; cần `SUPABASE_SECRET_KEY` trong env Render |
+| **Snapshot giá hàng ngày** | job trong `server/index.js` | ghi `price_snapshots` mỗi giờ, upsert 1 hàng/ngày/loại; cần `SUPABASE_SECRET_KEY` trong env Render. **Trang Vàng đọc bảng này** để tính ngưỡng chênh lệch riêng từng loại |
+| **Gọi API theo lô** | `/quotes`, `/closes` | 1 request cho cả dải giá + watchlist; 404 (Render còn bản cũ) → tự lùi về gọi từng mã |
+| **Nhịp làm mới** | `chung-khoan.js` | 45s trong giờ (08:45–15:15 T2–T6), 10' ngoài giờ, **dừng khi tab ẩn**; ngày lễ nhận từ `tradingDate` |
+| **Số liệu lần trước khi máy chủ ngủ** | localStorage `vn_dashboard_market_snapshot_v1` | vẽ ngay, làm mờ, nhãn "Số liệu lưu lần trước (SSI hh:mm)"; cache thị trường, KHÔNG phải dữ liệu user nên không đi qua Store |
+| **Nhãn thời điểm giá** | `asOf` của `/quotes` | "Giá SSI đọc lúc …" dưới đồng hồ; cam "trễ N phút" khi trong giờ mà cũ ≥3' |
+| **Ô nhập số** | `numInput.js` | chấm nghìn tự động, 25 ô / 6 trang (mục 4) |
+| **Animation** | `motion.js` | nháy giá, shimmer, số chạy, hàng trượt vào, toast… (mục 4) |
+| **Ảnh xem trước link** | `assets/og-image.png` | OG + description cả 6 trang; ảnh không có con số nào |
 
 ### Nhật ký theo phiên
+
+**26/09/2026 (phiên 15) — rà soát toàn hệ thống: 4 giai đoạn tốc độ + độ chính xác + animation.**
+Bump `?v=20260817c` → **`?v=20260926g`** (7 lần, lần cuối qua `scripts/bump-v.sh`).
+**ĐỤNG `server/`** 3 lần — Render deploy lại, đã kiểm live. 11 commit
+`0a64999`…`13d3467`.
+
+- **GĐ1 (CLS + gọi trùng):** thẻ giữ chỗ cho dải chỉ số + panel Tổng quan vẽ
+  khung sẵn → CLS 0,387 → 0,010 (desktop) / 0,007 (375px), đo với backend giả
+  lập chậm 4s. `ensureOvHistory` dùng chung promise → `index-history` 2 → 1 lần.
+- **GĐ2 (tốc độ):** endpoint `/quotes`, `/closes`, `/marketcaps` (mục 5);
+  request lúc tải trang Chứng khoán **43 → 9**; dừng làm mới khi tab ẩn, 10'
+  ngoài giờ; nhãn "Giá SSI đọc lúc"; treemap vốn hoá (nợ từ tháng 8, xong);
+  preconnect; trang tổng hỏi giá danh mục tay theo lô.
+- **Chen ngang theo yêu cầu user:** lỗi coin trùng ngày (mục 7 — cũng là căn
+  nguyên lỗi "lần vẽ đầu" treo từ 07/08); **ô nhập số tự chấm nghìn** (`numInput.js`).
+- **GĐ3 (độ chính xác):** tin VNDirect theo mã (0 → 49 tin); số liệu lần trước
+  khi máy chủ ngủ; ngày lễ theo `tradingDate`; ngưỡng chênh lệch vàng riêng
+  từng loại (mục 7); `QUYHOACH.md` sửa 7 → 9 bảng.
+- **GĐ4 (dọn):** SRI cho 2 thư viện CDN; OG + description; `scripts/bump-v.sh`;
+  xoá `server/temp`, `style.css.pre-glass.bak`, worktree `amazing-kalam`.
+- **Animation:** `motion.js` + khối MOTION cuối `base.css` (mục 4).
+- File: `server/index.js` + `package.json` (thêm `compression`),
+  `core/{dataService,networth,chartModule,nav,theme,motion,numInput}.js`,
+  cả 6 `pages/*.js`, `base.css`, `chung-khoan.css`, 6 HTML, `.gitignore`,
+  `docs/QUYHOACH.md`, `scripts/bump-v.sh`, `assets/og-image.png` + favicon.
+- Commit `d83d6eb` (bố cục 3 cột, 23/08) có từ trước phiên này, chưa được ghi
+  handoff — nó đã nằm trong bản live.
 
 **17/08/2026 (phiên 14) — chart điều chỉnh cổ tức + tab lịch cổ tức.**
 Bump `?v=20260816m` → **`?v=20260817a`** (1 lần, 77 chỗ). **ĐỤNG `server/`** —
@@ -865,33 +1012,38 @@ Render deploy lại. Commit `a254ddf`.
   19,8 hôm nay); rights 08/12/2025 giữ nguyên (không adjust). Verify trên browser
   local: chart liền mạch, tab đủ 12 sự kiện.
 
-**16/08/2026 (phiên 13) — trang tổng đọc tài khoản SSI thật + quy hoạch lại bố cục.**
-Bump `?v=20260816k` → **`?v=20260816m`** (2 lần). **KHÔNG đụng `server/`.**
-
-- **Trang tổng đọc danh mục THẬT SSI** (`networth.js`), không phải danh mục tay.
-  User báo "đồng bộ SSI mà trang tổng không thấy" — vì hai nguồn tách biệt cho
-  cùng tài sản (danh mục thật `/api/account/portfolio` KHÔNG lưu Store; danh mục
-  tay `tx_stock`). User chốt: ưu tiên SSI thật. Chi tiết + đơn vị ở mục 8.
-- **Đây là lần đầu bẫy ĐẾM TRÙNG (ghi sẵn cho GĐ 7 Binance) gặp thật.** Cùng bản
-  chất: hai nguồn cho một tài sản, không cộng cả hai. Khi làm Binance theo đúng
-  khuôn `stockFromSSI`/`stockFromManual`.
-- **Quy hoạch lại trang tổng** (user báo "bừa"): Tổng tài sản LÊN ĐẦU, rồi Dòng
-  tiền, rồi accordion "Tài khoản & công cụ dữ liệu" ở cuối gom 4 panel nền (đăng
-  nhập, khoá mã, sao lưu, chuyển dữ liệu). `migrate.js` là công cụ dùng-một-lần
-  của GĐ 5.8 đã xong việc; `backup.js` dùng định kỳ — cả hai không cần chình ình
-  trên trang chính nữa. Accordion mở sẵn khi chưa đăng nhập, đóng khi đã.
-
-Các phiên trước đó (kể cả phiên 12): **`docs/NHATKY.md`**.
+Các phiên trước đó (kể cả phiên 13): **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
 
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
-Cây làm việc sạch, đã push, bản live đã kiểm. **GĐ 6 xong (16/08). Ba việc treo
-của trang Chứng khoán cũng xong (16/08, phiên 12).**
+Cây làm việc sạch, đã push, bản live đã kiểm (26/09). **Checklist rà soát 4
+giai đoạn + animation của phiên 15 đã xong hết.** Quy hoạch chính thức còn đúng
+**GĐ 7** (đang hoãn, xem dưới).
 
-Quy hoạch chính thức còn đúng **GĐ 7** là hết. Nhưng có hai việc nhỏ đáng cân
-nhắc trước, và một quyết định về GĐ 7 cần nhắc lại (xem ngay dưới).
+#### Việc đầu tiên phiên sau — kiểm trong PHIÊN GIAO DỊCH THẬT (T2–T6, 9:20–15:00)
+
+Phiên 15 làm vào thứ Bảy nên mấy thứ chỉ chạy trong giờ giao dịch **chưa được
+thấy chạy thật**:
+1. Nhãn "Giá SSI đọc lúc …" phải KHÔNG có chữ "ngoài giờ giao dịch", và nhịp
+   làm mới là 45s (xem tab Network: `/quotes` cách nhau ~45s).
+2. Ngày lễ theo `tradingDate`: trong phiên, `/api/price/indices` phải trả
+   `tradingDate` = hôm nay. Nếu nó vẫn là ngày hôm trước sau 9:20 thì trang
+   tưởng nghỉ lễ và giãn nhịp xuống 10' — **đó là lỗi**, sửa `isMarketHoursVN()`.
+3. Nháy màu khi giá đổi (`flash-up/-down`) trên thẻ chỉ số/watchlist/heatmap.
+4. "trễ N phút" màu cam chỉ hiện khi quote cũ ≥3' trong giờ.
+
+#### Còn nợ từ phiên 15 (không chặn)
+
+- **Chưa thử "giảm chuyển động"** (reduced motion) trên máy thật — trình duyệt
+  nhúng không giả lập được. Bật trong Cài đặt hệ thống → Trợ năng → Giảm chuyển
+  động, mở trang: không được có gì trượt/nháy.
+- **Animation chưa làm** (cần viết lại lớn): kéo thả watchlist mượt (FLIP),
+  vạch chỉ báo trượt dưới tab (đang chỉ mờ dần), hiệu ứng thu lại khi xoá hàng
+  (hàng bị xoá khỏi DOM ngay).
+- **Nạp `supabase-js` muộn** (~212KB) — phải viết lại `auth.js` vì nó đọc
+  `window.supabase` lúc nạp. **Hỏi user trước**, đổi thứ tự nạp đã chốt.
 
 #### GĐ 7 đã được HOÃN có chủ ý (phiên 12) — đọc trước khi bắt tay
 
@@ -900,15 +1052,6 @@ không có một dòng crypto). GĐ 7 tự động hoá đồng bộ số dư Bi
 chưa từng làm — nên đã hoãn để làm 3 việc trang Chứng khoán trước. **Đừng tự khởi
 động GĐ 7; hỏi user đã mở tài khoản Binance và mua coin chưa.** Khi thật sự cần,
 quy hoạch vẫn nguyên ở `docs/QUYHOACH.md`.
-
-#### Hai việc nhỏ còn nợ, không cần user làm gì
-
-1. **Sizing bản đồ nhiệt VN30 theo vốn hóa** — cần endpoint marketcap ở
-   `server/` (1 endpoint warmed thay 30 call). Việc DUY NHẤT còn lại phải deploy
-   lại Render, nên để dành gộp chung nếu có đợt sửa server khác.
-2. ~~Dọn bài học tháng 7~~ — **ĐÃ LÀM 16/08.** `Format SSI thật` và `Lightweight
-   Charts 4 cạm bẫy` chuyển sạch sang `docs/BAIHOC-CU.md`; `Tín hiệu FiinTrade`
-   giữ con trỏ ở mục 7 (vì tính "đừng sửa lại"), bản đầy đủ ở BAIHOC-CU.
 
 #### Nếu làm GĐ 7: đồng bộ số dư Binance
 
@@ -966,7 +1109,6 @@ hiện hai kết quả khác nhau thì mở nó ra trước, đừng đoán — 
 
 #### Còn nợ nhỏ
 
-- `docs/QUYHOACH.md` vẫn ghi "schema 7 bảng" — thực tế **9**. Sửa khi tiện.
 - Job snapshot: đường **upsert đã chứng minh chạy đúng** (đo 15/08, 7 tiếng rưỡi
   sau lượt đầu: vẫn đúng 3 dòng, `id` không tăng, nhưng `fx` và `savings` mang
   mốc thời gian mới hơn hẳn — tức đè tại chỗ, không nhân dòng). `gold` giữ
@@ -989,13 +1131,10 @@ hiện chỉ tính trong trang của chúng. Trang tổng phải đọc `holding
 (cùng tên `holdRow`, hai bản khác nhau) — khi cần dùng ở hai nơi thì tách sang
 `assets/js/core/`, đừng chép bản thứ ba.
 
-**Cần soát lại khi có dữ liệu nhiều ngày:** ngưỡng cảnh báo chênh lệch mua-bán
-vàng đang để 5%, dựa trên đúng một lần đo (mục 9).
 
-**Còn nợ ở trang Coin:** căn nguyên lỗi "lần vẽ đầu không hiện đường" chưa tìm
-ra, đang vá bằng cách vẽ lại sau 400ms (mục 7). Và bảng ticker nội bộ chỉ ~40
-coin — coin ngoài bảng vẫn thêm được khi CoinGecko trả lời, nhưng ở production
-thì không.
+**Còn nợ ở trang Coin:** bảng ticker nội bộ chỉ ~40 coin — coin ngoài bảng vẫn
+thêm được khi CoinGecko trả lời, nhưng ở production thì không. (Lỗi "lần vẽ đầu
+không hiện đường" ĐÃ tìm ra căn nguyên và sửa 26/09 — mục 7.)
 
 **Đừng "sửa lại cho gọn" sáu chỗ sau của GĐ 5:**
 1. **Hai cờ `AUTH_ENABLED` / `STORE_ENABLED` tách riêng** — không gộp. Đăng nhập
@@ -1044,30 +1183,22 @@ Chi tiết GĐ 6: 6.1 gom định giá ✅ · 6.2 tổng + lãi/lỗ ✅ · 6.3 
 Việc chen ngang đã làm ngoài quy hoạch: reskin Fey (03/08), chart chỉ số
 (04/08), tab Tổng quan thị trường (07/08), theme mặc định Sáng (08/08),
 biểu đồ nhanh gấp 2 + cảnh báo đơn vị giá vốn (15/08), khoá mã 6 số cho nút con
-mắt + dồn nhãn nguồn xuống cuối trang tổng (16/08).
+mắt + dồn nhãn nguồn xuống cuối trang tổng (16/08), rà soát tốc độ + độ chính
+xác + animation 4 giai đoạn (26/09, phiên 15).
 
 ### Tính năng chứng khoán — 3 việc treo ĐÃ XONG (16/08, phiên 12)
 1. ✅ Theo dõi dòng tiền — `volSpike()` bắt đột biến KL ≥2× TB 20 phiên, tab
-   Giá–KL. **Chỉ còn nợ sizing heatmap theo vốn hóa** — phần DUY NHẤT cần
-   `server/` (endpoint marketcap VN30 warmed thay 30 call). Để phiên sau hoặc
-   gộp vào đợt sửa server khác.
+   Giá–KL. Sizing heatmap theo vốn hoá: **xong 26/09** (treemap + `/api/marketcaps`).
 2. ✅ Momentum Score A–F — `signals.js` `momentum` + `grader`, tab Tín hiệu.
 3. ✅ Mã thiếu quote không còn định giá bằng giá vốn — xem mục 7 (SSI giá 0).
 
 ### Việc nhỏ (không chặn) — user tự làm
 1. **Bật tự động gia hạn tên miền ở Mắt Bão** (quên = dashboard chết, không ai báo).
-2. **Enforce HTTPS — ĐANG LÀM DỞ, ưu tiên cao nhất.** Đây là thứ đã ăn mất gần
-   một buổi ngày 15/08 (mục 7). Đã có lớp vá `forceHttps()` trong `config.js`
-   nhưng lớp sửa thật gồm hai bước, **user tự làm**:
-   1. Vào DNS ở **Mắt Bão**, tên miền `dashboardstock.io.vn`, thêm **3 bản ghi A**
-      còn thiếu cho tên gốc `@`: `185.199.109.153`, `185.199.110.153`,
-      `185.199.111.153`. Giữ nguyên bản ghi `185.199.108.153` đang có và CNAME
-      `www`. Chờ 15–60 phút.
-   2. GitHub → repo → **Settings → Pages** → chờ ô **Enforce HTTPS** hết mờ rồi
-      tích vào. Trước khi đủ 4 IP thì ô này bị khoá.
-
-   Kiểm bằng: `dig +short dashboardstock.io.vn A` phải ra đủ 4 dòng, và
-   `curl -sI http://dashboardstock.io.vn` phải trả 301 thay vì 200.
+2. **Pinger giữ backend thức** — user đã thêm UptimeRobot 5' (26/09). Còn:
+   vào **cron-job.org** đổi job thành **10 phút**, URL phải là
+   `https://dashboard-chung-khoan.onrender.com/health` (bắt buộc `https://`).
+   Kiểm sau ~1 ngày: mở `/health`, `uptimeSec` > 86.400 là không ngủ lần nào.
+   (Mục Enforce HTTPS cũ ở đây đã XONG từ 15/08 — xem mục 6.)
 3. GitHub tự tắt scheduled workflow sau 60 ngày repo không commit → tab Actions
    bấm *Enable workflow* khi cần.
 
