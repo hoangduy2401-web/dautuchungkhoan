@@ -257,6 +257,7 @@ function wireTable() {
   document.getElementById("coinTableBody").addEventListener("click", async (e) => {
     const del = e.target.closest("[data-del]");
     if (del) {
+      await Motion.leave(del.closest("tr"));
       coinState.watch = coinState.watch.filter((id) => id !== del.dataset.del);
       coinState.items = coinState.items.filter((c) => c.id !== del.dataset.del);
       if (coinState.selected === del.dataset.del) {
@@ -739,6 +740,7 @@ function wireHoldings() {
         return;
       }
       coinState.confirmDeleteId = null;
+      await Motion.leave(btn.closest("tr")); // slide the row out, then delete
       await Store.remove(HOLDINGS_COLLECTION, rowId);
       await reloadHoldings();
     }

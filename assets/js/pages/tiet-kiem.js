@@ -601,6 +601,7 @@ function wireBooks() {
         return;
       }
       svState.confirmDeleteId = null;
+      await Motion.leave(btn.closest("tr")); // slide the row out, then delete
       await Store.remove(BOOKS_COLLECTION, id);
       svState.books = await Store.list(BOOKS_COLLECTION);
       renderBooks();

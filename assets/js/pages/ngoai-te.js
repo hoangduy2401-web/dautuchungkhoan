@@ -671,6 +671,7 @@ function wireHoldings() {
         return;
       }
       fxState.confirmDeleteId = null;
+      await Motion.leave(btn.closest("tr")); // slide the row out, then delete
       await Store.remove(HOLDINGS_COLLECTION, id);
       fxState.holdings = await Store.list(HOLDINGS_COLLECTION);
       renderHoldings();

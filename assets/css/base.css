@@ -948,6 +948,26 @@ details[open] > :not(summary) { animation: motion-fade-in 220ms var(--ease-stand
     border-color 300ms var(--ease-standard), fill 300ms var(--ease-standard) !important;
 }
 
+/* Hàng bị xoá: trượt ra + mờ trước khi rời DOM (motion.js `leave`). */
+@keyframes motion-row-leave { to { opacity: 0; transform: translateX(14px); } }
+/* !important: a leaving row may still carry an enter animation (e.g. the
+   list was expanded a moment ago) and the leave must win. */
+.row-leave { animation: motion-row-leave 200ms var(--ease-standard) forwards !important; pointer-events: none; }
+
+/* Vạch nền trượt dưới tab đang chọn (motion.js gắn .has-ink + .tab-ink).
+   Nút đang chọn trong suốt, "viên thuốc" phía sau trượt tới nút mới. */
+.has-ink { position: relative; }
+.has-ink > button { position: relative; z-index: 1; }
+.has-ink > button.active, .has-ink > button.on,
+.has-ink > button.active:hover, .has-ink > button.on:hover { background: transparent; }
+.tab-ink {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
+  border-radius: var(--radius-sm); background: var(--surface-pill-active);
+  transition: transform 260ms var(--ease-out), width 260ms var(--ease-out),
+    height 260ms var(--ease-out), opacity 150ms var(--ease-standard);
+}
+.segmented > .tab-ink { background: var(--accent-orange); border-radius: 6px; }
+
 /* Toast xác nhận "Đã lưu". */
 .toast-host {
   position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);

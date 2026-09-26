@@ -930,7 +930,7 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | Theo ngành / Top tăng-giảm / Khối ngoại / Tín hiệu | quote + history | 5 tab, thuần client-side |
 | Chỉ số cơ bản (10 ô) | VNDirect finfo | ratios + tự tính YoY & nợ/VCSH |
 | Tin tức theo mã | CafeF RSS + **VNDirect theo mã** | tối đa 3 tin/mã ở lượt đầu; tin cũ hiện ngày (mục 7) |
-| Watchlist | **`Store`** (driver localStorage) | kéo thả sắp xếp, sparkline SVG |
+| Watchlist | **`Store`** (driver localStorage) | kéo thả sắp xếp, sparkline SVG. **KHÔNG giới hạn số mã** (bỏ trần 5 ngày 26/09 theo yêu cầu user); hiện 5 mã, nút "Xem thêm N mã" mở rộng trong khung cuộn cao tối đa 460px để giữ bố cục cột. Tin tức cùng khuôn (5 tin → mở rộng) |
 | Lịch sử giao dịch tay | **`Store`** (driver localStorage) | giá vốn bình quân gia quyền |
 | Danh mục thật SSI (chỉ đọc) | SSI FCTrading | GĐ1, xem mục 8. **Trang tổng cũng đọc nguồn này** (ưu tiên hơn danh mục tay) |
 | **Bảng tỷ giá** (trang Ngoại tệ) | Vietcombank XML | 20 mã, bán lẻ; ô VCB không niêm yết hiện `—` và luôn xuống cuối khi sắp xếp |
@@ -1039,9 +1039,10 @@ thấy chạy thật**:
 - **Chưa thử "giảm chuyển động"** (reduced motion) trên máy thật — trình duyệt
   nhúng không giả lập được. Bật trong Cài đặt hệ thống → Trợ năng → Giảm chuyển
   động, mở trang: không được có gì trượt/nháy.
-- **Animation chưa làm** (cần viết lại lớn): kéo thả watchlist mượt (FLIP),
-  vạch chỉ báo trượt dưới tab (đang chỉ mờ dần), hiệu ứng thu lại khi xoá hàng
-  (hàng bị xoá khỏi DOM ngay).
+- ~~Animation chưa làm~~ — **xong 26/09 (cùng phiên)**: kéo thả watchlist mượt
+  (`Motion.flip`), vạch nền trượt dưới tab (`.tab-ink`, tự gắn cho
+  `.market-tabs/.range-tabs/.ov-ex/.segmented`), hàng thu lại khi xoá
+  (`await Motion.leave(row)` TRƯỚC khi xoá — làm theo khuôn này cho nút xoá mới).
 - **Nạp `supabase-js` muộn** (~212KB) — phải viết lại `auth.js` vì nó đọc
   `window.supabase` lúc nạp. **Hỏi user trước**, đổi thứ tự nạp đã chốt.
 

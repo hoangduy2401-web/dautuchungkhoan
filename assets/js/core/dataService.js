@@ -215,11 +215,17 @@ const DataService = (function () {
     };
     if (cfg.USE_MOCK) return viaHistory();
     try {
-      const r = await fetchJson(
-        `${cfg.priceProvider.baseUrl}/closes?symbols=${encodeURIComponent(list.join(","))}&days=${days}`,
-        T_BATCH
-      );
-      return r.closes || {};
+      // Backend takes 20 symbols per call; the watchlist is unlimited now.
+      const out = {};
+      for (let i = 0; i < list.length; i += 20) {
+        const chunk = list.slice(i, i + 20);
+        const r = await fetchJson(
+          `${cfg.priceProvider.baseUrl}/closes?symbols=${encodeURIComponent(chunk.join(","))}&days=${days}`,
+          T_BATCH
+        );
+        Object.assign(out, r.closes || {});
+      }
+      return out;
     } catch (err) {
       if (err.status !== 404) throw err;
       return viaHistory();

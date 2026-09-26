@@ -30,10 +30,12 @@ function saveWatchlist() {
 const INDEX_CODES = new Set(["VNINDEX", "VN30", "HNXINDEX", "UPCOM"]);
 const isIndexCode = (s) => INDEX_CODES.has(s);
 
-// Watchlist is capped so a long list never pushes the News panel (stacked right
-// below it) down the page. Existing lists longer than this keep their rows until
-// trimmed — the cap only blocks ADDING beyond it.
-const MAX_WATCHLIST = 5;
+// Watchlist and News show this many rows until the user expands them. NOT a cap
+// on the watchlist any more (the old hard limit of 5 was removed 26/09 at the
+// user's request): the list is unlimited, only the COLLAPSED view is short, so
+// the side column keeps its shape. Expanded lists scroll inside a max-height
+// box (CSS .list-scroll) instead of stretching the page.
+const LIST_PREVIEW = 5;
 
 const state = {
   watchlist: [...APP_CONFIG.DEFAULT_WATCHLIST],
@@ -42,6 +44,9 @@ const state = {
   quotes: {}, // symbol -> {price, changePct, volume}
   sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
+  wlExpanded: false, // watchlist: show all rows (else the first LIST_PREVIEW)
+  newsExpanded: false,
+  newsItems: [], // last /api/news answer, so the toggle re-renders without a fetch
   fromSnapshot: false, // true while the board shows the saved last-good data
   quotesAsOf: null, // ms — when SSI was read for the oldest quote on screen
   quotesGotAt: null, // ms — when the browser received them (fallback label)
@@ -1440,22 +1445,35 @@ async function loadSparklines() {
 }
 
 // Disable the add form and show a hint once the watchlist hits the cap.
-function syncWatchlistCap() {
-  const atCap = state.watchlist.length >= MAX_WATCHLIST;
-  const input = document.getElementById("newSymbol");
-  const btn = document.querySelector("#addSymbolForm button");
-  const hint = document.getElementById("watchlistHint");
-  if (input) input.disabled = atCap;
-  if (btn) btn.disabled = atCap;
-  if (hint) {
-    hint.hidden = !atCap;
-    hint.textContent = `Tối đa ${MAX_WATCHLIST} mã theo dõi. Bỏ bớt một mã rồi thêm.`;
+// "Xem thêm N" / "Thu gọn" under a list. Hidden when there is nothing extra.
+function syncMoreButton(btnId, total, expanded, noun) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const extra = total - LIST_PREVIEW;
+  btn.hidden = extra <= 0;
+  btn.textContent = expanded ? "Thu gọn ▴" : `Xem thêm ${extra} ${noun} ▾`;
+  btn.setAttribute("aria-expanded", String(!!expanded));
+}
+
+// Toggle a list between preview and full. `just-expanded` lets CSS slide the
+// newly revealed rows in ONCE (the list re-renders every 45s; a plain CSS rule
+// would replay the animation each time).
+function toggleList(listEl, key, render) {
+  state[key] = !state[key];
+  render();
+  if (state[key]) {
+    listEl.classList.add("just-expanded");
+    setTimeout(() => listEl.classList.remove("just-expanded"), 450);
+  } else {
+    listEl.scrollTop = 0;
+    listEl.closest(".panel").scrollIntoView({ block: "nearest", behavior: Motion.reduced() ? "auto" : "smooth" });
   }
 }
 
 function renderWatchlist() {
-  syncWatchlistCap();
   const el = document.getElementById("watchlist");
+  el.classList.toggle("collapsed", !state.wlExpanded);
+  syncMoreButton("watchlistMore", state.watchlist.length, state.wlExpanded, "mã");
   if (state.watchlist.length === 0) {
     el.innerHTML = `<div class="empty-state">Chưa có mã theo dõi.<br>Thêm mã ở ô phía trên.</div>`;
     syncIndexCardActive(); // watchlist rỗng vẫn chọn được chỉ số
@@ -1500,9 +1518,10 @@ function renderWatchlist() {
   });
   enableWatchlistDrag(el);
   el.querySelectorAll("[data-remove]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
+    btn.addEventListener("click", async (e) => {
       e.stopPropagation();
       const sym = btn.dataset.remove;
+      await Motion.leave(btn.closest(".watch-item"));
       state.watchlist = state.watchlist.filter((s) => s !== sym);
       if (state.selected === sym) state.selected = state.watchlist[0];
       saveWatchlist();
@@ -1533,12 +1552,19 @@ function enableWatchlistDrag(el) {
   let dragging = null;
   let moved = false;
 
-  const rowAfter = (y) => {
-    const rows = [...el.querySelectorAll(".watch-item:not(.dragging)")];
-    return rows.find((r) => {
+  // Only rows actually on screen are drop targets: in the collapsed view rows
+  // 6+ are display:none (rect 0) and must not swallow the drop.
+  const visibleRows = () => [...el.querySelectorAll(".watch-item:not(.dragging)")].filter((r) => r.offsetParent !== null);
+  const rowAfter = (y) =>
+    visibleRows().find((r) => {
       const b = r.getBoundingClientRect();
       return y < b.top + b.height / 2;
     }) || null;
+  // Below the last visible row: drop right after it, NOT at the very end of the
+  // list (which, collapsed, would hide the row among the unseen ones).
+  const endAnchor = () => {
+    const vis = visibleRows();
+    return vis.length ? vis[vis.length - 1].nextElementSibling : null;
   };
 
   el.querySelectorAll(".drag").forEach((handle) => {
@@ -1553,9 +1579,13 @@ function enableWatchlistDrag(el) {
     handle.addEventListener("pointermove", (e) => {
       if (!dragging) return;
       moved = true;
-      const after = rowAfter(e.clientY);
-      if (after == null) el.appendChild(dragging);
-      else if (after !== dragging) el.insertBefore(dragging, after);
+      const after = rowAfter(e.clientY) || endAnchor();
+      if (after === dragging || dragging.nextElementSibling === after) return;
+      // FLIP: neighbours glide to their new slots instead of jumping.
+      Motion.flip(el, () => {
+        if (after == null) el.appendChild(dragging);
+        else el.insertBefore(dragging, after);
+      });
     });
     const finish = () => {
       if (!dragging) return;
@@ -1572,6 +1602,13 @@ function enableWatchlistDrag(el) {
 }
 
 function wireForms() {
+  document
+    .getElementById("watchlistMore")
+    .addEventListener("click", () => toggleList(document.getElementById("watchlist"), "wlExpanded", renderWatchlist));
+  document
+    .getElementById("newsMore")
+    .addEventListener("click", () => toggleList(document.getElementById("newsList"), "newsExpanded", () => renderNews()));
+
   document.getElementById("addSymbolForm").addEventListener("submit", (e) => {
     e.preventDefault();
     const input = document.getElementById("newSymbol");
@@ -1579,25 +1616,9 @@ function wireForms() {
     input.value = "";
     if (!sym) return;
     if (!state.watchlist.includes(sym)) {
-      // At the cap: don't grow the list (keeps News right beneath it). Select the
-      // symbol so its chart still loads, but leave the watchlist unchanged.
-      if (state.watchlist.length >= MAX_WATCHLIST) {
-        const hint = document.getElementById("watchlistHint");
-        if (hint) {
-          hint.hidden = false;
-          hint.textContent = `Tối đa ${MAX_WATCHLIST} mã theo dõi. Bỏ bớt một mã rồi thêm.`;
-        }
-        state.selected = sym;
-        DataService.getQuote(sym)
-          .then((q) => (state.quotes[sym] = q))
-          .catch(() => {})
-          .finally(() => {
-            renderWatchlist();
-            loadSelectedSymbol();
-          });
-        return;
-      }
       state.watchlist.push(sym);
+      // Added beyond the preview: open the list so the new row is visible.
+      if (state.watchlist.length > LIST_PREVIEW) state.wlExpanded = true;
     }
     state.selected = sym;
     saveWatchlist();
@@ -1705,7 +1726,7 @@ async function loadSelectedSymbol() {
   const [full, fundamentals, news, events] = await Promise.all([
     DataService.getHistory(sym, fetchDays).catch(() => null),
     DataService.getFundamentals(sym),
-    DataService.getNews(state.watchlist),
+    DataService.getNews(state.watchlist.slice(0, 20)), // backend caps at 20 symbols
     DataService.getEvents(sym),
   ]);
 
@@ -1845,35 +1866,43 @@ function newsAge(time) {
   return t.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-// Show 12, but no more than 3 per symbol in the first pass: one ticker with a
-// burst of exchange disclosures would otherwise push every other symbol off.
-function pickNews(items, total = 12, perSymbol = 3) {
-  const picked = [];
-  const count = {};
-  const rest = [];
-  for (const n of items) {
-    if ((count[n.symbol] || 0) < perSymbol && picked.length < total) {
-      picked.push(n);
-      count[n.symbol] = (count[n.symbol] || 0) + 1;
-    } else {
-      rest.push(n);
+// The first LIST_PREVIEW items favour variety: at most one per symbol in the
+// first pass, then filled by recency — one ticker's burst of exchange
+// disclosures must not push every other symbol off the short list. Expanded,
+// the rest follow newest-first BELOW them, so the top items never reorder.
+function orderNews(items) {
+  const byTime = [...items].sort((a, b) => new Date(b.time) - new Date(a.time));
+  const head = [];
+  const seenSym = new Set();
+  for (const n of byTime) {
+    if (head.length >= LIST_PREVIEW) break;
+    if (!seenSym.has(n.symbol)) {
+      head.push(n);
+      seenSym.add(n.symbol);
     }
   }
-  for (const n of rest) if (picked.length < total) picked.push(n);
-  return picked.sort((a, b) => new Date(b.time) - new Date(a.time));
+  for (const n of byTime) if (head.length < LIST_PREVIEW && !head.includes(n)) head.push(n);
+  head.sort((a, b) => new Date(b.time) - new Date(a.time));
+  return [...head, ...byTime.filter((n) => !head.includes(n))];
 }
 
 function renderNews(items) {
+  if (items) state.newsItems = items;
+  const all = state.newsItems;
   const el = document.getElementById("newsList");
-  if (!items.length) {
+  el.classList.toggle("collapsed", !state.newsExpanded);
+  syncMoreButton("newsMore", all.length, state.newsExpanded, "tin");
+  if (!all.length) {
     // Say what was searched, so an empty box reads as "no news", not "broken".
-    const syms = state.watchlist.slice(0, 10).join(", ");
+    const syms = state.watchlist.slice(0, 20).join(", ");
     el.innerHTML = `<div class="empty-state">${
       syms ? `Chưa có tin nào về ${escapeHtml(syms)} từ CafeF và VNDirect.` : "Thêm mã vào danh mục theo dõi để xem tin."
     }</div>`;
     return;
   }
-  el.innerHTML = pickNews(items)
+  // All items are rendered; the collapsed view hides 6+ in CSS so expanding
+  // is instant and needs no refetch.
+  el.innerHTML = orderNews(all)
     .map((n) => {
       return `
       <div class="news-item">
@@ -2042,6 +2071,7 @@ function renderPortfolio() {
 
   txEl.querySelectorAll("[data-id]").forEach((btn) => {
     btn.addEventListener("click", async () => {
+      await Motion.leave(btn.closest("tr"));
       await Portfolio.remove(btn.dataset.id); // await: render reads the cache Store refreshes
       renderPortfolio();
     });

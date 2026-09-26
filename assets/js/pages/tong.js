@@ -365,6 +365,7 @@ async function renderCashFlows(res) {
 
   host.querySelectorAll("[data-cf-del]").forEach((b) =>
     b.addEventListener("click", async () => {
+      await Motion.leave(b.closest("tr, li, .cf-row"));
       await Store.remove("cash_flows", b.dataset.cfDel);
       await renderCashFlows(res);
     })
