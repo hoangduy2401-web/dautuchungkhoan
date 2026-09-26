@@ -1265,7 +1265,9 @@ const FX_CODES = [
 // What to actually ask for: VND is the quote leg of every rate on this page and
 // must be requested explicitly; USD is the base, so it is always 1 and asking
 // for it returns nothing.
-const FX_QUERY_CODES = ["VND", ...FX_CODES.filter((c) => c !== "USD")];
+// XAU rides along for the gold chart's "world price" line (26/09/2026): same
+// call, no extra request. It comes back as troy ounces of gold per 1 USD.
+const FX_QUERY_CODES = ["VND", ...FX_CODES.filter((c) => c !== "USD"), "XAU"];
 
 function isoDay(d) {
   return d.toISOString().slice(0, 10);
@@ -1477,6 +1479,141 @@ app.get("/api/gold/prices", async (req, res) => {
     res.json(await withCache("gold:prices", GOLD_TTL_MS, computeGoldPrices));
   } catch (err) {
     console.error("[/api/gold/prices]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
+// GOLD HISTORY — lịch sử giá vàng miếng SJC theo ngày (26/09/2026).
+//
+// Nguồn đã dò (đừng dò lại):
+//   - sjc.com.vn: Cloudflare JS challenge (như bảng giá hiện tại) — KHÔNG dùng.
+//   - CafeF `du-lieu/Ajax/ajaxgoldpricehistory.ashx?index=1y` — CHÍNH. Một lần
+//     gọi trả SJC mua/bán (triệu ₫/lượng) cả năm: 460 bản ghi / 366 ngày, có
+//     ngày nhiều bản → giữ bản CUỐI của ngày (giờ VN). index: 1m/3m/6m/1y/all
+//     (all chỉ về tới 08/02/2025; "3y"/"5y" lặng lẽ trả như 1m — đừng dùng).
+//   - PNJ `get-gold-price-history?zone=00&gold_type=SJC&date=YYYYMMDD` — DỰ
+//     PHÒNG. Mỗi NGÀY một request, nghìn ₫/lượng dạng chuỗi "141.400".
+//   - Đối chiếu CafeF vs PNJ 5 ngày rải 1 năm (25/09, 15/08, 02/06, 15/01/2026,
+//     06/10/2025): khớp 0 đồng cả mua lẫn bán.
+//   - "Thế giới quy đổi": XAU/USD × USD/VND của FXRatesAPI (liên ngân hàng),
+//     đổi ounce → lượng (37,5 g / 31,1034768 g). KHÔNG gồm thuế, phí nhập
+//     khẩu, gia công — là mốc tham chiếu, trang phải ghi rõ.
+// ============================================================
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const CAFEF_GOLD_HISTORY_URL =
+  process.env.CAFEF_GOLD_HISTORY_URL || "https://cafef.vn/du-lieu/Ajax/ajaxgoldpricehistory.ashx";
+const PNJ_GOLD_HISTORY_URL = "https://edge-api.pnj.io/ecom-frontend/v1/get-gold-price-history";
+const OZ_PER_LUONG = 37.5 / 31.1034768;
+const GOLD_HISTORY_MAX_DAYS = 365;
+const vnDateOf = (iso) => new Date(new Date(iso).getTime() + 7 * 3600e3).toISOString().slice(0, 10);
+
+async function goldHistoryFromCafef() {
+  const res = await fetchWithTimeout(
+    `${CAFEF_GOLD_HISTORY_URL}?index=1y`,
+    { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } },
+    15000
+  );
+  if (!res.ok) throw new Error(`CafeF HTTP ${res.status}`);
+  const rows = ((await res.json()).Data || {}).goldPriceWorldHistories || [];
+  const byDate = new Map();
+  for (const r of [...rows].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))) {
+    if (r.name !== "SJC" || !r.createdAt) continue;
+    const buy = Number(r.buyPrice);
+    const sell = Number(r.sellPrice);
+    if (!(buy > 0) || !(sell > 0)) continue;
+    byDate.set(vnDateOf(r.createdAt), { buy, sell, at: r.createdAt }); // last of the day wins
+  }
+  if (!byDate.size) throw new Error("CafeF trả rỗng");
+  return byDate;
+}
+
+// Per-day PNJ calls, 4 at a time. Only for short ranges: a year = 365 calls.
+async function goldHistoryFromPnj(days) {
+  const dates = [];
+  for (let i = days; i >= 0; i--) dates.push(new Date(Date.now() + 7 * 3600e3 - i * 86400e3).toISOString().slice(0, 10));
+  const byDate = new Map();
+  const one = async (d) => {
+    const res = await fetchWithTimeout(
+      `${PNJ_GOLD_HISTORY_URL}?zone=00&gold_type=SJC&date=${d.replace(/-/g, "")}`,
+      { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } },
+      10000
+    );
+    if (!res.ok) return;
+    const loc = ((await res.json()).locations || [])[0];
+    const sjc = loc && (loc.gold_type || []).find((g) => g.name === "SJC");
+    const last = sjc && sjc.data && sjc.data[sjc.data.length - 1];
+    if (!last) return;
+    const n = (v) => Number(String(v).replace(/\./g, "")) / 1000; // "141.400" nghìn -> 141.4 triệu
+    const buy = n(last.gia_mua);
+    const sell = n(last.gia_ban);
+    if (buy > 0 && sell > 0) byDate.set(d, { buy, sell, at: last.updated_at });
+  };
+  for (let i = 0; i < dates.length; i += 4) await Promise.all(dates.slice(i, i + 4).map((d) => one(d).catch(() => {})));
+  if (!byDate.size) throw new Error("PNJ trả rỗng");
+  return byDate;
+}
+
+async function computeGoldHistory(days) {
+  let source = "CafeF";
+  let note = null;
+  let byDate;
+  try {
+    byDate = await withCache("gold:hist:cafef", 60 * 60_000, goldHistoryFromCafef);
+  } catch (err) {
+    console.warn("[gold/history] CafeF lỗi, thử PNJ:", err.message);
+    // PNJ is one request per day: measured 20s for 30 days (4 in flight).
+    // A 3M/1Y fallback would keep the user waiting over a minute — refuse
+    // instead and say why.
+    if (days > 31) throw new Error(`CafeF lỗi (${err.message}); nguồn dự phòng PNJ chỉ phục vụ khung 1M`);
+    byDate = await withCache(`gold:hist:pnj:${days}`, 60 * 60_000, () => goldHistoryFromPnj(days));
+    source = "PNJ";
+    note = "Nguồn chính CafeF đang lỗi — dùng lịch sử giá của PNJ";
+  }
+  const since = new Date(Date.now() + 7 * 3600e3 - days * 86400e3).toISOString().slice(0, 10);
+  const items = [...byDate]
+    .filter(([date]) => date >= since)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, v]) => ({ date, buy: v.buy, sell: v.sell }));
+  if (!items.length) throw new Error("không có dữ liệu trong khoảng này");
+  const lastAt = byDate.get(items[items.length - 1].date).at;
+
+  // World reference line. Best-effort: the SJC series stands on its own.
+  let world = null;
+  try {
+    const fx = await fxTimeseries(Math.min(days, FX_MAX_DAYS));
+    const w = [];
+    for (const [date, vals] of fx) {
+      if (date < since || !(vals.XAU > 0) || !(vals.VND > 0)) continue;
+      w.push({ date, price: Math.round(((vals.VND / vals.XAU) * OZ_PER_LUONG) / 1e4) / 100 }); // triệu ₫/lượng
+    }
+    w.sort((a, b) => a.date.localeCompare(b.date));
+    if (w.length) {
+      world = {
+        source: "FXRatesAPI",
+        method: "XAU/USD × USD/VND liên ngân hàng, quy ounce → lượng",
+        note: "Chưa gồm thuế, phí nhập khẩu và gia công — chỉ để so mức chênh",
+        items: w,
+      };
+    }
+  } catch (err) {
+    console.warn("[gold/history] giá thế giới lỗi:", err.message);
+  }
+
+  return { source, note, product: "SJC", unit: "triệu đồng/lượng", lastAt, items, world };
+}
+
+// GET /api/gold/history?days=30|90|180|365
+app.get("/api/gold/history", cacheFor(900), async (req, res) => {
+  const days = Number(req.query.days) || 90;
+  if (days > GOLD_HISTORY_MAX_DAYS) {
+    return res.status(400).json({ error: "range_too_long", maxDays: GOLD_HISTORY_MAX_DAYS });
+  }
+  try {
+    res.json(await withCache(`gold:history:${days}`, 30 * 60_000, () => computeGoldHistory(days)));
+  } catch (err) {
+    console.error("[/api/gold/history]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
   }
 });
