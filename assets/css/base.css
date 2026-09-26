@@ -339,6 +339,20 @@ a { color: inherit; }
 .market-tabs button.active { background: var(--surface-pill-active); color: var(--text-on-accent); }
 .mtab-pane[hidden] { display: none; }
 
+/* Bộ chọn khoảng thời gian của MỌI biểu đồ (Chứng khoán, Ngoại tệ, Coin).
+   Trước 26/09 kiểu này chỉ nằm trong chung-khoan.css, nên trang Ngoại tệ và
+   Coin hiện nút mặc định của trình duyệt (viền nổi, font Arial). Để ở đây,
+   đừng chép lại vào CSS trang. Vạch nền trượt: motion.js (.tab-ink). */
+.range-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.range-tabs button {
+  background: transparent; border: none; color: var(--text-secondary); font-family: inherit;
+  padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: var(--text-xs); font-weight: 600; cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard), color 200ms var(--ease-standard);
+}
+.range-tabs button:hover { color: var(--text-primary); background: var(--surface-hover); }
+.range-tabs button.active { background: var(--surface-pill-active); color: var(--text-on-accent); }
+
 .market-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
   margin-bottom: 12px;
@@ -666,6 +680,30 @@ tr:hover td { background: var(--surface-hover); }
   .market-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .market-tabs::-webkit-scrollbar { display: none; }
   .market-tabs button { flex: 0 0 auto; }
+
+  /* Vùng chạm: đo 26/09 nút điều hướng cao 26px (khuyến nghị ≥44 cho ngón
+     tay). 40px là mức cân bằng với chiều cao thanh; tab thị trường/khung giờ 36. */
+  .app-nav a { min-height: 40px; display: inline-flex; align-items: center; }
+  .market-tabs button, .range-tabs button, .ov-ex button { min-height: 36px; }
+
+  /* Bảng trên điện thoại: gọn lề + cột đầu (tên) đứng yên khi vuốt ngang —
+     trước đây vuốt tới cột Bán/Chênh lệch là mất luôn tên hàng đang xem. */
+  .asset-table th, .asset-table td { padding-left: 7px; padding-right: 7px; }
+  .asset-table-wrap > .asset-table tr > :first-child {
+    position: sticky; left: 0; z-index: 1; background: var(--surface-card);
+  }
+  .asset-table-wrap > .asset-table tbody tr.sel > :first-child { background: var(--surface-card); box-shadow: inset 3px 0 0 var(--accent-orange); }
+  .asset-table-wrap > .asset-table td.empty-state { position: static; }
+}
+
+/* Còn nội dung khuất bên phải/trái của vùng cuộn ngang (thanh điều hướng, tab
+   thị trường, bảng): mép đó mờ dần. motion.js gắn .fade-l / .fade-r theo vị
+   trí cuộn thật, nên cuộn tới cuối thì hết mờ. */
+.fade-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.fade-l { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+.fade-l.fade-r {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -769,6 +807,7 @@ tr:hover td { background: var(--surface-hover); }
    danh tinh roi. */
 .nw-alloc-legend b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .nw-alloc-legend .money { color: var(--text-tertiary); }
+.nw-empty-why { margin-top: 4px; font-size: var(--text-xs); color: var(--text-tertiary); }
 
 /* Cot dau bang tong mang ca nhan nguon lan gia dinh dinh gia - de dai tu nhien
    thi bang phinh ra va cot Lai/lo bi day khoi khung nhin. Ep xuong dong. */

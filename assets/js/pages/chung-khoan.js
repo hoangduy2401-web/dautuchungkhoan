@@ -559,8 +559,11 @@ function renderHeatmap() {
         // Small tiles drop the % line; big ones get larger type.
         // Tiny tiles (can't fit even the ticker) show colour only; the
         // title tooltip still names them.
+        // Thresholds lowered 26/09 after a phone check: at 375px tiles like
+        // MBB/HPG (~50px wide) hid their % although it fits in 2xs type, and
+        // a phone has no hover tooltip to fall back on.
         const sizeCls =
-          t.w < 34 || t.h < 22 ? "xs" : t.w < 58 || t.h < 40 ? "sm" : t.w * t.h > 30000 ? "lg" : "";
+          t.w < 30 || t.h < 20 ? "xs" : t.w < 46 || t.h < 32 ? "sm" : t.w * t.h > 30000 ? "lg" : "";
         return heatCellHtml(t.s, state.quotes[t.s], style, sizeCls);
       })
       .join("");

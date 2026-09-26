@@ -175,6 +175,63 @@ const Motion = (function () {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scanTabs);
   else scanTabs();
 
+  // ---- Horizontal scroll hints -------------------------------------------
+  // On phones the nav, the market tabs and wide tables scroll sideways with
+  // no visible scrollbar, so items past the edge were simply invisible
+  // ("Coin", "Tiết kiệm", "Tín hiệu", the Bán column...). Fade the edge that
+  // still has content (.fade-l / .fade-r in base.css), from the real scroll
+  // position. Tables get the right fade only: their first column is sticky
+  // and a left fade would dim it.
+  const HINT_SEL = [".nav-links", ".market-tabs", ".asset-table-wrap"];
+  function hint(box) {
+    if (box.dataset.hint) return;
+    box.dataset.hint = "1";
+    const leftOk = !box.classList.contains("asset-table-wrap");
+    const update = () => {
+      const max = box.scrollWidth - box.clientWidth;
+      box.classList.toggle("fade-r", max > 2 && box.scrollLeft < max - 2);
+      box.classList.toggle("fade-l", leftOk && max > 2 && box.scrollLeft > 2);
+    };
+    box.addEventListener("scroll", update, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(update).observe(box);
+    new MutationObserver(update).observe(box, { childList: true, subtree: true });
+    update();
+    // Once, when first seen: the current page's nav item into view (on a
+    // phone "Tiết kiệm" sat off-screen). Never again — it would fight the
+    // user's own scrolling.
+    if (box.classList.contains("nav-links")) revealInScroller(box.querySelector("a.active"));
+  }
+  // Bring an item into view INSIDE its scroller only (element.scrollIntoView
+  // would also scroll the page vertically).
+  function revealInScroller(item) {
+    const box = item && item.parentElement;
+    if (!box || box.scrollWidth <= box.clientWidth) return;
+    const l = item.offsetLeft - box.offsetLeft;
+    if (l < box.scrollLeft) box.scrollTo({ left: l - 12, behavior: reduced() ? "auto" : "smooth" });
+    else if (l + item.offsetWidth > box.scrollLeft + box.clientWidth)
+      box.scrollTo({ left: l + item.offsetWidth - box.clientWidth + 12, behavior: reduced() ? "auto" : "smooth" });
+  }
+  function scanHints() {
+    HINT_SEL.forEach((sel) => document.querySelectorAll(sel).forEach(hint));
+  }
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".market-tabs button, .nav-links a");
+    if (btn) revealInScroller(btn);
+  });
+  // nav.js renders the nav after load: rescan when new scrollers may have
+  // appeared, at most once per frame (the page re-renders a lot every 45s).
+  let scanQueued = false;
+  new MutationObserver(() => {
+    if (scanQueued) return;
+    scanQueued = true;
+    requestAnimationFrame(() => {
+      scanQueued = false;
+      scanHints();
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scanHints);
+  else scanHints();
+
   // ---- Row enter ----------------------------------------------------------
   const ROW_SEL = ":scope > [data-hid], :scope > .watch-item[data-symbol]";
   const rowKey = (r) => r.dataset.hid || r.dataset.symbol;

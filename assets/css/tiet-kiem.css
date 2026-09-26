@@ -30,7 +30,23 @@
   font-size: var(--text-xs); line-height: 1.5;
   border: 1px solid transparent;
 }
+.sv-alert { display: flex; align-items: flex-start; gap: 10px; }
+.sv-alert-text { flex: 1; min-width: 0; }
 .sv-alert strong { font-weight: 700; }
+/* Nút ẩn: ô chạm đủ lớn trên điện thoại, màu theo màu cảnh báo. */
+.sv-alert-x {
+  flex: 0 0 auto; width: 28px; height: 28px; margin: -4px -6px -4px 0;
+  border: none; border-radius: 999px; background: transparent; color: inherit;
+  font-size: 13px; cursor: pointer; opacity: 0.7;
+  transition: opacity var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard);
+}
+.sv-alert-x:hover { opacity: 1; background: rgba(127, 127, 127, 0.15); }
+.sv-alert-all {
+  align-self: flex-end; border: none; background: transparent; cursor: pointer;
+  font-family: inherit; font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary);
+  padding: 4px 6px; border-radius: var(--radius-sm);
+}
+.sv-alert-all:hover { color: var(--text-primary); background: var(--surface-hover); }
 .sv-alert.d30 { background: var(--surface-inset); color: var(--text-secondary); border-color: var(--border-default); }
 .sv-alert.d15 { background: var(--accent-soft); color: var(--accent-orange); }
 .sv-alert.d7, .sv-alert.past { background: var(--negative-soft); color: var(--negative); }
@@ -53,7 +69,10 @@
 .sv-table th.sv-term:hover { color: var(--text-primary); }
 .sv-table th.sv-term.on { color: var(--accent-orange); }
 .sv-table td.sv-best { color: var(--positive); font-weight: 700; }
-.sv-bank { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+/* Flex nằm ở span bên trong, KHÔNG ở td: td display:flex không còn là ô bảng
+   nên `position: sticky` (cột ngân hàng đứng yên khi vuốt ngang) hỏng. */
+.sv-bank { white-space: nowrap; }
+.sv-bank-in { display: flex; align-items: center; gap: 8px; }
 .sv-logo { width: 18px; height: 18px; border-radius: 4px; flex: 0 0 18px; object-fit: contain; background: #fff; }
 .sv-note { margin: 10px 0 0; font-size: var(--text-2xs); line-height: 1.6; color: var(--text-secondary); }
 .sv-note strong { color: var(--text-primary); }

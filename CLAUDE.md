@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260926h`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20260926i`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -906,7 +906,7 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260926h`. Nhánh `main` sạch, đã push (commit `160b006`),
+Cache busting `?v=20260926i`. Nhánh `main` sạch, đã push,
 backend deploy lại 26/09 (endpoint gom lô, tin VNDirect, lọc trùng ngày coin,
 header cache). Bản live đã kiểm sau deploy: 9 request lúc tải trang Chứng
 khoán, CLS 0,004, 0 lỗi console.
@@ -1009,6 +1009,24 @@ Bump `?v=20260817c` → **`?v=20260926h`** (8 lần, 2 lần cuối qua `scripts
     chèn trước hàng ẩn đầu tiên — nếu `appendChild` như cũ, hàng rơi vào vùng ẩn.
     Thử bằng PointerEvent giả lập: `left_click_drag` của trình duyệt nhúng KHÔNG
     kích hoạt được kéo thả này (không có pointermove trung gian).
+  - **Rà bản live trên điện thoại (375px) + sửa:** bảng Vàng/Ngoại tệ/Tiết
+    kiệm giấu đúng cột quan trọng (Bán, Chênh lệch, kỳ hạn đang sắp) → cột đầu
+    `position: sticky` + gọn lề (base.css, ≤640px), Ngoại tệ ẩn "Mua tiền mặt"
+    trên điện thoại, Tiết kiệm đưa kỳ hạn đang sắp lên sau tên NH (chỉ khi
+    màn hẹp). **Ô bảng muốn dính cột phải là ô bảng thật** — `td` mang
+    `display:flex` thì sticky hỏng (đã tách flex vào span `.sv-bank-in`).
+  - `.range-tabs` chuyển từ `chung-khoan.css` sang **`base.css`**: trang Ngoại tệ
+    và Coin trước giờ hiện nút mặc định trình duyệt (viền nổi, Arial) vì không
+    nạp `chung-khoan.css`. Thành phần dùng ở >1 trang phải nằm ở `base.css`.
+  - Dải mờ mép cuộn ngang (`.fade-l/.fade-r`, motion.js) cho thanh điều hướng,
+    tab thị trường, bảng; thanh điều hướng tự cuộn tới trang hiện tại MỘT lần.
+  - Trang tổng: cả 5 kênh không có dòng nào → "—" + lý do, không "0 ₫".
+  - Tiết kiệm: nút ✕ ẩn từng cảnh báo đáo hạn + "Ẩn tất cả". Ẩn theo **mức**
+    (`idSổ:d30|d15|d7|past`, setting `svAlertDismissed` qua Store) — tới mốc kế
+    tiếp cảnh báo hiện lại. Đừng đổi thành ẩn vĩnh viễn.
+  - **Bẫy công cụ:** chụp màn hình ở chế độ giả lập điện thoại SAU KHI CUỘN ra
+    ảnh trống nửa trên (DOM vẫn đúng — `elementFromPoint` xác nhận). Cách chụp:
+    giữ `scrollY=0`, dịch `document.body.style.transform = translateY(-Npx)`.
 
 **17/08/2026 (phiên 14) — chart điều chỉnh cổ tức + tab lịch cổ tức.**
 Bump `?v=20260816m` → **`?v=20260817a`** (1 lần, 77 chỗ). **ĐỤNG `server/`** —

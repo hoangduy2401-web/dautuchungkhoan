@@ -70,6 +70,20 @@ function renderTotals(res) {
   const t = res.total;
   const dayDu = !res.missing.length && !res.partial.length;
 
+  // Chưa có một dòng nắm giữ nào ở cả 5 kênh: "0 ₫" đọc như "tài sản bằng
+  // không" — một con số, trong khi thật ra là chưa có gì để cộng (thường vì
+  // chưa đăng nhập trên máy này). Luật vàng: ô trống phải nói tại sao trống.
+  const empty = res.channels.every((c) => c.ok && !c.count);
+  if (empty) {
+    const why = typeof Store !== "undefined" && Store.needsLogin
+      ? "Chưa đăng nhập trên máy này — dữ liệu nằm ở tài khoản, không ở trình duyệt."
+      : "Chưa nhập tài sản nào ở 5 kênh.";
+    host.innerHTML =
+      `<div class="nw-total"><div class="label">Tổng tài sản ròng</div>` +
+      `<div class="val">—</div><div class="nw-empty-why">${esc(why)}</div></div>`;
+    return;
+  }
+
   host.innerHTML =
     `<div class="nw-total">` +
     `<div class="label">${dayDu ? "Tổng tài sản ròng" : "Tổng tài sản ròng (chưa đủ)"}</div>` +

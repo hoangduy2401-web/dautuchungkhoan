@@ -212,7 +212,7 @@ function renderTable() {
           title="${pinned ? "Bỏ ghim" : "Ghim lên đầu"}" aria-pressed="${pinned}">★</button></td>
         <td class="code">${escapeHtml(r.code)}</td>
         <td class="th-name">${escapeHtml(FX_NAMES_VI[r.code] || r.name || "")}</td>
-        <td class="num">${fmtRate(r.buyCash)}</td>
+        <td class="num col-cash">${fmtRate(r.buyCash)}</td>
         <td class="num">${fmtRate(r.buyTransfer)}</td>
         <td class="num">${fmtRate(r.sell)}</td>
         <td class="num muted">${hasVal(sp) ? sp.toFixed(2) + "%" : "—"}</td>

@@ -342,15 +342,7 @@
 .symbol-title .price {
   font-size: var(--text-xl); font-weight: 700; margin-left: auto; font-variant-numeric: tabular-nums;
 }
-.range-tabs { display: flex; gap: 2px; }
-.range-tabs button {
-  background: transparent; border: none; color: var(--text-secondary); font-family: inherit;
-  padding: 6px 12px; border-radius: var(--radius-sm);
-  font-size: var(--text-xs); font-weight: 600; cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-.range-tabs button:hover { color: var(--text-primary); background: var(--surface-hover); }
-.range-tabs button.active { background: var(--surface-pill-active); color: var(--text-on-accent); }
+/* .range-tabs moved to base.css (26/09) — FX and Coin charts use it too. */
 .chart-toolbar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0;
 }

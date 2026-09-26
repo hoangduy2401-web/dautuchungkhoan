@@ -19,6 +19,11 @@ const svState = {
   snapshotAt: null,
   search: "",
   sortTerm: "12T", // kỳ hạn dùng để sắp bảng
+  // Cảnh báo đáo hạn user đã ẩn: "idSổ:mức" (mức = d30|d15|d7|past). Ẩn theo
+  // TỪNG MỨC chứ không ẩn vĩnh viễn: ẩn lúc còn 30 ngày thì tới mốc 15 ngày,
+  // 7 ngày, ngày đáo hạn nó vẫn hiện lại — không để lỡ ngày đáo hạn thật.
+  // Lưu qua Store (đồng bộ mọi thiết bị đã đăng nhập).
+  dismissed: new Set(),
   books: [], // sổ tiết kiệm, collection savings_accounts
   editingId: null,
   confirmDeleteId: null,
@@ -29,6 +34,7 @@ const BOOKS_COLLECTION = "savings_accounts"; // tên đã chốt ở docs/QUYHOA
 // Mốc cảnh báo đáo hạn (ngày). Ba mức vì việc cần làm khác nhau: 30 ngày là lúc
 // bắt đầu tìm lãi suất mới, 7 ngày là lúc phải quyết.
 const ALERT_DAYS = [30, 15, 7];
+const ALERT_DISMISS_SETTING = "svAlertDismissed";
 
 const hasVal = (n) => n !== null && n !== undefined && Number.isFinite(Number(n));
 const escapeHtml = (s) =>
@@ -104,11 +110,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Store bất đồng bộ: nạp sổ TRƯỚC lần vẽ đầu, nếu không bảng hiện rỗng rồi
   // mới nhảy số.
   svState.books = (await Store.list(BOOKS_COLLECTION)) || [];
+  svState.dismissed = new Set((await Store.getSetting(ALERT_DISMISS_SETTING, [])) || []);
   document.getElementById("holdDate").value = new Date().toISOString().slice(0, 10);
 
   wireTable();
   wireCalc();
   wireBooks();
+  wireAlerts();
   renderBooks(); // sổ đọc được ngay cả khi máy chủ chưa trả lời
 
   bootData();
@@ -225,15 +233,28 @@ function visibleBanks() {
   });
 }
 
+// Điện thoại: bảng 9 cột rộng gấp đôi màn hình, và kỳ hạn đang dùng để sắp
+// (mặc định 12T) nằm tít bên phải, phải vuốt mới thấy (đo 26/09: 548px trên
+// khung 305px). Trên màn hình hẹp đưa kỳ hạn đó lên ngay sau tên ngân hàng.
+// Màn hình rộng giữ thứ tự kỳ hạn tự nhiên — đổi thứ tự cột khi bấm tiêu đề
+// sẽ làm người dùng máy tính mất phương hướng.
+const narrowMq = window.matchMedia("(max-width: 640px)");
+narrowMq.addEventListener("change", () => renderTable());
+function orderedTerms() {
+  if (!narrowMq.matches || !svState.terms.includes(svState.sortTerm)) return svState.terms;
+  return [svState.sortTerm, ...svState.terms.filter((t) => t !== svState.sortTerm)];
+}
+
 function renderTable() {
   if (!svState.banks.length) {
     setTableMessage("Đang chờ máy chủ…");
     return;
   }
+  const terms = orderedTerms();
 
   document.getElementById("svHead").innerHTML =
     `<th>Ngân hàng</th>` +
-    svState.terms
+    terms
       .map(
         (t) =>
           `<th class="num sv-term${t === svState.sortTerm ? " on" : ""}" data-term="${escapeHtml(t)}">${escapeHtml(t)}</th>`
@@ -245,7 +266,7 @@ function renderTable() {
   document.getElementById("svBody").innerHTML = rows.length
     ? rows
         .map((b) => {
-          const cells = svState.terms
+          const cells = terms
             .map((t) => {
               const v = b.rates[t];
               const top = hasVal(v) && best[t] !== null && v >= best[t];
@@ -253,10 +274,10 @@ function renderTable() {
             })
             .join("");
           return `<tr>
-            <td class="sv-bank">
+            <td class="sv-bank"><span class="sv-bank-in">
               ${b.icon ? `<img class="sv-logo" src="${escapeHtml(b.icon)}" alt="" onerror="this.remove()" />` : ""}
               <span>${escapeHtml(b.name)}</span>
-            </td>${cells}
+            </span></td>${cells}
           </tr>`;
         })
         .join("")
@@ -469,29 +490,59 @@ function renderAlerts(rows) {
   const soon = rows
     .filter((r) => r.daysLeft !== null && r.daysLeft <= ALERT_DAYS[0])
     .sort((a, b) => a.daysLeft - b.daysLeft);
+  const key = (r) => `${r.id}:${alertLevel(r.daysLeft)}`;
+  const shown = soon.filter((r) => !svState.dismissed.has(key(r)));
 
-  if (!soon.length) {
+  if (!shown.length) {
     host.hidden = true;
     host.innerHTML = "";
     return;
   }
 
   host.hidden = false;
-  host.innerHTML = soon
-    .map((r) => {
-      const lvl = alertLevel(r.daysLeft);
-      const when =
-        r.daysLeft < 0
-          ? `đã đáo hạn ${fmtDate(r.maturity)}`
-          : r.daysLeft === 0
-          ? `đáo hạn HÔM NAY`
-          : `đáo hạn sau ${r.daysLeft} ngày (${fmtDate(r.maturity)})`;
-      return `<div class="sv-alert ${lvl}">
-        <strong>${escapeHtml(r.bank || "Sổ tiết kiệm")}</strong> — ${escapeHtml(when)},
-        gốc <span class="money">${fmtMoney(r.amount)} ₫</span>, lãi <span class="money">+${fmtMoney(r.interest || 0)} ₫</span>
+  host.innerHTML =
+    shown
+      .map((r) => {
+        const lvl = alertLevel(r.daysLeft);
+        const when =
+          r.daysLeft < 0
+            ? `đã đáo hạn ${fmtDate(r.maturity)}`
+            : r.daysLeft === 0
+            ? `đáo hạn HÔM NAY`
+            : `đáo hạn sau ${r.daysLeft} ngày (${fmtDate(r.maturity)})`;
+        return `<div class="sv-alert ${lvl}" data-hid="${escapeHtml(key(r))}">
+        <span class="sv-alert-text"><strong>${escapeHtml(r.bank || "Sổ tiết kiệm")}</strong> — ${escapeHtml(when)},
+        gốc <span class="money">${fmtMoney(r.amount)} ₫</span>, lãi <span class="money">+${fmtMoney(r.interest || 0)} ₫</span></span>
+        <button type="button" class="sv-alert-x" data-dismiss="${escapeHtml(key(r))}" title="Ẩn cảnh báo này (sẽ hiện lại ở mốc kế tiếp)" aria-label="Ẩn cảnh báo">✕</button>
       </div>`;
-    })
-    .join("");
+      })
+      .join("") +
+    (shown.length > 1
+      ? `<button type="button" class="sv-alert-all" data-dismiss-all="1">Ẩn tất cả ${shown.length} cảnh báo</button>`
+      : "");
+}
+
+// Ẩn một (hoặc tất cả) cảnh báo đáo hạn ở mức hiện tại.
+async function dismissAlerts(keys, rowEls) {
+  await Promise.all(rowEls.map((el) => Motion.leave(el)));
+  keys.forEach((k) => svState.dismissed.add(k));
+  // Chỉ giữ khoá của sổ còn tồn tại, để danh sách không phình mãi.
+  const alive = new Set(svState.books.map((b) => String(b.id)));
+  const keep = [...svState.dismissed].filter((k) => alive.has(k.split(":")[0]));
+  svState.dismissed = new Set(keep);
+  renderBooks();
+  await Store.setSetting(ALERT_DISMISS_SETTING, keep);
+}
+
+function wireAlerts() {
+  document.getElementById("svAlerts").addEventListener("click", (e) => {
+    const one = e.target.closest("[data-dismiss]");
+    if (one) return dismissAlerts([one.dataset.dismiss], [one.closest(".sv-alert")]);
+    if (e.target.closest("[data-dismiss-all]")) {
+      const els = [...document.querySelectorAll("#svAlerts .sv-alert")];
+      return dismissAlerts(els.map((el) => el.dataset.hid), els);
+    }
+  });
 }
 
 function setHoldError(msg) {

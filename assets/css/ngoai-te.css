@@ -108,4 +108,11 @@
   .main-grid-fx { padding-left: 14px; padding-right: 14px; }
   /* Tên đầy đủ chiếm chỗ của cột số trên màn hình hẹp; mã ngoại tệ đủ để nhận ra. */
   .asset-table .th-name { display: none; }
+  /* Điện thoại: bỏ "Mua tiền mặt" để Mua CK + Bán + Chênh lệch vừa màn hình
+     (đo 26/09: bảng 424px trên khung 305px, cột Bán bị khuất). Giá mua CHUYỂN
+     KHOẢN là giá dùng để định giá danh mục (CLAUDE.md mục 10), nên giữ nó. */
+  .fx-table .col-cash { display: none; }
+  /* ★ + mã cùng đứng yên khi vuốt ngang: ★ rộng cố định để mã biết dính ở đâu. */
+  .fx-table tr > :first-child { width: 26px; min-width: 26px; max-width: 26px; padding-left: 4px; padding-right: 0; }
+  .fx-table tr > :nth-child(2) { position: sticky; left: 26px; z-index: 1; background: var(--surface-card); }
 }
