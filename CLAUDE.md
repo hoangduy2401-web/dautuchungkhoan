@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260926g`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20260926h`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -261,7 +261,7 @@ GET /api/marketcaps?symbols=A,B,…           (VNDirect, MỘT lần gọi cả 
 GET /api/fundamentals/:symbol
 → { marketCap, pe, pb, eps, roe, roa, dividendYield, revenueYoY, netProfitYoY, debtToEquity }
 
-GET /api/news?symbols=A,B,C             (tối đa 10 mã; CafeF RSS + VNDirect)
+GET /api/news?symbols=A,B,C             (tối đa 20 mã; CafeF RSS + VNDirect)
 → [{ symbol, title, source, time (ISO), url }, ...]   tối đa 60, mới nhất trước
    source = nơi đăng thật (HOSE, Tạp chí Công Thương, VNDirect, CafeF…).
    time của VNDirect gắn +07:00; mốc 00:00–00:09 là giờ NHẬP, không phải giờ
@@ -906,7 +906,7 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260926g`. Nhánh `main` sạch, đã push (commit `13d3467`),
+Cache busting `?v=20260926h`. Nhánh `main` sạch, đã push (commit `160b006`),
 backend deploy lại 26/09 (endpoint gom lô, tin VNDirect, lọc trùng ngày coin,
 header cache). Bản live đã kiểm sau deploy: 9 request lúc tải trang Chứng
 khoán, CLS 0,004, 0 lỗi console.
@@ -968,9 +968,9 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 ### Nhật ký theo phiên
 
 **26/09/2026 (phiên 15) — rà soát toàn hệ thống: 4 giai đoạn tốc độ + độ chính xác + animation.**
-Bump `?v=20260817c` → **`?v=20260926g`** (7 lần, lần cuối qua `scripts/bump-v.sh`).
-**ĐỤNG `server/`** 3 lần — Render deploy lại, đã kiểm live. 11 commit
-`0a64999`…`13d3467`.
+Bump `?v=20260817c` → **`?v=20260926h`** (8 lần, 2 lần cuối qua `scripts/bump-v.sh`).
+**ĐỤNG `server/`** 4 lần — Render deploy lại, đã kiểm live. 13 commit
+`0a64999`…`160b006`.
 
 - **GĐ1 (CLS + gọi trùng):** thẻ giữ chỗ cho dải chỉ số + panel Tổng quan vẽ
   khung sẵn → CLS 0,387 → 0,010 (desktop) / 0,007 (375px), đo với backend giả
@@ -993,6 +993,22 @@ Bump `?v=20260817c` → **`?v=20260926g`** (7 lần, lần cuối qua `scripts/b
   `docs/QUYHOACH.md`, `scripts/bump-v.sh`, `assets/og-image.png` + favicon.
 - Commit `d83d6eb` (bố cục 3 cột, 23/08) có từ trước phiên này, chưa được ghi
   handoff — nó đã nằm trong bản live.
+- **Phần tiếp sau handoff đầu tiên (cùng ngày, `7e0238c` + `160b006`):**
+  - **Bỏ trần 5 mã watchlist** theo yêu cầu user. Watchlist + Tin tức hiện 5
+    dòng, nút "Xem thêm N mã/tin" mở rộng trong khung cuộn 460px (giữ bố cục
+    cột). `LIST_PREVIEW = 5` trong `chung-khoan.js` phải khớp `:nth-child(n + 6)`
+    trong `chung-khoan.css`. `/api/news` nhận 20 mã (trước 10); `/closes` chia lô 20.
+  - 5 tin đầu ưu tiên mỗi mã 1 tin, phần mở rộng xếp mới nhất bên dưới — 5 tin
+    đầu không đổi thứ tự khi bấm mở.
+  - 3 animation còn nợ: kéo thả FLIP, vạch nền trượt dưới tab, hàng thu lại khi xoá.
+  - **Bẫy đã gặp khi thử:** bấm "Xem thêm" rồi xoá ngay → animation mở rộng
+    (`.list-scroll.just-expanded > :nth-child`, độ ưu tiên cao hơn) đè
+    `.row-leave`, hàng biến mất không hiệu ứng (vẫn xoá đúng nhờ timeout 320ms
+    trong `Motion.leave`). Sửa: `.row-leave` dùng `!important`.
+  - Kéo thả khi thu gọn: chỉ hàng ĐANG HIỆN là đích thả, thả dưới hàng cuối thì
+    chèn trước hàng ẩn đầu tiên — nếu `appendChild` như cũ, hàng rơi vào vùng ẩn.
+    Thử bằng PointerEvent giả lập: `left_click_drag` của trình duyệt nhúng KHÔNG
+    kích hoạt được kéo thả này (không có pointermove trung gian).
 
 **17/08/2026 (phiên 14) — chart điều chỉnh cổ tức + tab lịch cổ tức.**
 Bump `?v=20260816m` → **`?v=20260817a`** (1 lần, 77 chỗ). **ĐỤNG `server/`** —
