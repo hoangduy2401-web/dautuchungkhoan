@@ -322,7 +322,7 @@ async function renderCashFlows(res) {
     `</select>` +
     `<select id="cfDir" class="edit-input">` +
     `<option value="in">Nạp vào</option><option value="out">Rút ra</option></select>` +
-    `<input id="cfAmount" class="edit-input" inputmode="numeric" placeholder="Số tiền (₫)" />` +
+    `<input id="cfAmount" class="edit-input" inputmode="numeric" data-num="int" placeholder="Số tiền (₫)" />` +
     `<input id="cfDate" class="edit-input" type="date" />` +
     `<input id="cfNote" class="edit-input" placeholder="Ghi chú (không bắt buộc)" />` +
     `<button type="button" id="cfAdd">Thêm</button>` +

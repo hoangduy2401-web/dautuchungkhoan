@@ -1543,16 +1543,30 @@ function wireForms() {
       });
   });
 
-  document.getElementById("txForm").addEventListener("submit", async (e) => {
+  // Clear the custom validity message as soon as the field is edited —
+  // otherwise the browser keeps blocking every later submit.
+  const txForm = document.getElementById("txForm");
+  ["qty", "price"].forEach((name) =>
+    txForm.elements[name].addEventListener("input", (e) => e.target.setCustomValidity(""))
+  );
+
+  txForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = e.target;
+    // qty/price are text fields with live grouping ("1.000", "64,7"), so they
+    // must be parsed — Number("1.000") would be 1 and Number("64,7") NaN.
+    const qty = NumInput.parse(f.qty.value);
+    const price = NumInput.parse(f.price.value);
+    f.qty.setCustomValidity(qty > 0 && Number.isInteger(qty) ? "" : "Khối lượng phải là số nguyên dương");
+    f.price.setCustomValidity(price > 0 ? "" : "Giá phải lớn hơn 0");
+    if (!f.reportValidity()) return;
     // await: Portfolio writes through Store, and refreshPortfolio() reads the
     // cache Store just refreshed. Rendering first would show the old list.
     await Portfolio.add({
       symbol: f.symbol.value,
       type: f.type.value,
-      qty: f.qty.value,
-      price: f.price.value,
+      qty,
+      price,
       date: f.date.value || new Date().toISOString().slice(0, 10),
       note: f.note.value,
     });

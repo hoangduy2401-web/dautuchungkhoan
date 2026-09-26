@@ -594,8 +594,8 @@ function viewRowHtml(r) {
 function editRowHtml(r) {
   return `<tr data-hid="${r.id}">
     <td class="code">${escapeHtml(r.symbol || r.coinId)}</td>
-    <td class="num"><input class="edit-input" data-edit="qty" value="${fmtQty(r.qty)}" /></td>
-    <td class="num"><input class="edit-input" data-edit="cost" value="${r.cost === null ? "" : fmtVnd(r.cost)}" placeholder="₫/1 coin" /></td>
+    <td class="num"><input class="edit-input" inputmode="decimal" data-num="dec" data-edit="qty" value="${fmtQty(r.qty)}" /></td>
+    <td class="num"><input class="edit-input" inputmode="decimal" data-num="dec" data-edit="cost" value="${r.cost === null ? "" : fmtVnd(r.cost)}" placeholder="₫/1 coin" /></td>
     <td class="num muted col-rate">${r.price === null ? "—" : fmtVnd(r.price)}</td>
     <td class="num muted">—</td>
     <td class="num muted">—</td>

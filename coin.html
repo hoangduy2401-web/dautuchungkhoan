@@ -10,11 +10,11 @@
 <link rel="preconnect" href="https://dashboard-chung-khoan.onrender.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260926b" />
-<link rel="stylesheet" href="assets/css/coin.css?v=20260926b" />
-<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260926b" />
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=20260926b" />
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=20260926b" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260926c" />
+<link rel="stylesheet" href="assets/css/coin.css?v=20260926c" />
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260926c" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=20260926c" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=20260926c" />
 <meta name="theme-color" content="#e8973a" />
 </head>
 <body>
@@ -114,8 +114,8 @@
 
       <form id="holdForm" class="hold-form coin-hold-form">
         <select id="holdCoin" class="hold-input" aria-label="Coin"></select>
-        <input id="holdQty" class="hold-input" inputmode="decimal" placeholder="Số lượng, vd: 0,05" aria-label="Số lượng" />
-        <input id="holdCost" class="hold-input" inputmode="decimal" placeholder="Giá vốn ₫/1 coin (không bắt buộc)" aria-label="Giá vốn" />
+        <input id="holdQty" class="hold-input" inputmode="decimal" data-num="dec" placeholder="Số lượng, vd: 0,05" aria-label="Số lượng" />
+        <input id="holdCost" class="hold-input" inputmode="decimal" data-num="dec" placeholder="Giá vốn ₫/1 coin (không bắt buộc)" aria-label="Giá vốn" />
         <input id="holdDate" class="hold-input" type="date" aria-label="Ngày mua" />
         <button type="submit" class="btn">+ Thêm</button>
       </form>
@@ -151,16 +151,17 @@
 
   <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
-  <script src="assets/js/core/config.js?v=20260926b"></script>
-  <script src="assets/js/core/store.js?v=20260926b"></script>
-  <script src="assets/js/core/auth.js?v=20260926b"></script>
-  <script src="assets/js/core/store-supabase.js?v=20260926b"></script>
-  <script src="assets/js/core/theme.js?v=20260926b"></script>
-  <script src="assets/js/core/nav.js?v=20260926b"></script>
-  <script src="assets/js/core/mockData.js?v=20260926b"></script>
-  <script src="assets/js/core/dataService.js?v=20260926b"></script>
-  <script src="assets/js/core/costGuard.js?v=20260926b"></script>
-  <script src="assets/js/core/chartModule.js?v=20260926b"></script>
-  <script src="assets/js/pages/coin.js?v=20260926b"></script>
+  <script src="assets/js/core/config.js?v=20260926c"></script>
+  <script src="assets/js/core/store.js?v=20260926c"></script>
+  <script src="assets/js/core/auth.js?v=20260926c"></script>
+  <script src="assets/js/core/store-supabase.js?v=20260926c"></script>
+  <script src="assets/js/core/theme.js?v=20260926c"></script>
+  <script src="assets/js/core/nav.js?v=20260926c"></script>
+  <script src="assets/js/core/mockData.js?v=20260926c"></script>
+  <script src="assets/js/core/dataService.js?v=20260926c"></script>
+  <script src="assets/js/core/costGuard.js?v=20260926c"></script>
+  <script src="assets/js/core/chartModule.js?v=20260926c"></script>
+  <script src="assets/js/core/numInput.js?v=20260926c"></script>
+  <script src="assets/js/pages/coin.js?v=20260926c"></script>
 </body>
 </html>

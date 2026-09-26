@@ -514,8 +514,8 @@ function viewRowHtml(r) {
 function editRowHtml(r) {
   return `<tr data-hid="${r.id}">
     <td class="code">${escapeHtml(r.code)}</td>
-    <td class="num"><input class="edit-input" data-edit="amount" value="${fmtMoney(r.amount, r.amount % 1 ? 2 : 0)}" /></td>
-    <td class="num"><input class="edit-input" data-edit="cost" value="${r.cost === null ? "" : fmtMoney(r.cost, 0)}" placeholder="—" /></td>
+    <td class="num"><input class="edit-input" inputmode="decimal" data-num="dec" data-edit="amount" value="${fmtMoney(r.amount, r.amount % 1 ? 2 : 0)}" /></td>
+    <td class="num"><input class="edit-input" inputmode="decimal" data-num="dec" data-edit="cost" value="${r.cost === null ? "" : fmtMoney(r.cost, 0)}" placeholder="—" /></td>
     <td class="num muted col-rate">${r.rate === null ? "—" : fmtRate(r.rate)}</td>
     <td class="num muted">—</td>
     <td class="num muted">—</td>

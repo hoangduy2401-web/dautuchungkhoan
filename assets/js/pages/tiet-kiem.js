@@ -436,9 +436,9 @@ function viewRowHtml(r) {
 function editRowHtml(r) {
   return `<tr data-hid="${r.id}">
     <td>${escapeHtml(r.bank || "—")}</td>
-    <td class="num"><input class="edit-input" data-edit="amount" value="${fmtMoney(r.amount)}" /></td>
+    <td class="num"><input class="edit-input" inputmode="numeric" data-num="int" data-edit="amount" value="${fmtMoney(r.amount)}" /></td>
     <td class="num muted">${escapeHtml(termLabel(r.term))}</td>
-    <td class="num"><input class="edit-input" data-edit="rate" value="${r.rate === null ? "" : r.rate}" placeholder="%/năm" /></td>
+    <td class="num"><input class="edit-input" inputmode="decimal" data-num="dec" data-edit="rate" value="${r.rate === null ? "" : NumInput.formatNumber(r.rate, "dec")}" placeholder="%/năm" /></td>
     <td class="col-date"><input class="edit-input" type="date" data-edit="date" value="${escapeHtml(r.date || "")}" /></td>
     <td class="col-date muted">—</td>
     <td class="num muted">—</td>
@@ -508,7 +508,9 @@ function wireBooks() {
     if (rateEl.dataset.touched === "1") return;
     const bank = svState.banks.find((b) => b.name === document.getElementById("holdBank").value);
     const v = bank ? bank.rates[document.getElementById("holdTerm").value] : null;
-    rateEl.value = hasVal(v) ? v : "";
+    // VN format ("5,9"), not String(5.9): the field groups digits live and
+    // would read a dot as a thousands separator once the user edits it.
+    rateEl.value = hasVal(v) ? NumInput.formatNumber(Number(v), "dec") : "";
   };
   document.getElementById("holdBank").addEventListener("change", suggest);
   document.getElementById("holdTerm").addEventListener("change", suggest);
