@@ -1829,9 +1829,15 @@ app.get("/api/crypto/history", cacheFor(600), async (req, res) => {
         const raw = await cgJson(
           `/coins/${encodeURIComponent(id)}/market_chart?vs_currency=vnd&days=${days}&interval=daily`
         );
-        const items = (raw.prices || [])
-          .map(([ts, price]) => ({ date: new Date(ts).toISOString().slice(0, 10), price }))
-          .filter((p) => Number.isFinite(p.price));
+        // `interval=daily` returns the 00:00 point of today PLUS a live "now"
+        // point with the same date (measured 26/09/2026: two 2026-09-26 rows).
+        // Lightweight Charts throws on duplicate times and draws nothing, so
+        // keep one point per date — the last, i.e. the most recent price.
+        const byDate = new Map();
+        for (const [ts, price] of raw.prices || []) {
+          if (Number.isFinite(price)) byDate.set(new Date(ts).toISOString().slice(0, 10), price);
+        }
+        const items = [...byDate].map(([date, price]) => ({ date, price }));
         if (!items.length) throw new Error(`no data for ${id}`);
         return { source: "CoinGecko", currency: "VND", id, items };
       } catch (err) {
