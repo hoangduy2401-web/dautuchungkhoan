@@ -15,7 +15,11 @@ const DataService = (function () {
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(url, { signal: ctrl.signal });
-      if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+      if (!res.ok) {
+        const err = new Error(`${url} -> ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
       return await res.json();
     } finally {
       clearTimeout(timer);
@@ -60,9 +64,22 @@ const DataService = (function () {
   const AWAKE_TRUST_MS = 60_000;
 
   // Resolves true once /health answers, false if the whole budget runs out.
-  async function wakeBackend(budgetMs = 90_000) {
-    if (cfg.USE_MOCK) return true;
-    if (Date.now() < awakeUntil) return true;
+  // Concurrent callers share one probe: the page starts probing before user
+  // data has hydrated, and bootData() then asks again while that probe is
+  // still waiting out a cold start.
+  let wakeInFlight = null;
+  function wakeBackend(budgetMs = 90_000) {
+    if (cfg.USE_MOCK) return Promise.resolve(true);
+    if (Date.now() < awakeUntil) return Promise.resolve(true);
+    if (!wakeInFlight) {
+      wakeInFlight = probeUntilAwake(budgetMs).finally(() => {
+        wakeInFlight = null;
+      });
+    }
+    return wakeInFlight;
+  }
+
+  async function probeUntilAwake(budgetMs) {
     const started = Date.now();
     while (Date.now() - started < budgetMs) {
       try {
@@ -114,6 +131,81 @@ const DataService = (function () {
       () => fetchJson(`${cfg.priceProvider.baseUrl}/quote?symbol=${encodeURIComponent(symbol)}`, T_FAST),
       () => generateQuote(symbol)
     );
+  }
+
+  // ---- Batch quotes -------------------------------------------------------
+  // Resolves { quotes: {SYM: quote}, asOf: ISO|null }. A symbol that failed is
+  // simply absent (callers already treat "no quote" as "—"). `asOf` is when
+  // SSI was actually read for the OLDEST quote in the batch — the backend may
+  // serve a cache entry minutes old, so the time the browser got the answer
+  // would overstate freshness.
+  //
+  // Falls back to one /quote per symbol on 404: GitHub Pages ships this file
+  // within a minute of a push, Render takes several, so for a while the page
+  // can be newer than the backend.
+  const BATCH_MAX = 60;
+  const T_BATCH = 30000; // cold symbols queue one by one on the SSI limiter
+  async function getQuotes(symbols) {
+    const list = [...new Set(symbols)];
+    if (!list.length) return { quotes: {}, asOf: null };
+    if (cfg.USE_MOCK) {
+      return { quotes: Object.fromEntries(list.map((s) => [s, generateQuote(s)])), asOf: null };
+    }
+    try {
+      const quotes = {};
+      let asOf = null;
+      for (let i = 0; i < list.length; i += BATCH_MAX) {
+        const chunk = list.slice(i, i + BATCH_MAX);
+        const r = await fetchJson(
+          `${cfg.priceProvider.baseUrl}/quotes?symbols=${encodeURIComponent(chunk.join(","))}`,
+          T_BATCH
+        );
+        Object.assign(quotes, r.quotes || {});
+        if (r.asOf && (!asOf || r.asOf < asOf)) asOf = r.asOf;
+      }
+      return { quotes, asOf };
+    } catch (err) {
+      if (err.status !== 404) throw err;
+      const results = await Promise.all(
+        list.map((s) => getQuote(s).then((q) => [s, q], () => [s, null]))
+      );
+      return { quotes: Object.fromEntries(results.filter(([, q]) => q)), asOf: null };
+    }
+  }
+
+  // ---- Batch close series for sparklines: { SYM: [close, ...] } ascending.
+  // Same 404 fallback as getQuotes. Failed symbols are absent.
+  async function getCloses(symbols, days) {
+    const list = [...new Set(symbols)];
+    if (!list.length) return {};
+    const viaHistory = async () => {
+      const results = await Promise.all(
+        list.map((s) => getHistory(s, days).then((rows) => [s, rows], () => [s, null]))
+      );
+      return Object.fromEntries(
+        results.filter(([, rows]) => Array.isArray(rows) && rows.length).map(([s, rows]) => [s, rows.map((r) => r.close)])
+      );
+    };
+    if (cfg.USE_MOCK) return viaHistory();
+    try {
+      const r = await fetchJson(
+        `${cfg.priceProvider.baseUrl}/closes?symbols=${encodeURIComponent(list.join(","))}&days=${days}`,
+        T_BATCH
+      );
+      return r.closes || {};
+    } catch (err) {
+      if (err.status !== 404) throw err;
+      return viaHistory();
+    }
+  }
+
+  // ---- Market caps for heatmap sizing: {source, asOf, items:{SYM: nghìn tỷ}}.
+  // No mock: an invented size would look real. Mock mode -> empty items, and
+  // the heatmap falls back to equal tiles.
+  function getMarketCaps(symbols) {
+    if (cfg.USE_MOCK) return Promise.resolve({ source: null, asOf: null, items: {} });
+    const base = cfg.fundamentalsProvider.baseUrl.replace(/\/fundamentals$/, "/marketcaps");
+    return fetchJson(`${base}?symbols=${encodeURIComponent([...new Set(symbols)].join(","))}`, T_FAST);
   }
 
   // ---- OHLCV history: [{date, open, high, low, close, volume}] ----
@@ -277,6 +369,9 @@ const DataService = (function () {
     getCompanyInfo,
     getIndices,
     getQuote,
+    getQuotes,
+    getCloses,
+    getMarketCaps,
     getHistory,
     getIndexHistory,
     getFundamentals,

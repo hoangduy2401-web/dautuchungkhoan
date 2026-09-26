@@ -173,13 +173,13 @@ const NetWorth = (function () {
     if (!holds.length) return sum(out, []);
 
     out.note = "giao dịch tự nhập; chưa kết nối tài khoản SSI thật";
-    const quotes = await Promise.all(
-      holds.map((h) =>
-        DataService.getQuote(h.symbol)
-          .then((q) => (q && has(q.price) ? Number(q.price) : null))
-          .catch(() => null)
-      )
-    );
+    // One batched request for every holding; a symbol missing from the answer
+    // (or a failed batch) stays null = "chưa có giá", never priced at cost.
+    const batch = await DataService.getQuotes(holds.map((h) => h.symbol)).catch(() => ({ quotes: {} }));
+    const quotes = holds.map((h) => {
+      const q = batch.quotes[h.symbol];
+      return q && has(q.price) ? Number(q.price) : null;
+    });
 
     const rows = holds.map((h, i) => {
       const gia = quotes[i]; // nghìn ₫/cp

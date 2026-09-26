@@ -42,6 +42,9 @@ const state = {
   quotes: {}, // symbol -> {price, changePct, volume}
   sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
+  quotesAsOf: null, // ms — when SSI was read for the oldest quote on screen
+  quotesGotAt: null, // ms — when the browser received them (fallback label)
+  mcaps: null, // {source, asOf, items:{SYM: nghìn tỷ}} — heatmap tile sizes
   marketTab: "overview", // overview | heatmap | sector | rank | foreign | signal
   rankExchange: "VNINDEX", // VNINDEX | HNXINDEX | UPCOM — rankings tab exchange
   ovExchange: "VNINDEX", // sàn đang xem ở tab Tổng quan thị trường
@@ -113,6 +116,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   tickClock();
   setInterval(tickClock, 1000);
 
+  // Start the backend wake-up probe NOW, in parallel with hydrating user data
+  // from Supabase; bootData() joins the same in-flight probe instead of only
+  // starting it after hydration.
+  DataService.wakeBackend();
+
   // Store is async, so user data must be hydrated BEFORE the first render —
   // otherwise the watchlist paints the seed and the portfolio paints empty,
   // then both flicker to the real values a moment later.
@@ -183,12 +191,52 @@ async function bootData() {
 // Self-scheduling loop: the next refresh is queued only AFTER the current one
 // finishes, so a slow cycle can never stack on top of another (which used to
 // multiply concurrent SSI calls and choke the backend).
-function scheduleRefreshLoop() {
-  setTimeout(async () => {
-    await refreshCycle();
-    scheduleRefreshLoop();
-  }, APP_CONFIG.REFRESH_INTERVAL_MS);
+//
+// Two throttles:
+//  - Hidden tab: no refresh at all. A background tab used to keep firing ~35
+//    requests every 45s for nobody. On return, refresh at once if due.
+//  - Outside trading hours: every 10 min instead of 45s — prices do not move,
+//    but a slow poll still catches the post-close settlement numbers.
+const OFF_HOURS_REFRESH_MS = 10 * 60_000;
+let refreshTimer = null;
+// Starts at page load so the first scheduled cycle comes one interval after
+// bootData(), not on top of it.
+let lastRefreshAt = Date.now();
+
+// HOSE/HNX/UPCoM session incl. pre-open and put-through, Mon–Fri, Vietnam
+// time. Public holidays count as open — only costs normal polling that day.
+function isMarketHoursVN(now = Date.now()) {
+  const vn = new Date(now + 7 * 3600 * 1000); // read with getUTC* below
+  const day = vn.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const mins = vn.getUTCHours() * 60 + vn.getUTCMinutes();
+  return mins >= 8 * 60 + 45 && mins <= 15 * 60 + 15;
 }
+
+function refreshDelayMs() {
+  return isMarketHoursVN() ? APP_CONFIG.REFRESH_INTERVAL_MS : OFF_HOURS_REFRESH_MS;
+}
+
+function scheduleRefreshLoop() {
+  clearTimeout(refreshTimer);
+  if (document.hidden) return; // resumed by the visibilitychange handler
+  refreshTimer = setTimeout(async () => {
+    await refreshCycle();
+    // Also stamped here, not only in refreshAll(): a cycle that finds the
+    // backend asleep skips refreshAll, and must still wait a full interval.
+    lastRefreshAt = Date.now();
+    scheduleRefreshLoop();
+  }, Math.max(0, lastRefreshAt + refreshDelayMs() - Date.now()));
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    clearTimeout(refreshTimer);
+    return;
+  }
+  renderDataAsOf(); // the age label is stale after a long absence
+  scheduleRefreshLoop(); // fires immediately if a refresh is already due
+});
 
 // One refresh cycle. Re-checks that the backend is awake first — the probe
 // short-circuits for 60s after a success, so on a healthy server this costs
@@ -244,6 +292,7 @@ async function refreshAll() {
   refreshInFlight = true;
   try {
     await Promise.all([loadIndices(), loadTapeQuotes()]);
+    renderDataAsOf();
     renderTickerTape();
     renderOverview();
     renderHeatmap();
@@ -256,6 +305,7 @@ async function refreshAll() {
     loadSparklines(); // non-blocking: sparklines fill in once histories arrive
   } finally {
     refreshInFlight = false;
+    lastRefreshAt = Date.now();
   }
 }
 
@@ -351,34 +401,140 @@ function heatColor(pct) {
   return (pct || 0) >= 0 ? `rgba(61,220,151,${alpha})` : `rgba(240,98,95,${alpha})`;
 }
 
-function renderHeatmap() {
-  const el = document.getElementById("vn30Heatmap");
-  if (!el) return;
-  // Biggest gainers first, losers last; symbols without a quote yet sink down.
-  const rows = APP_CONFIG.VN30
-    .map((s) => ({ s, q: state.quotes[s] }))
-    .sort((a, b) => {
-      const av = a.q ? a.q.changePct : -Infinity;
-      const bv = b.q ? b.q.changePct : -Infinity;
-      return bv - av;
+// Market caps for tile sizing: fetched once per page life (they move a few %
+// a day; one VNDirect call for the whole basket). On failure retry after
+// 10 min; meanwhile the heatmap uses equal tiles.
+let mcapsLoading = false;
+let mcapsRetryAt = 0;
+function ensureMarketCaps() {
+  if (state.mcaps || mcapsLoading || Date.now() < mcapsRetryAt) return;
+  mcapsLoading = true;
+  DataService.getMarketCaps(APP_CONFIG.VN30)
+    .then((m) => {
+      state.mcaps = m;
+      renderHeatmap();
+    })
+    .catch(() => {
+      mcapsRetryAt = Date.now() + 10 * 60_000;
+    })
+    .finally(() => {
+      mcapsLoading = false;
     });
-  el.innerHTML = rows
-    .map(({ s, q }) => {
-      if (!q) {
-        return `<div class="heat-cell heat-empty"><span class="hc-sym">${s}</span><span class="hc-pct">—</span></div>`;
+}
+
+// Squarified treemap (Bruls et al.): lays `items` (value desc) into the
+// rectangle x,y,w,h keeping tiles close to square. Returns items + x,y,w,h.
+function squarify(items, x, y, w, h) {
+  const total = items.reduce((a, b) => a + b.value, 0);
+  const scale = (w * h) / total;
+  let rest = items.map((it) => ({ ...it, area: it.value * scale }));
+  const out = [];
+  while (rest.length) {
+    const side = Math.min(w, h);
+    const worst = (row) => {
+      const sum = row.reduce((a, b) => a + b.area, 0);
+      const max = Math.max(...row.map((r) => r.area));
+      const min = Math.min(...row.map((r) => r.area));
+      return Math.max((side * side * max) / (sum * sum), (sum * sum) / (side * side * min));
+    };
+    const row = [rest[0]];
+    let i = 1;
+    while (i < rest.length && worst([...row, rest[i]]) <= worst(row)) row.push(rest[i++]);
+    const sum = row.reduce((a, b) => a + b.area, 0);
+    if (w >= h) {
+      const cw = sum / h;
+      let cy = y;
+      for (const r of row) {
+        out.push({ ...r, x, y: cy, w: cw, h: r.area / cw });
+        cy += r.area / cw;
       }
-      // Selected ticker gets the inset accent ring, same as the watchlist row tint.
-      const cls =
-        (q.changePct > 0 ? "up" : q.changePct < 0 ? "down" : "flat") +
-        (s === state.selected ? " active" : "");
-      return `<div class="heat-cell ${cls}" data-symbol="${s}" style="background:${heatColor(
-        q.changePct
-      )}" title="${s} · ${fmt(q.price)} · ${fmtPct(q.changePct)}">
+      x += cw;
+      w -= cw;
+    } else {
+      const ch = sum / w;
+      let cx = x;
+      for (const r of row) {
+        out.push({ ...r, x: cx, y, w: r.area / ch, h: ch });
+        cx += r.area / ch;
+      }
+      y += ch;
+      h -= ch;
+    }
+    rest = rest.slice(i);
+  }
+  return out;
+}
+
+function heatCellHtml(s, q, style = "", sizeCls = "") {
+  if (!q) {
+    return `<div class="heat-cell heat-empty ${sizeCls}" style="${style}"><span class="hc-sym">${s}</span><span class="hc-pct">—</span></div>`;
+  }
+  // Selected ticker gets the inset accent ring, same as the watchlist row tint.
+  const cls =
+    (q.changePct > 0 ? "up" : q.changePct < 0 ? "down" : "flat") + (s === state.selected ? " active" : "");
+  return `<div class="heat-cell ${cls} ${sizeCls}" data-symbol="${s}" style="background:${heatColor(
+    q.changePct
+  )};${style}" title="${s} · ${fmt(q.price)} · ${fmtPct(q.changePct)}">
         <span class="hc-sym">${s}</span>
         <span class="hc-pct">${fmtPct(q.changePct)}</span>
       </div>`;
-    })
-    .join("");
+}
+
+function renderHeatmap() {
+  const el = document.getElementById("vn30Heatmap");
+  if (!el) return;
+  ensureMarketCaps();
+  const note = document.getElementById("heatmapNote");
+  const caps = (state.mcaps && state.mcaps.items) || {};
+
+  // Tile area = market cap, but ONLY when every symbol has a cap. Sizing some
+  // tiles and guessing others would draw a wrong picture that looks right.
+  const sized = APP_CONFIG.VN30.every((s) => caps[s] > 0);
+  el.classList.toggle("treemap", sized);
+
+  if (sized) {
+    // Lay out in the container's real aspect ratio (pane hidden -> parent width).
+    const W = el.clientWidth || (el.parentElement && el.parentElement.clientWidth) || 1000;
+    const H = parseFloat(getComputedStyle(el).height) || 380;
+    const tiles = squarify(
+      APP_CONFIG.VN30.map((s) => ({ s, value: caps[s] })).sort((a, b) => b.value - a.value),
+      0,
+      0,
+      W,
+      H
+    );
+    el.innerHTML = tiles
+      .map((t) => {
+        const style = `left:${((t.x / W) * 100).toFixed(3)}%;top:${((t.y / H) * 100).toFixed(3)}%;width:${(
+          (t.w / W) *
+          100
+        ).toFixed(3)}%;height:${((t.h / H) * 100).toFixed(3)}%`;
+        // Small tiles drop the % line; big ones get larger type.
+        // Tiny tiles (can't fit even the ticker) show colour only; the
+        // title tooltip still names them.
+        const sizeCls =
+          t.w < 34 || t.h < 22 ? "xs" : t.w < 58 || t.h < 40 ? "sm" : t.w * t.h > 30000 ? "lg" : "";
+        return heatCellHtml(t.s, state.quotes[t.s], style, sizeCls);
+      })
+      .join("");
+    if (note) {
+      const d = state.mcaps.asOf
+        ? new Date(state.mcaps.asOf + "T00:00:00").toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
+        : "—";
+      note.textContent = `Diện tích ô theo vốn hoá thị trường · ${state.mcaps.source || "VNDirect"} ngày ${d}`;
+    }
+  } else {
+    // Biggest gainers first, losers last; symbols without a quote yet sink down.
+    const rows = APP_CONFIG.VN30
+      .map((s) => ({ s, q: state.quotes[s] }))
+      .sort((a, b) => (b.q ? b.q.changePct : -Infinity) - (a.q ? a.q.changePct : -Infinity));
+    el.innerHTML = rows.map(({ s, q }) => heatCellHtml(s, q)).join("");
+    if (note) {
+      note.textContent = state.mcaps
+        ? "Thiếu vốn hoá của một vài mã — các ô đang vẽ bằng nhau, xếp theo % thay đổi."
+        : "Ô vẽ bằng nhau, xếp theo % thay đổi — đang tải vốn hoá để chia diện tích.";
+    }
+  }
 
   // Click a cell to load that symbol in the chart, like the watchlist rows.
   el.querySelectorAll(".heat-cell[data-symbol]").forEach((cell) => {
@@ -390,6 +546,15 @@ function renderHeatmap() {
     });
   });
 }
+
+// Treemap tiles are laid out in pixels of the current width: redo on resize.
+let heatmapResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(heatmapResizeTimer);
+  heatmapResizeTimer = setTimeout(() => {
+    if (state.marketTab === "heatmap") renderHeatmap();
+  }, 150);
+});
 
 /* ============================================================
    MARKET OVERVIEW — SECTOR + RANKINGS TABS
@@ -1135,6 +1300,8 @@ function wireMarketTabs() {
       // opening the tab never blocks the UI.
       if (state.marketTab === "signal") renderSignalPane();
       if (state.marketTab === "overview") renderOverview();
+      // Treemap needs the pane's real width, which is 0 while it is hidden.
+      if (state.marketTab === "heatmap") renderHeatmap();
     });
   });
 }
@@ -1153,17 +1320,40 @@ async function loadTapeQuotes() {
   await loadQuotesFor(symbols);
 }
 
+// One batched request (was one request per symbol, ~35 per cycle). A symbol
+// missing from the answer keeps its previous quote; a wholly failed batch
+// leaves every quote as it was — never replaced by a made-up value.
 async function loadQuotesFor(symbols) {
-  const results = await Promise.all(
-    symbols.map((s) =>
-      DataService.getQuote(s)
-        .then((q) => [s, q])
-        .catch(() => [s, null])
-    )
-  );
-  results.forEach(([s, q]) => {
-    if (q) state.quotes[s] = q;
-  });
+  try {
+    const { quotes, asOf } = await DataService.getQuotes(symbols);
+    Object.assign(state.quotes, quotes);
+    if (Object.keys(quotes).length) {
+      state.quotesGotAt = Date.now();
+      state.quotesAsOf = asOf ? Date.parse(asOf) : null;
+    }
+  } catch (e) {
+    console.warn("[quotes] batch lỗi:", e.message);
+  }
+}
+
+// "Giá SSI đọc lúc 14:32:05" under the clock. Uses the backend's `asOf` (when
+// SSI was really read — the server may serve a cache entry minutes old) and
+// flags it once it is clearly behind during trading hours (golden rule:
+// old data must say when it is from).
+function renderDataAsOf() {
+  const el = document.getElementById("dataAsOf");
+  if (!el) return;
+  const at = state.quotesAsOf || state.quotesGotAt;
+  if (!at) {
+    el.textContent = "";
+    return;
+  }
+  const hhmm = new Date(at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const label = state.quotesAsOf ? "Giá SSI đọc lúc" : "Giá cập nhật lúc";
+  const ageMin = Math.floor((Date.now() - at) / 60_000);
+  const late = isMarketHoursVN() && ageMin >= 3;
+  el.textContent = `${label} ${hhmm}` + (late ? ` · trễ ${ageMin} phút` : isMarketHoursVN() ? "" : " · ngoài giờ giao dịch");
+  el.classList.toggle("late", late);
 }
 
 // Fetch a short close-price history per watched symbol for its row sparkline.
@@ -1172,15 +1362,11 @@ async function loadQuotesFor(symbols) {
 async function loadSparklines() {
   const missing = state.watchlist.filter((s) => !state.sparks[s]);
   if (missing.length === 0) return;
-  await Promise.all(
-    missing.map((s) =>
-      DataService.getHistory(s, 40)
-        .then((rows) => {
-          if (Array.isArray(rows) && rows.length) state.sparks[s] = rows.map((r) => r.close);
-        })
-        .catch(() => {})
-    )
-  );
+  // One batched request for every missing symbol (was one /history each).
+  const closes = await DataService.getCloses(missing, 40).catch(() => ({}));
+  for (const [s, arr] of Object.entries(closes)) {
+    if (Array.isArray(arr) && arr.length) state.sparks[s] = arr;
+  }
   renderWatchlist();
 }
 

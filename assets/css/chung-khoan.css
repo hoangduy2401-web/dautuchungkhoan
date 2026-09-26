@@ -102,6 +102,21 @@
 .heat-cell.heat-empty { background: var(--surface-inset); cursor: default; }
 .heat-cell.heat-empty .hc-sym, .heat-cell.heat-empty .hc-pct { color: var(--text-tertiary); }
 
+/* Treemap mode (tile area = market cap): absolutely placed tiles, gap drawn by
+   a card-coloured border so the alpha tints never touch. */
+.heatmap-grid.treemap { display: block; position: relative; height: 380px; }
+.heatmap-grid.treemap .heat-cell {
+  position: absolute; box-sizing: border-box; min-height: 0; padding: 2px;
+  border: 2px solid var(--surface-card); overflow: hidden; text-align: center;
+}
+.heatmap-grid.treemap .heat-cell.sm .hc-pct { display: none; }
+.heatmap-grid.treemap .heat-cell.xs span { display: none; }
+.heatmap-grid.treemap .heat-cell.sm .hc-sym { font-size: var(--text-2xs); }
+.heatmap-grid.treemap .heat-cell.lg .hc-sym { font-size: var(--text-lg); }
+.heatmap-grid.treemap .heat-cell.lg .hc-pct { font-size: var(--text-sm); }
+@media (max-width: 640px) { .heatmap-grid.treemap { height: 440px; } }
+.heatmap-note { margin-top: 8px; font-size: var(--text-2xs); color: var(--text-tertiary); }
+
 .heatmap-legend {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary);
