@@ -1131,8 +1131,9 @@ async function computeNews(symbols) {
 }
 
 app.get("/api/news", async (req, res) => {
-  // Capped: each symbol is one VNDirect call.
-  const symbols = parseSymbols(req.query.symbols, 10);
+  // Capped: each symbol is one VNDirect call (15-min cached). 20 since the
+  // watchlist became unlimited (26/09); the page sends its first 20.
+  const symbols = parseSymbols(req.query.symbols, 20);
 
   try {
     const news = await withCache(`news:${symbols.join(",")}`, 5 * 60_000, () => computeNews(symbols));
