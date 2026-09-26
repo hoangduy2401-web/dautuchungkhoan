@@ -154,15 +154,15 @@ function setBackendStatus(text, kind) {
 async function bootData() {
   if (APP_CONFIG.USE_MOCK) return refreshAll();
 
-  document.getElementById("indexStrip").innerHTML =
-    `<div class="empty-state">Đang kết nối máy chủ…</div>`;
+  document.getElementById("indexStrip").innerHTML = indexStripPlaceholder("Đang kết nối máy chủ…");
+  renderOverview({ fetchHistory: false });
 
   // Live elapsed counter: a 40s wait with no feedback reads as a broken page.
   const t0 = Date.now();
   const tick = setInterval(() => {
     const s = Math.round((Date.now() - t0) / 1000);
     setBackendStatus(
-      s < 5 ? "Đang kết nối máy chủ…" : `Đang đánh thức máy chủ… ${s}s`,
+      s < 5 ? "Đang kết nối máy chủ…" : `Máy chủ đang khởi động (thường 30–50s)… ${s}s`,
       "warn"
     );
   }, 500);
@@ -172,8 +172,7 @@ async function bootData() {
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — sẽ tự thử lại", "err");
-    document.getElementById("indexStrip").innerHTML =
-      `<div class="empty-state">Không kết nối được máy chủ. Bảng sẽ tự cập nhật khi máy chủ trả lời.</div>`;
+    document.getElementById("indexStrip").innerHTML = indexStripPlaceholder("Máy chủ chưa trả lời — sẽ tự thử lại");
     return; // deliberately no data: an empty board beats a fabricated one
   }
 
@@ -263,6 +262,22 @@ async function refreshAll() {
 /* ============================================================
    INDEX STRIP
    ============================================================ */
+// Placeholder cards with the SAME markup/size as the real ones. The old single
+// "empty-state" line was ~32px shorter than a card row (more on mobile, where
+// cards wrap to 2 rows), so the whole page jumped down when data arrived —
+// measured CLS 0.379 on the live page, almost all from this strip. Each card
+// still says why it is empty (golden rule, CLAUDE.md §3).
+const INDEX_PLACEHOLDER_CODES = ["VNINDEX", "VN30", "HNXINDEX", "UPCOM"];
+function indexStripPlaceholder(reason) {
+  return INDEX_PLACEHOLDER_CODES.map(
+    (code) => `
+    <div class="index-card is-placeholder" aria-busy="true">
+      <div class="code">${code}</div>
+      <div class="val">—</div>
+      <div class="chg">${reason}</div>
+    </div>`
+  ).join("");
+}
 async function loadIndices() {
   try {
     const fresh = await DataService.getIndices();
@@ -282,7 +297,7 @@ async function loadIndices() {
   }
   const el = document.getElementById("indexStrip");
   if (!state.indices.length) {
-    el.innerHTML = `<div class="empty-state">Chưa có dữ liệu chỉ số — đang chờ máy chủ.</div>`;
+    el.innerHTML = indexStripPlaceholder("Chưa có dữ liệu — đang chờ máy chủ");
     return;
   }
   el.innerHTML = state.indices
@@ -877,11 +892,24 @@ function wireSignalTab() {
 // Chuỗi khối lượng theo phiên của một sàn. `/index-history` bỏ dòng đang hình
 // thành (IndexValue=0) nên chuỗi này dừng ở phiên GẦN NHẤT ĐÃ ĐÓNG — khối lượng
 // hôm nay lấy riêng từ /indices.
-async function ensureOvHistory(code) {
-  if (state.ovVolHistory[code]) return state.ovVolHistory[code];
-  const rows = await DataService.getIndexHistory(code, 30);
-  state.ovVolHistory[code] = (rows || []).filter((r) => Number.isFinite(r.volume) && r.volume > 0);
-  return state.ovVolHistory[code];
+// The in-flight promise is shared: renderOverview() fires again from the 45s
+// refresh and tab clicks before the first (slow, 3-4s) call answers, and each
+// of those used to start its own duplicate request. Dropped on failure so the
+// next render retries.
+const ovHistoryInflight = {};
+function ensureOvHistory(code) {
+  if (state.ovVolHistory[code]) return Promise.resolve(state.ovVolHistory[code]);
+  if (!ovHistoryInflight[code]) {
+    ovHistoryInflight[code] = DataService.getIndexHistory(code, 30)
+      .then((rows) => {
+        state.ovVolHistory[code] = (rows || []).filter((r) => Number.isFinite(r.volume) && r.volume > 0);
+        return state.ovVolHistory[code];
+      })
+      .finally(() => {
+        delete ovHistoryInflight[code];
+      });
+  }
+  return ovHistoryInflight[code];
 }
 
 // Mốc "phiên hiện tại" là NGÀY CỦA PHIÊN đang báo cáo, không phải hôm nay.
@@ -961,7 +989,10 @@ function fmtVol(n) {
   return String(Math.round(v));
 }
 
-async function renderOverview() {
+// `fetchHistory: false` = paint the placeholder layout only (used at boot,
+// before the backend is awake) so the panel already has its final height —
+// without it the empty panel grew ~220px when data arrived (measured CLS).
+async function renderOverview({ fetchHistory = true } = {}) {
   const volHost = document.getElementById("ovVolume");
   const breadthHost = document.getElementById("ovBreadth");
   if (!volHost || !breadthHost) return;
@@ -971,7 +1002,7 @@ async function renderOverview() {
 
   // Chuỗi lịch sử nạp lười; trong lúc chờ vẫn vẽ được phần của phiên hôm nay.
   let hist = state.ovVolHistory[code] || null;
-  if (!hist) {
+  if (!hist && fetchHistory) {
     ensureOvHistory(code)
       .then(() => {
         if (state.ovExchange === code) renderOverview();
@@ -1028,7 +1059,8 @@ async function renderOverview() {
       "Khối lượng phiên",
       todayVol,
       prevVol,
-      `cổ phiếu · phiên ${dayLabel(sessionDate)} so với ${dayLabel(prevDate)}`
+      // No payload yet (boot placeholder): don't label with the device date.
+      `cổ phiếu · phiên ${idx ? dayLabel(sessionDate) : "—"} so với ${dayLabel(prevDate)}`
     ) +
     ovBar("Khối lượng tuần", weekVol, prevWeekVol, "cổ phiếu · tuần này tới hiện tại so với trọn tuần trước") +
     (sym && !isIndexCode(sym)
@@ -1042,7 +1074,19 @@ async function renderOverview() {
   const total = (adv || 0) + (dec || 0) + (flat || 0);
 
   if (!total) {
-    breadthHost.innerHTML = `<div class="empty-state">Chưa có số mã tăng/giảm cho ${escapeHtml(code)}.</div>`;
+    // Same card shape as the filled one (not a bare empty-state line) so the
+    // panel keeps its height; the legend row carries the reason instead.
+    const reason = state.indices.length
+      ? `Chưa có số mã tăng/giảm cho ${escapeHtml(code)}.`
+      : "Đang chờ máy chủ…";
+    breadthHost.innerHTML = `<div class="ov-card">
+      <div class="ov-card-head">
+        <span class="ov-label">Độ rộng thị trường</span>
+        <span class="ov-pct">—</span>
+      </div>
+      <div class="ov-breadth-bar"></div>
+      <div class="ov-breadth-legend"><span>${reason}</span></div>
+    </div>`;
   } else {
     const p = (v) => ((v || 0) / total) * 100;
     breadthHost.innerHTML = `<div class="ov-card">

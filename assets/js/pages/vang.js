@@ -92,7 +92,7 @@ async function bootData() {
   const t0 = Date.now();
   const tick = setInterval(() => {
     const s = Math.round((Date.now() - t0) / 1000);
-    setBackendStatus(s < 5 ? "Đang kết nối máy chủ…" : `Đang đánh thức máy chủ… ${s}s`, "warn");
+    setBackendStatus(s < 5 ? "Đang kết nối máy chủ…" : `Máy chủ đang khởi động (thường 30–50s)… ${s}s`, "warn");
   }, 500);
 
   const awake = await DataService.wakeBackend();

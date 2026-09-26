@@ -28,6 +28,9 @@
   font-size: var(--text-xs); font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .ticker-track:hover { animation-play-state: paused; }
+/* Empty tape (before quotes load) must keep its one-line height, or the whole
+   page below it shifts when the first quotes arrive. */
+.ticker-track:empty::before { content: "\00a0"; }
 @keyframes scroll-left { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .ticker-item .sym { color: var(--text-primary); margin-right: 6px; font-weight: 600; }
 .ticker-item .price { color: var(--text-secondary); font-weight: 500; }
@@ -59,6 +62,16 @@
 .index-card .chg {
   font-size: var(--text-xs); font-weight: 600; margin-top: 2px;
   font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 4px;
+}
+/* Placeholder cards (before data / backend asleep): same box as a real card so
+   the page does not jump when numbers arrive. Not clickable, reason text muted
+   and kept to one line so the card height matches exactly. */
+.index-card.is-placeholder { cursor: default; }
+.index-card.is-placeholder:hover { background: var(--surface-card); }
+.index-card.is-placeholder .val { color: var(--text-tertiary); }
+.index-card.is-placeholder .chg {
+  color: var(--text-tertiary); font-weight: 500; display: block;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .index-card .chg.up { color: var(--positive); }
 .index-card .chg.down { color: var(--negative); }
