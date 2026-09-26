@@ -42,6 +42,7 @@ const state = {
   quotes: {}, // symbol -> {price, changePct, volume}
   sparks: {}, // symbol -> [close, ...] recent closes for the watchlist sparkline
   indices: [], // [{code, value, changePct}] — kept so a transient 0 can fall back
+  fromSnapshot: false, // true while the board shows the saved last-good data
   quotesAsOf: null, // ms — when SSI was read for the oldest quote on screen
   quotesGotAt: null, // ms — when the browser received them (fallback label)
   mcaps: null, // {source, asOf, items:{SYM: nghìn tỷ}} — heatmap tile sizes
@@ -162,7 +163,23 @@ function setBackendStatus(text, kind) {
 async function bootData() {
   if (APP_CONFIG.USE_MOCK) return refreshAll();
 
-  document.getElementById("indexStrip").innerHTML = indexStripPlaceholder("Đang kết nối máy chủ…");
+  // Paint the last-good numbers from this browser right away, labelled as
+  // old; the live refresh replaces them. No snapshot: placeholder cards.
+  const snap = DataService.loadMarketSnapshot();
+  if (snap) {
+    state.indices = snap.indices;
+    Object.assign(state.quotes, snap.quotes || {});
+    state.quotesAsOf = snap.asOf ? Date.parse(snap.asOf) : null;
+    state.quotesGotAt = snap.savedAt;
+    state.fromSnapshot = true;
+    renderIndexStrip();
+    renderDataAsOf();
+    renderTickerTape();
+    renderHeatmap();
+    renderWatchlist();
+  } else {
+    document.getElementById("indexStrip").innerHTML = indexStripPlaceholder("Đang kết nối máy chủ…");
+  }
   renderOverview({ fetchHistory: false });
 
   // Live elapsed counter: a 40s wait with no feedback reads as a broken page.
@@ -180,8 +197,11 @@ async function bootData() {
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — sẽ tự thử lại", "err");
-    document.getElementById("indexStrip").innerHTML = indexStripPlaceholder("Máy chủ chưa trả lời — sẽ tự thử lại");
-    return; // deliberately no data: an empty board beats a fabricated one
+    // Keep a shown snapshot (real, labelled old data); otherwise say why empty.
+    if (!state.fromSnapshot) {
+      document.getElementById("indexStrip").innerHTML = indexStripPlaceholder("Máy chủ chưa trả lời — sẽ tự thử lại");
+    }
+    return; // deliberately no invented data
   }
 
   setBackendStatus("", "");
@@ -204,13 +224,19 @@ let refreshTimer = null;
 let lastRefreshAt = Date.now();
 
 // HOSE/HNX/UPCoM session incl. pre-open and put-through, Mon–Fri, Vietnam
-// time. Public holidays count as open — only costs normal polling that day.
+// time. Public holidays are detected from the payload, not a hard-coded
+// calendar (the exchange's Tết/holiday dates shift every year): from 09:20,
+// if the latest session SSI reports is still an earlier day, today is closed.
+// Before 09:20 a holiday just costs normal polling for a few minutes.
 function isMarketHoursVN(now = Date.now()) {
   const vn = new Date(now + 7 * 3600 * 1000); // read with getUTC* below
   const day = vn.getUTCDay();
   if (day === 0 || day === 6) return false;
   const mins = vn.getUTCHours() * 60 + vn.getUTCMinutes();
-  return mins >= 8 * 60 + 45 && mins <= 15 * 60 + 15;
+  if (mins < 8 * 60 + 45 || mins > 15 * 60 + 15) return false;
+  const td = state.indices[0] && state.indices[0].tradingDate;
+  if (td && !state.fromSnapshot && mins >= 9 * 60 + 20 && td < vn.toISOString().slice(0, 10)) return false;
+  return true;
 }
 
 function refreshDelayMs() {
@@ -291,7 +317,15 @@ async function refreshAll() {
   if (refreshInFlight) return; // never run two refresh cycles at once
   refreshInFlight = true;
   try {
+    state.indicesLive = false;
     await Promise.all([loadIndices(), loadTapeQuotes()]);
+    if (state.indicesLive && state.quotesGotAt) {
+      if (state.fromSnapshot) {
+        state.fromSnapshot = false;
+        renderIndexStrip();
+      }
+      saveSnapshot();
+    }
     renderDataAsOf();
     renderTickerTape();
     renderOverview();
@@ -331,6 +365,7 @@ function indexStripPlaceholder(reason) {
 async function loadIndices() {
   try {
     const fresh = await DataService.getIndices();
+    state.indicesLive = true;
     // Defensive: if a refresh returns a 0/blank value for an index (SSI can emit
     // a transient 0 during the ATO auction), keep the last good value we had
     // instead of flashing 0 on the board.
@@ -345,7 +380,12 @@ async function loadIndices() {
     // again, so drop the "awake" flag and let the next cycle re-probe.
     DataService.markAsleep();
   }
+  renderIndexStrip();
+}
+
+function renderIndexStrip() {
   const el = document.getElementById("indexStrip");
+  document.body.classList.toggle("showing-snapshot", state.fromSnapshot);
   if (!state.indices.length) {
     el.innerHTML = indexStripPlaceholder("Chưa có dữ liệu — đang chờ máy chủ");
     return;
@@ -1336,6 +1376,15 @@ async function loadQuotesFor(symbols) {
   }
 }
 
+function saveSnapshot() {
+  const keep = [...new Set([...APP_CONFIG.VN30, ...state.watchlist])];
+  DataService.saveMarketSnapshot({
+    indices: state.indices,
+    quotes: Object.fromEntries(keep.filter((s) => state.quotes[s]).map((s) => [s, state.quotes[s]])),
+    asOf: state.quotesAsOf ? new Date(state.quotesAsOf).toISOString() : null,
+  });
+}
+
 // "Giá SSI đọc lúc 14:32:05" under the clock. Uses the backend's `asOf` (when
 // SSI was really read — the server may serve a cache entry minutes old) and
 // flags it once it is clearly behind during trading hours (golden rule:
@@ -1348,7 +1397,16 @@ function renderDataAsOf() {
     el.textContent = "";
     return;
   }
-  const hhmm = new Date(at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const d = new Date(at);
+  let hhmm = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  if (new Date(at + 7 * 3600e3).toISOString().slice(0, 10) !== vnToday()) {
+    hhmm += " " + d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  }
+  if (state.fromSnapshot) {
+    el.textContent = `Số liệu lưu lần trước (SSI ${hhmm}) — đang chờ máy chủ`;
+    el.classList.add("late");
+    return;
+  }
   const label = state.quotesAsOf ? "Giá SSI đọc lúc" : "Giá cập nhật lúc";
   const ageMin = Math.floor((Date.now() - at) / 60_000);
   const late = isMarketHoursVN() && ageMin >= 3;
@@ -1757,20 +1815,54 @@ function renderFundamentals(f) {
     .join("");
 }
 
+// "3 giờ trước" for today-ish items, a date for older ones — news from the
+// VNDirect feed can be weeks old and "700h trước" reads as noise.
+// Items VNDirect dates without a time come as "...T00:00:00+07:00": show the
+// date, since "17 giờ trước" would invent an hour.
+function newsAge(time) {
+  const t = new Date(time);
+  const dateOnly = /T00:00:00\+07:00$/.test(String(time));
+  const h = Math.round((Date.now() - t) / 3600000);
+  if (dateOnly) return t.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  if (!Number.isFinite(h)) return "";
+  if (h < 1) return "vừa xong";
+  if (h < 24) return `${h} giờ trước`;
+  return t.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+// Show 12, but no more than 3 per symbol in the first pass: one ticker with a
+// burst of exchange disclosures would otherwise push every other symbol off.
+function pickNews(items, total = 12, perSymbol = 3) {
+  const picked = [];
+  const count = {};
+  const rest = [];
+  for (const n of items) {
+    if ((count[n.symbol] || 0) < perSymbol && picked.length < total) {
+      picked.push(n);
+      count[n.symbol] = (count[n.symbol] || 0) + 1;
+    } else {
+      rest.push(n);
+    }
+  }
+  for (const n of rest) if (picked.length < total) picked.push(n);
+  return picked.sort((a, b) => new Date(b.time) - new Date(a.time));
+}
+
 function renderNews(items) {
   const el = document.getElementById("newsList");
   if (!items.length) {
-    el.innerHTML = `<div class="empty-state">Chưa có tin tức.</div>`;
+    // Say what was searched, so an empty box reads as "no news", not "broken".
+    const syms = state.watchlist.slice(0, 10).join(", ");
+    el.innerHTML = `<div class="empty-state">${
+      syms ? `Chưa có tin nào về ${escapeHtml(syms)} từ CafeF và VNDirect.` : "Thêm mã vào danh mục theo dõi để xem tin."
+    }</div>`;
     return;
   }
-  el.innerHTML = items
-    .slice(0, 12)
+  el.innerHTML = pickNews(items)
     .map((n) => {
-      const t = new Date(n.time);
-      const hoursAgo = Math.max(1, Math.round((Date.now() - t) / 3600000));
       return `
       <div class="news-item">
-        <div class="meta"><span class="tag">${escapeHtml(n.symbol)}</span><span class="src">${escapeHtml(n.source)} · ${hoursAgo}h trước</span></div>
+        <div class="meta"><span class="tag">${escapeHtml(n.symbol)}</span><span class="src">${escapeHtml(n.source)} · ${newsAge(n.time)}</span></div>
         <div class="title"><a href="${escapeHtml(safeUrl(n.url))}" target="_blank" rel="noopener">${escapeHtml(n.title)}</a></div>
       </div>`;
     })

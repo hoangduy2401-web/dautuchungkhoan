@@ -377,14 +377,11 @@ function selectCoin(id) {
   loadChart();
 }
 
-// Chart dựng LƯỜI, ngay trước lần vẽ đầu — không dựng trong DOMContentLoaded.
-// Dựng sớm thì Lightweight Charts đọc kích thước container lúc trang chưa bố
-// cục xong, và lần setData đầu tiên KHÔNG VẼ ĐƯỜNG: trục, thang giá và nhãn giá
-// cuối đều đúng, chỉ thiếu đường, không có lỗi console nào. Gọi lại đúng hàm vẽ
-// đó sau khi trang ổn định thì bình thường (đo 07/08/2026). Cùng họ với bài học
-// "chart tạo lúc container width = 0" ở CLAUDE.md mục 7.
+// Chart dựng LƯỜI, ngay trước lần vẽ đầu — không dựng trong DOMContentLoaded,
+// để Lightweight Charts đọc kích thước container khi trang đã bố cục xong.
+// (Lỗi "lần vẽ đầu không hiện đường" từng đổ cho việc này; căn nguyên thật là
+// điểm trùng ngày — xem loadChart, 26/09/2026.)
 let chartReady = false;
-let firstDrawDone = false;
 function ensureChart() {
   if (chartReady) return;
   ChartModule.init("priceChartContainer", "rsiChartContainer", "trendOverlay");
@@ -446,29 +443,16 @@ async function loadChart() {
 
     const scale = chartScaleFor(items.map((p) => p.price));
     // Không có OHLC — ChartModule tự nhận ra và vẽ đường khi thiếu `open`.
-    const bars = items.map((p) => ({ date: p.date, close: p.price / scale.div, volume: 0 }));
+    // MỘT điểm mỗi ngày. Hai điểm trùng ngày làm Lightweight Charts ném
+    // "Value is null" trong vòng vẽ và BỎ đường giá (MA vẫn vẽ) — đây chính là
+    // căn nguyên lỗi "lần vẽ đầu không hiện đường" ghi từ 07/08: CoinGecko
+    // `interval=daily` trả điểm 00:00 hôm nay + điểm "hiện tại" cùng ngày
+    // (đo 26/09/2026). Server đã lọc; lọc lại ở đây để trang không phụ thuộc.
+    const byDate = new Map(items.map((p) => [p.date, p.price]));
+    const bars = [...byDate].map(([date, price]) => ({ date, close: price / scale.div, volume: 0 }));
     ChartModule.setData(bars, `${id}|${days}`);
     renderChartStats(items, scale);
 
-    // VẼ LẠI MỘT LẦN — không xoá dòng này.
-    // Lần vẽ ĐẦU TIÊN sau khi tải trang không hiện đường: trục, thang giá và
-    // nhãn giá cuối đều đúng, chỉ thiếu đường, và không có lỗi console nào.
-    // Gọi lại đúng hàm vẽ đó khi trang đã ổn định thì bình thường.
-    // ĐÃ THỬ VÀ KHÔNG PHẢI NGUYÊN NHÂN (đo 07/08/2026, đừng thử lại):
-    //   - độ lớn giá trị (đã chia bậc về ~2.000, vẫn không vẽ)
-    //   - `priceFormat.minMove` (thử 1000, không đổi)
-    //   - nạp bảng giá trước rồi mới vẽ (tuần tự thay Promise.all)
-    //   - chờ 2 khung hình rồi mới vẽ
-    //   - dựng chart lười ngay trước lần vẽ đầu
-    // Căn nguyên vẫn chưa rõ; đây là cách duy nhất đã kiểm chứng là chạy.
-    if (!firstDrawDone) {
-      firstDrawDone = true;
-      setTimeout(() => {
-        if (coinState.selected === id && coinState.range === days) {
-          ChartModule.setData(bars, `${id}|${days}`);
-        }
-      }, 400);
-    }
   } catch (err) {
     console.warn("[coin] lịch sử lỗi:", err.message);
     DataService.markAsleep();

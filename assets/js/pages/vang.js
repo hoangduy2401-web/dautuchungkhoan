@@ -17,6 +17,7 @@ const goldState = {
   note: null, // chỉ có khi nguồn dự phòng trả lời
   unit: "luong", // đơn vị hiển thị của bảng giá
   showAll: false, // hiện cả vàng tuổi thấp (18K trở xuống)
+  spreadBase: null, // code -> {median, limit, days}; null = chưa có lịch sử
   holdings: [],
   editingId: null,
   confirmDeleteId: null,
@@ -34,11 +35,20 @@ const UNIT_LABEL = { luong: "lượng", chi: "chỉ", gram: "gram" };
 // coi là chính hết.
 const PNJ_MAIN = ["SJC", "N24K", "KB", "TL", "PNJ", "24K", "999"];
 
-// Ngưỡng cảnh báo chênh lệch mua-bán (việc 2.6). Đo 06/08/2026 trên nhóm vàng
-// 999.9 của PNJ: 2,10% (SJC) đến 3,54%. 5% là biên trên rộng rãi so với mức
-// đó — CHƯA có chuỗi lịch sử để chốt ngưỡng chuẩn, nên coi đây là mốc tạm và
-// soát lại khi có dữ liệu nhiều ngày.
-const SPREAD_WARN_PCT = 5;
+// Cảnh báo chênh lệch mua-bán (việc 2.6) — NGƯỠNG RIÊNG TỪNG LOẠI, không phải
+// một con số chung. Soát 26/09/2026 trên 43 ngày `price_snapshots`
+// (15/08–26/09): chênh lệch là đặc tính CỐ ĐỊNH của từng loại —
+//   miếng SJC 1,99–2,10% · nhẫn/Kim Bảo/Phúc Lộc Tài 1,99–2,50% ·
+//   nữ trang 999.9 3,34–3,53% · 18K 8,83–9,32% · 8K 19,89–21,00%.
+// Ngưỡng chung 5% cũ vì thế SAI cả hai chiều: gắn ▲ thường trực cho mọi loại
+// tuổi thấp (ngày nào cũng >5%), và KHÔNG BAO GIỜ bật cho vàng miếng/nhẫn (chưa
+// từng chạm 5%). Đừng quay lại ngưỡng chung.
+// Quy tắc: ▲ khi chênh lệch hôm nay > trung vị của CHÍNH loại đó + max(0,5 điểm
+// %, 3×MAD). Cần ≥ SPREAD_MIN_DAYS ngày lịch sử; thiếu thì dùng mốc cũ 5% và
+// ghi rõ trên chú thích.
+const SPREAD_MIN_DAYS = 10;
+const SPREAD_MIN_MARGIN = 0.5; // điểm %
+const SPREAD_FALLBACK_PCT = 5;
 
 const hasVal = (n) => n !== null && n !== undefined && Number.isFinite(Number(n));
 const escapeHtml = (s) =>
@@ -57,6 +67,39 @@ function priceIn(pricePerChi, unit) {
 function spreadPct(it) {
   if (!hasVal(it.buy) || !hasVal(it.sell) || !it.sell) return null;
   return ((it.sell - it.buy) / it.sell) * 100;
+}
+
+// code -> { median, limit, days } built from the daily snapshots.
+function buildSpreadBaseline(rows) {
+  const series = {};
+  for (const row of rows || []) {
+    for (const it of (row.payload && row.payload.items) || []) {
+      const sp = spreadPct(it);
+      if (hasVal(sp)) (series[it.code] = series[it.code] || []).push(sp);
+    }
+  }
+  const median = (a) => {
+    const s = [...a].sort((x, y) => x - y);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const out = {};
+  for (const [code, v] of Object.entries(series)) {
+    if (v.length < SPREAD_MIN_DAYS) continue;
+    const med = median(v);
+    const mad = median(v.map((x) => Math.abs(x - med)));
+    out[code] = { median: med, limit: med + Math.max(SPREAD_MIN_MARGIN, 3 * mad), days: v.length };
+  }
+  return out;
+}
+
+// Is this row's spread unusually wide? Uses the product's own baseline; falls
+// back to the old flat 5% only when there is no history for it yet.
+function spreadWarn(it) {
+  const sp = spreadPct(it);
+  if (!hasVal(sp)) return false;
+  const b = goldState.spreadBase && goldState.spreadBase[it.code];
+  return b ? sp > b.limit : sp >= SPREAD_FALLBACK_PCT;
 }
 
 /* ============================================================
@@ -121,6 +164,7 @@ async function loadPrices() {
     goldState.note = d.note || null;
     renderSource();
     renderTable();
+    loadSpreadBaseline(); // non-blocking: ▲ switches to per-product limits when it lands
     fillTypeSelects();
     updateConverter();
     renderHoldings(); // giờ mới có giá để định giá danh mục
@@ -129,6 +173,21 @@ async function loadPrices() {
     DataService.markAsleep();
     setTableMessage("Nguồn lỗi — chưa lấy được giá vàng.");
   }
+}
+
+let spreadBaseLoaded = false;
+function loadSpreadBaseline() {
+  if (spreadBaseLoaded) return;
+  spreadBaseLoaded = true;
+  DataService.getGoldSnapshots(90)
+    .then((rows) => {
+      goldState.spreadBase = buildSpreadBaseline(rows);
+      renderTable();
+    })
+    .catch((err) => {
+      console.warn("[vang] lịch sử chênh lệch lỗi:", err.message);
+      spreadBaseLoaded = false; // thử lại ở lần nạp giá sau
+    });
 }
 
 function renderSource() {
@@ -169,7 +228,8 @@ function renderTable() {
   document.getElementById("goldTableBody").innerHTML = rows
     .map((it) => {
       const sp = spreadPct(it);
-      const warn = hasVal(sp) && sp >= SPREAD_WARN_PCT;
+      const warn = spreadWarn(it);
+      const base = goldState.spreadBase && goldState.spreadBase[it.code];
       const buy = priceIn(it.buy, u);
       const sell = priceIn(it.sell, u);
       return `<tr>
@@ -177,7 +237,13 @@ function renderTable() {
         <td class="num">${buy === null ? "—" : fmtMoney(buy)}</td>
         <td class="num">${sell === null ? "—" : fmtMoney(sell)}</td>
         <td class="num ${warn ? "warn" : "muted"}">${hasVal(sp) ? sp.toFixed(2) + "%" : "—"}${
-          warn ? ' <span class="warn-dot" title="Chênh lệch mua-bán giãn rộng">▲</span>' : ""
+          warn
+            ? ` <span class="warn-dot" title="${
+                base
+                  ? `Cao hơn mức thường ngày của loại này (trung vị ${base.days} ngày: ${base.median.toFixed(2)}%)`
+                  : "Chênh lệch mua-bán giãn rộng"
+              }">▲</span>`
+            : ""
         }</td>
       </tr>`;
     })
@@ -200,16 +266,19 @@ function renderSpreadNote() {
   // dòng cảnh báo phải đếm theo đúng những gì bảng ĐANG hiện — bật "vàng tuổi
   // thấp" mà chú thích vẫn nói "không có dòng nào vượt ngưỡng" là mâu thuẫn với
   // 8 dấu ▲ ngay phía trên.
-  const warned = visibleItems().filter((it) => {
-    const sp = spreadPct(it);
-    return hasVal(sp) && sp >= SPREAD_WARN_PCT;
-  }).length;
+  const warned = visibleItems().filter(spreadWarn).length;
+  const baseDays = goldState.spreadBase
+    ? Math.max(0, ...Object.values(goldState.spreadBase).map((b) => b.days))
+    : 0;
 
   el.innerHTML =
     `Giá theo <strong>${UNIT_LABEL[goldState.unit]}</strong>. ` +
     (hasVal(sjcSp) ? `Chênh lệch mua–bán của vàng miếng SJC hiện <strong>${sjcSp.toFixed(2)}%</strong>, ` : "") +
     `trung bình nhóm chính <strong>${avg.toFixed(2)}%</strong>. ` +
-    `Vượt ${SPREAD_WARN_PCT}% được đánh dấu ▲ — chênh lệch giãn rộng thường là lúc thị trường căng, ` +
+    (baseDays
+      ? `▲ = chênh lệch cao hơn hẳn mức thường ngày của <em>chính loại đó</em> (trung vị ${baseDays} ngày + ít nhất 0,5 điểm %) — `
+      : `Chưa đủ lịch sử để biết mức thường ngày của từng loại; tạm đánh dấu ▲ khi vượt ${SPREAD_FALLBACK_PCT}% — `) +
+    `chênh lệch giãn rộng thường là lúc thị trường căng, ` +
     `mua vào lúc đó lỗ ngay phần chênh.` +
     (warned ? ` <span class="warn">Đang có ${warned} loại vượt ngưỡng.</span>` : "");
 }

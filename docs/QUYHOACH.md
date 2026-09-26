@@ -480,7 +480,7 @@ lúc đó đã biết chính xác schema cần gì, không phải thiết kế m
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 5.1 | Tạo Supabase project (free tier), thiết kế schema 7 bảng | Xem 3.4 |
+| 5.1 | Tạo Supabase project (free tier), thiết kế schema 9 bảng (thực tế `supabase/schema.sql`; kế hoạch gốc ghi 7) | Xem 3.4 |
 | 5.2 | Bật **Row Level Security** trên mọi bảng ngay lúc tạo | Không để làm sau |
 | 5.3 | Đăng nhập bằng email magic link | Không mật khẩu = không có mật khẩu để lộ |
 | 5.4 | Viết `store.js` driver Supabase | Cùng giao diện, đổi driver |

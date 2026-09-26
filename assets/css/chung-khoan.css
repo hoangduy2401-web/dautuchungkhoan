@@ -73,6 +73,15 @@
   color: var(--text-tertiary); font-weight: 500; display: block;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Showing the saved last-good snapshot while the backend wakes: every widget
+   painted from it is dimmed so it never reads as live (the header label says
+   when it is from). */
+.showing-snapshot .index-card,
+.showing-snapshot .ticker-track,
+.showing-snapshot .heatmap-grid,
+.showing-snapshot #watchlist,
+.showing-snapshot #ovVolume,
+.showing-snapshot #ovBreadth { opacity: 0.55; transition: opacity var(--duration-base) var(--ease-standard); }
 .index-card .chg.up { color: var(--positive); }
 .index-card .chg.down { color: var(--negative); }
 

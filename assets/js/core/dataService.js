@@ -93,6 +93,33 @@ const DataService = (function () {
     return false;
   }
 
+  // ---- Last-good market snapshot (this browser only) ----------------------
+  // The stock page saves indices + VN30/watchlist quotes after every good
+  // refresh and paints them at once on the next visit, while a sleeping Render
+  // instance takes 30-50s to wake. They are REAL numbers with their SSI read
+  // time and are shown labelled as old (golden rule: old data must say when it
+  // is from) — never mixed silently with live ones.
+  // localStorage directly, not Store: this is a disposable market-data cache,
+  // not user data, and must not be synced to Supabase on every refresh.
+  const SNAP_KEY = "vn_dashboard_market_snapshot_v1";
+  const SNAP_MAX_AGE_MS = 7 * 24 * 3600 * 1000; // older than a week: useless
+  function saveMarketSnapshot(snap) {
+    try {
+      localStorage.setItem(SNAP_KEY, JSON.stringify({ ...snap, savedAt: Date.now() }));
+    } catch (err) {
+      /* private mode / quota — the snapshot is only a convenience */
+    }
+  }
+  function loadMarketSnapshot() {
+    try {
+      const snap = JSON.parse(localStorage.getItem(SNAP_KEY) || "null");
+      if (!snap || !Array.isArray(snap.indices) || Date.now() - snap.savedAt > SNAP_MAX_AGE_MS) return null;
+      return snap;
+    } catch (err) {
+      return null;
+    }
+  }
+
   // Called by the UI when a data call fails: forces the next cycle to re-probe
   // instead of trusting the cached "awake" flag.
   function markAsleep() {
@@ -308,6 +335,29 @@ const DataService = (function () {
     return fetchJson(`${cfg.goldProvider.baseUrl}/prices`, T_FAST);
   }
 
+  // Daily gold snapshots written by the backend job into Supabase
+  // `price_snapshots` (public-read table, publishable key is fine): the
+  // history the gold page needs to know each product's NORMAL buy/sell spread.
+  // [{taken_on, payload:{items:[{code, buy, sell}]}}], oldest first.
+  function getGoldSnapshots(days = 90) {
+    const sb = cfg.supabase;
+    const since = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10);
+    const url =
+      `${sb.url}/rest/v1/price_snapshots?kind=eq.gold&taken_on=gte.${since}` +
+      `&select=taken_on,payload&order=taken_on.asc`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), T_FAST);
+    return fetch(url, {
+      signal: ctrl.signal,
+      headers: { apikey: sb.publishableKey, Authorization: `Bearer ${sb.publishableKey}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`price_snapshots -> ${res.status}`);
+        return res.json();
+      })
+      .finally(() => clearTimeout(timer));
+  }
+
   // ---- Crypto -----------------------------------------------------------
   // getCryptoPrices  {updatedAt, source:"CoinGecko"|"Binance", note?, items:[
   //                   {id, symbol, name, image, vnd, usd, change24h, marketCap}]}
@@ -366,6 +416,8 @@ const DataService = (function () {
   return {
     wakeBackend,
     markAsleep,
+    saveMarketSnapshot,
+    loadMarketSnapshot,
     getCompanyInfo,
     getIndices,
     getQuote,
@@ -380,6 +432,7 @@ const DataService = (function () {
     getFxRates,
     getFxHistory,
     getGoldPrices,
+    getGoldSnapshots,
     getSavingsRates,
     getCryptoPrices,
     getCryptoHistory,
