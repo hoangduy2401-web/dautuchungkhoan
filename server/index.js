@@ -5,6 +5,7 @@
 // ============================================================
 
 const express = require("express");
+const compression = require("compression");
 const cors = require("cors");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -14,6 +15,9 @@ const Parser = require("rss-parser");
 require("dotenv").config();
 
 const app = express();
+// gzip every JSON response: a 5Y history is ~1,250 candles of repetitive JSON
+// that compresses ~5-8x. Render's edge does not compress for us.
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 
@@ -111,6 +115,32 @@ function revalidate(key, ttlMs, producer) {
   inFlight.set(key, p);
   p.catch(() => {}); // a background refresh failure must not crash the process
   return p;
+}
+
+// Browser cache hint for SLOW-moving data only (fundamentals, dividend events,
+// daily FX/crypto history, savings rates). Live prices/indices/quotes get NO
+// header on purpose: a browser-cached quote would sit under the 45s refresh
+// and show an old price as current. Set only on success, so an error response
+// is never cached by the browser.
+function cacheFor(seconds) {
+  return (req, res, next) => {
+    const json = res.json.bind(res);
+    res.json = (body) => {
+      if (res.statusCode < 400) res.set("Cache-Control", `public, max-age=${seconds}`);
+      return json(body);
+    };
+    next();
+  };
+}
+
+// Parse ?symbols=A,B,C into a de-duplicated, validated, capped list.
+function parseSymbols(raw, max) {
+  return [...new Set(
+    String(raw || "")
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => /^[A-Z0-9]{1,10}$/.test(s))
+  )].slice(0, max);
 }
 
 function withCache(key, ttlMs, producer, { staleMs = DEFAULT_STALE_MS } = {}) {
@@ -371,6 +401,32 @@ app.get("/api/price/history", async (req, res) => {
   }
 });
 
+// GET /api/price/closes?symbols=FPT,VNM&days=40
+// -> { closes: { FPT: [c1, c2, ...] }, errors: { XYZ: "msg" } }   (ascending)
+// Batch for the watchlist sparklines: one HTTP round trip instead of one per
+// symbol. Reuses the exact cache entry of /api/price/history (same key), so a
+// symbol already charted costs nothing and vice versa.
+app.get("/api/price/closes", async (req, res) => {
+  const symbols = parseSymbols(req.query.symbols, 20);
+  const days = Math.min(Number(req.query.days) || 40, 270);
+  if (!symbols.length) return res.status(400).json({ error: "missing symbols" });
+
+  const closes = {};
+  const errors = {};
+  await Promise.all(
+    symbols.map((sym) =>
+      withCache(`history:${sym}:${days}:adj`, 60_000, () => computeHistory(sym, days, { raw: false }))
+        .then((items) => {
+          closes[sym] = items.map((r) => r.close);
+        })
+        .catch((err) => {
+          errors[sym] = err.message;
+        })
+    )
+  );
+  res.json({ closes, errors });
+});
+
 // UI code -> SSI IndexId. DailyIndex only accepts one IndexId per call
 // (IndexId=ALL -> NoDataFound), so every index lookup goes through this map.
 const INDEX_IDS = {
@@ -627,9 +683,47 @@ async function computeQuote(symbol) {
 }
 
 // Cached + de-duplicated. 45s TTL: outside trading hours the quote barely moves.
+const QUOTE_TTL_MS = 45_000;
 function fetchQuote(symbol) {
-  return withCache(`quote:${symbol}`, 45_000, () => computeQuote(symbol));
+  return withCache(`quote:${symbol}`, QUOTE_TTL_MS, () => computeQuote(symbol));
 }
+
+// When SSI was actually read for this cached quote (every write to the entry
+// uses QUOTE_TTL_MS, so expiresAt - TTL is the fetch time). Stale-while-
+// revalidate can serve an entry up to 10 min old; this lets the UI say so.
+function quoteFetchedAt(symbol) {
+  const entry = cache.get(`quote:${symbol}`);
+  return entry ? entry.expiresAt - QUOTE_TTL_MS : null;
+}
+
+// GET /api/price/quotes?symbols=FPT,VNM,...
+// -> { quotes: { FPT: {price, changePct, volume, netForeignVal} }, errors: { XYZ: "msg" },
+//      asOf: ISO — when SSI was read for the OLDEST quote in `quotes` }
+// Batch form of /api/price/quote: the stock page used to fire 30+ parallel
+// requests per refresh (VN30 tape + watchlist). Every item goes through the
+// same fetchQuote cache, so warmed VN30 symbols answer instantly and only
+// cold ones queue on the SSI limiter. Each quote has the exact /quote shape.
+app.get("/api/price/quotes", async (req, res) => {
+  const symbols = parseSymbols(req.query.symbols, 60);
+  if (!symbols.length) return res.status(400).json({ error: "missing symbols" });
+
+  const quotes = {};
+  const errors = {};
+  await Promise.all(
+    symbols.map((sym) =>
+      fetchQuote(sym)
+        .then((q) => {
+          quotes[sym] = q;
+        })
+        .catch((err) => {
+          errors[sym] = err.message;
+        })
+    )
+  );
+  const times = Object.keys(quotes).map(quoteFetchedAt).filter(Number.isFinite);
+  const asOf = times.length ? new Date(Math.min(...times)).toISOString() : null;
+  res.json({ quotes, errors, asOf });
+});
 
 // GET /api/price/quote?symbol=VNM  (used by dataService.getQuote)
 app.get("/api/price/quote", async (req, res) => {
@@ -758,7 +852,41 @@ async function computeFundamentals(symbol) {
   };
 }
 
-app.get("/api/fundamentals/:symbol", async (req, res) => {
+// GET /api/marketcaps?symbols=FPT,VNM,...
+// -> { source:"VNDirect", asOf:"YYYY-MM-DD", items: { FPT: 121.3, ... } }  (nghìn tỷ ₫)
+// Sizes the VN30 heatmap tiles. ONE VNDirect call for the whole basket
+// (`where=code:A,B,C` works on /ratios/latest — measured 26/09/2026), not 30.
+// A symbol missing from `items` means VNDirect had no value: the UI must not
+// invent a size for it. `asOf` = the oldest reportDate among the rows, so the
+// label never claims fresher data than the stalest tile.
+app.get("/api/marketcaps", cacheFor(3600), async (req, res) => {
+  const symbols = parseSymbols(req.query.symbols, 60);
+  if (!symbols.length) return res.status(400).json({ error: "missing symbols" });
+  try {
+    const data = await withCache(`mcap:${[...symbols].sort().join(",")}`, 6 * 3600_000, async () => {
+      const rows = await vndirectJson(
+        `${VNDIRECT_RATIOS}?filter=ratioCode:MARKETCAP&where=code:${symbols.join(",")}` +
+          `&order=reportDate&fields=code,value,reportDate&size=${symbols.length * 2}`
+      );
+      const items = {};
+      let asOf = null;
+      for (const r of rows) {
+        const v = Number(r.value);
+        if (!Number.isFinite(v) || v <= 0) continue;
+        items[r.code] = v / 1e12; // -> nghìn tỷ, same unit as /api/fundamentals
+        if (r.reportDate && (!asOf || r.reportDate < asOf)) asOf = r.reportDate;
+      }
+      if (!Object.keys(items).length) throw new Error("VNDirect trả rỗng");
+      return { source: "VNDirect", asOf, items };
+    });
+    res.json(data);
+  } catch (err) {
+    console.error("[/api/marketcaps]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+app.get("/api/fundamentals/:symbol", cacheFor(3600), async (req, res) => {
   const symbol = String(req.params.symbol || "").toUpperCase();
   try {
     // 6h TTL — fundamentals change slowly.
@@ -900,7 +1028,7 @@ function backAdjustHistory(rows, events) {
 
 // GET /api/events/SSI -> corporate-action history, newest first:
 // [{ type, typeDesc, note, exDate, recordDate, ratio, cash, issuePrice, year }]
-app.get("/api/events/:symbol", async (req, res) => {
+app.get("/api/events/:symbol", cacheFor(3600), async (req, res) => {
   const symbol = String(req.params.symbol || "").toUpperCase();
   if (!symbol) return res.status(400).json({ error: "missing symbol" });
   try {
@@ -1153,7 +1281,7 @@ async function computeFxHistory(code, days) {
 }
 
 // GET /api/fx/history?code=USD&days=365
-app.get("/api/fx/history", async (req, res) => {
+app.get("/api/fx/history", cacheFor(1800), async (req, res) => {
   const code = String(req.query.code || "USD").toUpperCase();
   const days = Number(req.query.days) || 365;
   if (!FX_CODES.includes(code)) {
@@ -1396,7 +1524,7 @@ async function computeSavings() {
 }
 
 // GET /api/savings/rates
-app.get("/api/savings/rates", async (req, res) => {
+app.get("/api/savings/rates", cacheFor(600), async (req, res) => {
   try {
     res.json(await withCache("savings:rates", SAVINGS_TTL_MS, computeSavings));
   } catch (err) {
@@ -1686,7 +1814,7 @@ app.get("/api/crypto/prices", async (req, res) => {
 });
 
 // GET /api/crypto/history?id=bitcoin&days=90 — VND series, one point per day.
-app.get("/api/crypto/history", async (req, res) => {
+app.get("/api/crypto/history", cacheFor(600), async (req, res) => {
   const id = String(req.query.id || "").trim().toLowerCase();
   const days = Number(req.query.days) || 90;
   if (!id) return res.status(400).json({ error: "missing_id" });
@@ -2156,7 +2284,7 @@ async function warmCache() {
     console.warn("[warm] indices:", e.message)
   );
   for (const sym of WARM_SYMBOLS) {
-    await revalidate(`quote:${sym}`, 45_000, () => computeQuote(sym)).catch((e) =>
+    await revalidate(`quote:${sym}`, QUOTE_TTL_MS, () => computeQuote(sym)).catch((e) =>
       console.warn(`[warm] quote ${sym}:`, e.message)
     );
   }
