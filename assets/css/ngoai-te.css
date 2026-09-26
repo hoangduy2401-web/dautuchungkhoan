@@ -45,29 +45,7 @@
 .hold-form { grid-template-columns: 100px minmax(0, 1fr) minmax(0, 1.4fr) auto; }
 .hold-code { font-weight: 700; }
 
-/* ---- Biểu đồ ---- */
-.fx-chart-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; flex-wrap: wrap; margin: 12px 0 6px;
-}
-.fx-chart-title { font-size: var(--text-md); font-weight: 700; }
-.fx-chart-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.fx-chart-stats {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: 8px; margin-bottom: 8px;
-}
-.fx-chart-stats .stat {
-  background: var(--surface-inset); border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm); padding: 8px 10px;
-  display: flex; flex-direction: column; gap: 2px;
-}
-.fx-chart-stats .label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
-.fx-chart-stats .val { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
-.fx-chart-stats .muted { color: var(--text-tertiary); font-size: var(--text-2xs); }
-
-.fx-note {
-  margin: 12px 0 0; font-size: var(--text-2xs); line-height: 1.6; color: var(--text-secondary);
-}
+/* ---- Biểu đồ: .fx-chart-* / .fx-note chuyển sang base.css (26/09) — trang Vàng dùng chung. ---- */
 .fx-note strong { color: var(--text-primary); }
 
 /* ---- Quy đổi nhanh ---- */

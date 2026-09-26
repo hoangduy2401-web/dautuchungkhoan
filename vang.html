@@ -23,11 +23,11 @@
 <link rel="preconnect" href="https://dashboard-chung-khoan.onrender.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap&subset=vietnamese,latin" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/base.css?v=20260926i" />
-<link rel="stylesheet" href="assets/css/vang.css?v=20260926i" />
-<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260926i" />
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=20260926i" />
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=20260926i" />
+<link rel="stylesheet" href="assets/css/base.css?v=20260926j" />
+<link rel="stylesheet" href="assets/css/vang.css?v=20260926j" />
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260926j" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=20260926j" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=20260926j" />
 <meta name="theme-color" content="#e8973a" />
 </head>
 <body>
@@ -158,29 +158,53 @@
       </div>
     </div>
 
+    <!-- Lịch sử giá vàng miếng SJC (26/09/2026). Panel THỨ 4 trong DOM; vị trí
+         trên màn hình do grid-template-areas ở vang.css quyết định ("hist"). -->
+    <div class="panel gold-hist-panel">
+      <div class="panel-head">
+        <h2>Lịch sử giá vàng SJC</h2>
+        <span class="src-badge" id="goldHistSource">—</span>
+      </div>
+      <div class="panel-body">
+        <div class="fx-chart-head">
+          <div class="fx-chart-title">Vàng miếng SJC <span class="gold-hist-unit">triệu ₫/lượng</span></div>
+          <div class="fx-chart-tools">
+            <label class="chk"><input type="checkbox" id="chkGoldBuy" checked /><span class="sw" style="background:var(--text-muted);"></span>Mua vào</label>
+            <label class="chk"><input type="checkbox" id="chkGoldWorld" checked /><span class="sw sw-dash" style="border-color:var(--chart-ma20);"></span>Thế giới quy đổi</label>
+            <div class="range-tabs" id="goldRangeTabs"></div>
+          </div>
+        </div>
+        <div class="fx-chart-stats" id="goldHistStats"></div>
+        <div class="chart-wrap gold-hist-chart" id="goldHistChart"></div>
+        <p class="fx-note" id="goldHistNote"></p>
+      </div>
+    </div>
+
   </main>
 
   <footer class="app-footer">
     Dữ liệu chỉ mang tính tham khảo, không phải khuyến nghị đầu tư.
-    Giá vàng: PNJ (dự phòng: Bảo Tín Minh Châu).
+    Giá vàng: PNJ (dự phòng: Bảo Tín Minh Châu). Lịch sử SJC: CafeF (dự phòng: PNJ).
+    Giá thế giới quy đổi: FXRatesAPI.
   </footer>
 
   <!-- CDN scripts pinned by version AND by hash (SRI): if unpkg ever served
        different bytes for this version, the browser refuses to run them.
        Changing a version = recompute the hash:
        curl -sL URL | openssl dgst -sha384 -binary | openssl base64 -A -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js" integrity="sha384-JZigAjwiaZtkUbA44CWkPaT3iBb/mU5pO6QOANp+OqHd4q+1+7MG1kzp2OOP9ZfP" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
-  <script src="assets/js/core/config.js?v=20260926i"></script>
-  <script src="assets/js/core/store.js?v=20260926i"></script>
-  <script src="assets/js/core/auth.js?v=20260926i"></script>
-  <script src="assets/js/core/store-supabase.js?v=20260926i"></script>
-  <script src="assets/js/core/theme.js?v=20260926i"></script>
-  <script src="assets/js/core/nav.js?v=20260926i"></script>
-  <script src="assets/js/core/motion.js?v=20260926i"></script>
-  <script src="assets/js/core/mockData.js?v=20260926i"></script>
-  <script src="assets/js/core/dataService.js?v=20260926i"></script>
-  <script src="assets/js/core/costGuard.js?v=20260926i"></script>
-  <script src="assets/js/core/numInput.js?v=20260926i"></script>
-  <script src="assets/js/pages/vang.js?v=20260926i"></script>
+  <script src="assets/js/core/config.js?v=20260926j"></script>
+  <script src="assets/js/core/store.js?v=20260926j"></script>
+  <script src="assets/js/core/auth.js?v=20260926j"></script>
+  <script src="assets/js/core/store-supabase.js?v=20260926j"></script>
+  <script src="assets/js/core/theme.js?v=20260926j"></script>
+  <script src="assets/js/core/nav.js?v=20260926j"></script>
+  <script src="assets/js/core/motion.js?v=20260926j"></script>
+  <script src="assets/js/core/mockData.js?v=20260926j"></script>
+  <script src="assets/js/core/dataService.js?v=20260926j"></script>
+  <script src="assets/js/core/costGuard.js?v=20260926j"></script>
+  <script src="assets/js/core/numInput.js?v=20260926j"></script>
+  <script src="assets/js/pages/vang.js?v=20260926j"></script>
 </body>
 </html>

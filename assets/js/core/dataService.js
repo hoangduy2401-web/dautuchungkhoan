@@ -341,6 +341,14 @@ const DataService = (function () {
     return fetchJson(`${cfg.goldProvider.baseUrl}/prices`, T_FAST);
   }
 
+  // SJC bar history, triệu ₫/lượng: {source:"CafeF"|"PNJ", note?, product,
+  // unit, lastAt, items:[{date, buy, sell}], world: {source, method, note,
+  // items:[{date, price}]} | null}. Never mock (a price). 30s budget: the PNJ
+  // fallback is one request per day (~20s for 1M, measured).
+  function getGoldHistory(days) {
+    return fetchJson(`${cfg.goldProvider.baseUrl}/history?days=${days}`, 30000);
+  }
+
   // Daily gold snapshots written by the backend job into Supabase
   // `price_snapshots` (public-read table, publishable key is fine): the
   // history the gold page needs to know each product's NORMAL buy/sell spread.
@@ -438,6 +446,7 @@ const DataService = (function () {
     getFxRates,
     getFxHistory,
     getGoldPrices,
+    getGoldHistory,
     getGoldSnapshots,
     getSavingsRates,
     getCryptoPrices,

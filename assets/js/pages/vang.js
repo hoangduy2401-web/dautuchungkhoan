@@ -138,6 +138,7 @@ async function bootData() {
     setBackendStatus(s < 5 ? "Đang kết nối máy chủ…" : `Máy chủ đang khởi động (thường 30–50s)… ${s}s`, "warn");
   }, 500);
 
+  renderGoldRangeTabs();
   const awake = await DataService.wakeBackend();
   clearInterval(tick);
 
@@ -149,6 +150,7 @@ async function bootData() {
 
   setBackendStatus("", "");
   await loadPrices();
+  loadGoldHistory(); // non-blocking: the price board must not wait on a year of history
 }
 
 /* ============================================================
@@ -633,4 +635,171 @@ function wireHoldings() {
       e.target.closest("tr")?.querySelector('[data-act="cancel"]')?.click();
     }
   });
+}
+
+/* ============================================================
+   LỊCH SỬ GIÁ VÀNG SJC (26/09/2026)
+   Nguồn: /api/gold/history — CafeF (chính), PNJ (dự phòng, chỉ khung 1M), đã
+   đối chiếu 5 ngày rải 1 năm: khớp 0 đồng. Đường "thế giới quy đổi" là
+   XAU × USD/VND liên ngân hàng, KHÔNG gồm thuế phí — chỉ để thấy mức chênh.
+
+   Biểu đồ riêng bằng Lightweight Charts, không qua ChartModule: ChartModule
+   là khuôn một chuỗi giá + MA/BB/RSI của trang chứng khoán; ở đây cần ba
+   đường cùng trục. Màu đọc từ biến CSS kiểu literal (--amber, --text-muted,
+   --chart-ma20, --border) — CLAUDE.md mục 3: biến dạng var(...) trả chuỗi thô
+   và Lightweight Charts im lặng dùng màu mặc định.
+   ============================================================ */
+const GOLD_RANGES = [
+  { label: "1M", days: 30 },
+  { label: "3M", days: 90 },
+  { label: "6M", days: 180 },
+  { label: "1Y", days: 365 },
+];
+const goldHist = { range: 90, data: null, chart: null, series: {} };
+
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
+function goldChartTheme() {
+  const border = cssVar("--border", "#2a2a2a");
+  return {
+    layout: { background: { color: "transparent" }, textColor: cssVar("--text-muted", "#8a8a8a"), fontFamily: "'Roboto', 'Inter', sans-serif", fontSize: 11 },
+    grid: { vertLines: { color: "transparent" }, horzLines: { color: border } },
+    rightPriceScale: { borderColor: border, minimumWidth: 58 },
+    timeScale: { borderColor: border },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  };
+}
+
+function goldSeriesColors() {
+  return {
+    sell: cssVar("--amber", "#f0a94e"),
+    buy: cssVar("--text-muted", "#8a8a8a"),
+    world: cssVar("--chart-ma20", "#a78bfa"),
+  };
+}
+
+// Built lazily when the first data lands, so the container has its real width.
+function ensureGoldChart() {
+  if (goldHist.chart) return;
+  const host = document.getElementById("goldHistChart");
+  const chart = LightweightCharts.createChart(host, {
+    ...goldChartTheme(),
+    width: host.clientWidth || 600,
+    height: host.clientHeight || 260,
+  });
+  const c = goldSeriesColors();
+  const fmt = { type: "price", precision: 1, minMove: 0.1 };
+  goldHist.series.world = chart.addLineSeries({ color: c.world, lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed, priceFormat: { type: "price", precision: 2, minMove: 0.01 }, lastValueVisible: false, priceLineVisible: false, title: "Thế giới" });
+  goldHist.series.buy = chart.addLineSeries({ color: c.buy, lineWidth: 1, priceFormat: fmt, lastValueVisible: true, priceLineVisible: false, title: "Mua" });
+  goldHist.series.sell = chart.addLineSeries({ color: c.sell, lineWidth: 2, priceFormat: fmt, lastValueVisible: true, priceLineVisible: true, title: "Bán" });
+  goldHist.chart = chart;
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => chart.applyOptions({ width: host.clientWidth })).observe(host);
+  }
+  // Sáng/Tối: re-read the literal colour vars.
+  new MutationObserver(() => {
+    chart.applyOptions(goldChartTheme());
+    const k = goldSeriesColors();
+    goldHist.series.sell.applyOptions({ color: k.sell });
+    goldHist.series.buy.applyOptions({ color: k.buy });
+    goldHist.series.world.applyOptions({ color: k.world });
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+}
+
+function renderGoldRangeTabs() {
+  const host = document.getElementById("goldRangeTabs");
+  host.innerHTML = GOLD_RANGES.map(
+    (r) => `<button type="button" data-days="${r.days}"${r.days === goldHist.range ? ' class="active"' : ""}>${r.label}</button>`
+  ).join("");
+  host.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-days]");
+    if (!btn || Number(btn.dataset.days) === goldHist.range) return;
+    goldHist.range = Number(btn.dataset.days);
+    host.querySelectorAll("button").forEach((b) => b.classList.toggle("active", Number(b.dataset.days) === goldHist.range));
+    loadGoldHistory();
+  });
+  const sync = () => {
+    if (!goldHist.chart) return;
+    goldHist.series.buy.applyOptions({ visible: document.getElementById("chkGoldBuy").checked });
+    goldHist.series.world.applyOptions({ visible: document.getElementById("chkGoldWorld").checked });
+  };
+  document.getElementById("chkGoldBuy").addEventListener("change", sync);
+  document.getElementById("chkGoldWorld").addEventListener("change", sync);
+}
+
+const toTimeG = (d) => d; // "YYYY-MM-DD" is a valid Lightweight Charts time
+const fmtTr = (n, d = 1) => (hasVal(n) ? Number(n).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d }) : "—");
+const fmtDay = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+async function loadGoldHistory() {
+  const days = goldHist.range;
+  const stats = document.getElementById("goldHistStats");
+  stats.innerHTML = `<span class="muted">Đang tải lịch sử…</span>`;
+  try {
+    const d = await DataService.getGoldHistory(days);
+    if (days !== goldHist.range) return; // user switched range meanwhile
+    ensureGoldChart();
+    goldHist.data = d;
+    goldHist.series.sell.setData(d.items.map((p) => ({ time: toTimeG(p.date), value: p.sell })));
+    goldHist.series.buy.setData(d.items.map((p) => ({ time: toTimeG(p.date), value: p.buy })));
+    goldHist.series.world.setData(d.world ? d.world.items.map((p) => ({ time: toTimeG(p.date), value: p.price })) : []);
+    goldHist.chart.timeScale().fitContent();
+    Motion.swap(document.getElementById("goldHistChart"));
+    renderGoldHistMeta(d);
+  } catch (err) {
+    if (days !== goldHist.range) return;
+    console.warn("[vang] lịch sử lỗi:", err.message);
+    // No chart for this range rather than the previous range's lines under
+    // a new label (golden rule).
+    if (goldHist.chart) Object.values(goldHist.series).forEach((s) => s.setData([]));
+    stats.innerHTML = `<span class="muted">Nguồn lỗi — chưa lấy được lịch sử giá vàng.</span>`;
+    document.getElementById("goldHistSource").textContent = "—";
+  }
+}
+
+function renderGoldHistMeta(d) {
+  const items = d.items;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const sells = items.map((p) => p.sell);
+  const chg = first && last ? ((last.sell - first.sell) / first.sell) * 100 : null;
+  const hi = Math.max(...sells);
+  const lo = Math.min(...sells);
+
+  // Premium over world: SJC sell vs the world line on the latest date BOTH have
+  // (the FX series ends yesterday).
+  let prem = null;
+  let premDate = null;
+  if (d.world && d.world.items.length) {
+    const w = new Map(d.world.items.map((p) => [p.date, p.price]));
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (w.has(items[i].date)) {
+        prem = ((items[i].sell - w.get(items[i].date)) / w.get(items[i].date)) * 100;
+        premDate = items[i].date;
+        break;
+      }
+    }
+  }
+  const cls = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
+  document.getElementById("goldHistStats").innerHTML =
+    `<div class="stat"><span class="label">Bán ra mới nhất</span><span class="val">${fmtTr(last.sell)}</span><span class="muted">${fmtDay(last.date)}</span></div>` +
+    `<div class="stat"><span class="label">Biến động khung</span><span class="val ${cls(chg)}">${hasVal(chg) ? (chg > 0 ? "+" : "") + chg.toFixed(2) + "%" : "—"}</span></div>` +
+    `<div class="stat"><span class="label">Cao / thấp</span><span class="val">${fmtTr(hi)} / ${fmtTr(lo)}</span></div>` +
+    `<div class="stat"><span class="label">Cao hơn thế giới</span><span class="val">${hasVal(prem) ? (prem > 0 ? "+" : "") + prem.toFixed(1) + "%" : "—"}</span>` +
+    `<span class="muted">${premDate ? fmtDay(premDate) : "chưa có giá thế giới"}</span></div>`;
+
+  const at = d.lastAt ? new Date(d.lastAt) : null;
+  document.getElementById("goldHistSource").textContent =
+    `${d.source}${at && !Number.isNaN(at.getTime()) ? " · cập nhật " + at.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : ""}`;
+  document.getElementById("goldHistNote").innerHTML =
+    (d.note ? `<strong>${escapeHtml(d.note)}.</strong> ` : "") +
+    `Giá vàng miếng SJC <strong>cuối mỗi ngày</strong> (${escapeHtml(d.source)}), đơn vị triệu ₫/lượng. ` +
+    (d.world
+      ? `Đường nét đứt là <strong>giá thế giới quy đổi</strong>: vàng quốc tế (XAU) × tỷ giá USD/VND liên ngân hàng của ${escapeHtml(d.world.source)}, ` +
+        `đổi ounce ra lượng — <strong>chưa gồm thuế, phí nhập khẩu</strong>, chỉ để so mức chênh. Điểm mới nhất của nó là hôm qua.`
+      : `Chưa lấy được giá thế giới để so sánh.`);
 }

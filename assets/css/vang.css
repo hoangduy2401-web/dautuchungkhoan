@@ -12,6 +12,7 @@
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   grid-template-areas:
     "board conv"
+    "board hist"
     "port  port";
   align-items: start;
   gap: 16px;
@@ -19,6 +20,12 @@
 .main-grid-gold > .panel:nth-child(1) { grid-area: board; }
 .main-grid-gold > .panel:nth-child(2) { grid-area: conv; }
 .main-grid-gold > .panel:nth-child(3) { grid-area: port; }
+.main-grid-gold > .panel:nth-child(4) { grid-area: hist; }
+
+/* ---- Lịch sử giá SJC (dùng lại khung .fx-chart-* của trang Ngoại tệ) ---- */
+.gold-hist-unit { font-size: var(--text-2xs); font-weight: 600; color: var(--text-tertiary); margin-left: 6px; }
+.gold-hist-chart { height: 260px; }
+.sw-dash { display: inline-block; width: 14px; height: 0; border-top: 2px dashed; margin-right: 6px; vertical-align: middle; background: none !important; }
 
 /* Nguồn dự phòng đang trả lời = giá của MỘT TIỆM KHÁC, không phải thị trường
    biến động. Phải nói ra, nên dải này cố ý nổi. */
@@ -85,7 +92,7 @@
 @media (max-width: 1040px) {
   .main-grid-gold {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "board" "conv" "port";
+    grid-template-areas: "board" "hist" "conv" "port";
   }
 }
 @media (max-width: 860px) {

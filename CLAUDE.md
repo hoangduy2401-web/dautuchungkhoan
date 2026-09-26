@@ -289,6 +289,16 @@ GET /api/gold/prices                    (PNJ chính, BTMC dự phòng)
 ```
 
 ```
+GET /api/gold/history?days=30|90|180|365     (26/09 — xem docs/VANG.md mục 4)
+→ { source:"CafeF"|"PNJ", note?, product:"SJC", unit:"triệu đồng/lượng",
+    lastAt (ISO), items:[{ date, buy, sell }],
+    world: { source:"FXRatesAPI", method, note, items:[{ date, price }] } | null }
+   ĐƠN VỊ KHÁC /prices: TRIỆU ₫/LƯỢNG (không phải nghìn ₫/chỉ).
+   world = XAU × USD/VND liên ngân hàng quy ra lượng, CHƯA thuế phí; điểm cuối
+   là hôm qua. PNJ dự phòng chỉ cho days ≤ 31. days > 365 → 400.
+```
+
+```
 GET /api/crypto/prices?ids=bitcoin,ethereum   (Binance ở production, xem mục 7)
 → { updatedAt, source:"CoinGecko"|"Binance"|"CoinMarketCap", note?,
     vndFrom?: { rate, rateDate, source },
@@ -937,6 +947,7 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Chart tỷ giá** (trang Ngoại tệ) | FXRatesAPI | đường, **chỉ 1M/3M/6M/1Y** — nguồn free hết lịch sử ở 366 ngày |
 | Ghim mã ngoại tệ / quy đổi 2 chiều | `Store` + bảng VCB | quy đổi dùng giá mua chuyển khoản (bán cho NH) và giá bán (mua từ NH) |
 | **Danh mục ngoại tệ** | `Store` (`holdings_fx`) | danh sách nắm giữ **sửa tại chỗ**, không phải sổ giao dịch; định giá theo giá mua chuyển khoản VCB |
+| **Lịch sử giá vàng SJC** | CafeF (dự phòng PNJ) + FXRatesAPI XAU | biểu đồ 3 đường bán/mua/thế giới quy đổi, 1M–1Y, ô "Cao hơn thế giới %" (26/09) |
 | **Bảng giá vàng** | PNJ (dự phòng BTMC) | 20 loại; đổi đơn vị lượng/chỉ/gram; cảnh báo chênh lệch mua-bán ≥5% |
 | **Danh mục vàng** | `Store` (`holdings_gold`) | cùng khuôn `holdings_fx`; giá vốn nhập theo **triệu ₫/lượng**; định giá theo giá tiệm **mua vào** |
 | **Giá coin** | Binance + tỷ giá dự án | CoinGecko **chặn IP Render** — xem mục 7. VND là số **quy đổi**, trang ghi nhãn |
@@ -1068,29 +1079,12 @@ thấy chạy thật**:
 3. Nháy màu khi giá đổi (`flash-up/-down`) trên thẻ chỉ số/watchlist/heatmap.
 4. "trễ N phút" màu cam chỉ hiện khi quote cũ ≥3' trong giờ.
 
-#### Còn nợ từ phiên 15 (không chặn)
+#### Còn nợ từ phiên 15 — user báo ĐÃ LÀM hết (26/09)
 
-- **Chưa thử trên iPhone thật** — mọi kiểm tra khổ điện thoại (375px) làm
-  bằng trình duyệt giả lập Android Chrome. **User tự làm:** mở bằng Safari
-  trên iPhone, thử (1) vuốt ngang bảng Tiết kiệm/Vàng — cột tên phải đứng yên,
-  (2) nút ✕ cảnh báo đáo hạn, (3) "Xem thêm" watchlist/tin tức, (4) kéo thả
-  watchlist bằng ngón tay (nút ☰). `position: sticky` trong bảng và
-  `mask-image` là hai thứ Safari hay khác Chrome.
-- Nút điều hướng trên điện thoại cao **40px** (chuẩn 44px) — chọn cố ý cho
-  thanh gọn; tăng lên 44 nếu user thấy khó bấm (base.css, khối ≤640px).
-- Trang Vàng **không có biểu đồ lịch sử giá** — user có nhắc "biểu đồ Vàng"
-  khi sửa bộ chọn thời gian. Nếu cần: có sẵn `price_snapshots` (1 dòng/ngày từ
-  15/08) làm nguồn, nhưng mới ~43 ngày.
-
-- **Chưa thử "giảm chuyển động"** (reduced motion) trên máy thật — trình duyệt
-  nhúng không giả lập được. Bật trong Cài đặt hệ thống → Trợ năng → Giảm chuyển
-  động, mở trang: không được có gì trượt/nháy.
-- ~~Animation chưa làm~~ — **xong 26/09 (cùng phiên)**: kéo thả watchlist mượt
-  (`Motion.flip`), vạch nền trượt dưới tab (`.tab-ink`, tự gắn cho
-  `.market-tabs/.range-tabs/.ov-ex/.segmented`), hàng thu lại khi xoá
-  (`await Motion.leave(row)` TRƯỚC khi xoá — làm theo khuôn này cho nút xoá mới).
-- **Nạp `supabase-js` muộn** (~212KB) — phải viết lại `auth.js` vì nó đọc
-  `window.supabase` lúc nạp. **Hỏi user trước**, đổi thứ tự nạp đã chốt.
+User xác nhận đã tự làm: thử trên iPhone thật (Safari), bật "giảm chuyển
+động", đổi cron-job.org sang 10 phút, bật tự gia hạn tên miền Mắt Bão. Trang
+Vàng đã có biểu đồ lịch sử (phiên 15, xem mục 9). Nút điều hướng điện thoại
+vẫn 40px (chuẩn 44) — chỉ tăng nếu user thấy khó bấm.
 
 #### GĐ 7 đã được HOÃN có chủ ý (phiên 12) — đọc trước khi bắt tay
 
@@ -1240,12 +1234,9 @@ xác + animation 4 giai đoạn (26/09, phiên 15).
 3. ✅ Mã thiếu quote không còn định giá bằng giá vốn — xem mục 7 (SSI giá 0).
 
 ### Việc nhỏ (không chặn) — user tự làm
-1. **Bật tự động gia hạn tên miền ở Mắt Bão** (quên = dashboard chết, không ai báo).
-2. **Pinger giữ backend thức** — user đã thêm UptimeRobot 5' (26/09). Còn:
-   vào **cron-job.org** đổi job thành **10 phút**, URL phải là
-   `https://dashboard-chung-khoan.onrender.com/health` (bắt buộc `https://`).
-   Kiểm sau ~1 ngày: mở `/health`, `uptimeSec` > 86.400 là không ngủ lần nào.
-   (Mục Enforce HTTPS cũ ở đây đã XONG từ 15/08 — xem mục 6.)
+1. ~~Tự gia hạn tên miền Mắt Bão~~ — **user báo đã bật (26/09).**
+2. ~~Pinger~~ — **xong 26/09:** UptimeRobot 5' + cron-job.org 10'. Phiên sau
+   nên mở `/health` một lần: `uptimeSec` > 86.400 là không ngủ lần nào.
 3. GitHub tự tắt scheduled workflow sau 60 ngày repo không commit → tab Actions
    bấm *Enable workflow* khi cần.
 

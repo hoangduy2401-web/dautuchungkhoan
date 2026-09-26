@@ -634,6 +634,30 @@ tr:hover td { background: var(--surface-hover); }
    position:absolute va lop canvas phu roi xuong duoi, day chart-stack cao
    gap doi (do 07/08/2026: 524px thay vi 260px). */
 /* Chart nam thang tren mat the — khong khung, khong nen rieng */
+/* ---- Khung biểu đồ trang tài sản (Ngoại tệ, Vàng): tiêu đề + công cụ +
+   ô thống kê + ghi chú. Chuyển từ ngoai-te.css 26/09 — dùng ở >1 trang. ---- */
+.fx-chart-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin: 12px 0 6px;
+}
+.fx-chart-title { font-size: var(--text-md); font-weight: 700; }
+.fx-chart-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fx-chart-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px; margin-bottom: 8px;
+}
+.fx-chart-stats .stat {
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.fx-chart-stats .label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary); }
+.fx-chart-stats .val { font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+.fx-chart-stats .muted { color: var(--text-tertiary); font-size: var(--text-2xs); }
+
+.fx-note {
+  margin: 12px 0 0; font-size: var(--text-2xs); line-height: 1.6; color: var(--text-secondary);
+}
 .chart-stack { position: relative; height: 260px; margin-top: 4px; }
 .chart-wrap { height: 260px; overflow: hidden; position: relative; }
 /* Transparent to the mouse unless a drawing tool is armed — otherwise the

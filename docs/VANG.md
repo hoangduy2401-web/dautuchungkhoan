@@ -84,3 +84,34 @@ User-Agent. Giống hệt trường hợp TCBS đã bỏ.
   Muốn có chart phải tự tích luỹ bản chụp hàng ngày (hợp với GĐ 5, khi đã có
   Supabase) hoặc tìm nguồn thứ ba.
 - Bạc: BTMC có sẵn dữ liệu, chưa ai yêu cầu.
+
+
+## 4. Lịch sử giá SJC — `/api/gold/history` (26/09/2026)
+
+| Nguồn | Trạng thái | Ghi chú |
+|---|---|---|
+| `sjc.com.vn/GoldPrice/Services/PriceService.ashx` | ❌ | Cloudflare challenge, như bảng giá |
+| **CafeF** `cafef.vn/du-lieu/Ajax/ajaxgoldpricehistory.ashx?index=1y` | ✅ CHÍNH | 1 lần gọi = cả năm, SJC mua/bán **triệu ₫/lượng**; đã đo gọi được từ Render |
+| **PNJ** `edge-api.pnj.io/ecom-frontend/v1/get-gold-price-history?zone=00&gold_type=SJC&date=YYYYMMDD` | ✅ DỰ PHÒNG | mỗi NGÀY 1 request; giá dạng chuỗi `"141.400"` = nghìn ₫/lượng |
+| VNDirect `/v4/commodities` | ❌ | trả rỗng |
+| FXRatesAPI `XAU` | ✅ | vàng thế giới, ounce/1 USD — thêm vào lượt gọi tỷ giá sẵn có |
+
+**Cạm bẫy CafeF:**
+- Một ngày có thể nhiều bản ghi (460 bản / 366 ngày) → giữ bản **cuối** của
+  ngày theo **giờ VN** (`createdAt` là UTC).
+- `index`: `1m/3m/6m/1y/all`. **`3y`, `5y` lặng lẽ trả như `1m`** (32 dòng) —
+  đừng tưởng có 5 năm. `all` chỉ về tới 08/02/2025.
+
+**Đối chiếu:** CafeF vs PNJ 5 ngày rải 1 năm (25/09, 15/08, 02/06, 15/01/2026,
+06/10/2025) khớp **0 đồng**. Ngày biến động mạnh có thể lệch 1–2% vì SJC đổi
+giá nhiều lần/ngày và mỗi nguồn chụp một lúc (03/03/2026: CafeF 190,9 vs PNJ
+chốt 188,2, PNJ trong ngày có 189,4). **Không phải lỗi dữ liệu** — đợt đỉnh
+~190 triệu cuối 01–03/2026 là thật (PNJ xác nhận 29/01: 189,6).
+
+**PNJ dự phòng chậm:** 30 ngày = 20s (4 request song song) → server chỉ dùng nó
+cho `days ≤ 31`; khung dài mà CafeF chết thì báo lỗi rõ, không bắt chờ.
+
+**Thế giới quy đổi** = (VND/USD ÷ XAU/USD) × 37,5/31,1034768, triệu ₫/lượng.
+Đo 25/09/2026: 134,25 — sát con số CafeF tự công bố (135,2). SJC bán cao hơn
+**+7,6%**; trong 1 năm dao động +1% … +24%. Chưa gồm thuế/phí nhập khẩu — trang
+ghi rõ, đừng gỡ nhãn.
