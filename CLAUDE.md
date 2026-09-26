@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260926i`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20260926j`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -916,7 +916,7 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260926i`. Nhánh `main` sạch, đã push,
+Cache busting `?v=20260926j`. Nhánh `main` sạch, đã push (commit `6dcbf85`),
 backend deploy lại 26/09 (endpoint gom lô, tin VNDirect, lọc trùng ngày coin,
 header cache). Bản live đã kiểm sau deploy: 9 request lúc tải trang Chứng
 khoán, CLS 0,004, 0 lỗi console.
@@ -979,9 +979,9 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 ### Nhật ký theo phiên
 
 **26/09/2026 (phiên 15) — rà soát toàn hệ thống: 4 giai đoạn tốc độ + độ chính xác + animation.**
-Bump `?v=20260817c` → **`?v=20260926i`** (9 lần, 3 lần cuối qua `scripts/bump-v.sh`).
-**ĐỤNG `server/`** 4 lần — Render deploy lại, đã kiểm live. 14 commit code
-`0a64999`…`d125419` (+ 2 commit handoff).
+Bump `?v=20260817c` → **`?v=20260926j`** (10 lần, 4 lần cuối qua `scripts/bump-v.sh`).
+**ĐỤNG `server/`** 5 lần — Render deploy lại, đã kiểm live. 16 commit code
+`0a64999`…`6dcbf85` (+ 3 commit handoff).
 
 - **GĐ1 (CLS + gọi trùng):** thẻ giữ chỗ cho dải chỉ số + panel Tổng quan vẽ
   khung sẵn → CLS 0,387 → 0,010 (desktop) / 0,007 (375px), đo với backend giả
@@ -1035,6 +1035,12 @@ Bump `?v=20260817c` → **`?v=20260926i`** (9 lần, 3 lần cuối qua `scripts
   - Tiết kiệm: nút ✕ ẩn từng cảnh báo đáo hạn + "Ẩn tất cả". Ẩn theo **mức**
     (`idSổ:d30|d15|d7|past`, setting `svAlertDismissed` qua Store) — tới mốc kế
     tiếp cảnh báo hiện lại. Đừng đổi thành ẩn vĩnh viễn.
+  - **Biểu đồ lịch sử giá vàng SJC** (`aab04ac` server + `6dcbf85` trang):
+    CafeF chính / PNJ dự phòng (≤31 ngày) / đường thế giới = XAU FXRatesAPI.
+    Nguồn, đối chiếu, cạm bẫy: **`docs/VANG.md` mục 4** — đọc trước khi động
+    vào. Biểu đồ là instance Lightweight Charts riêng trong `vang.js` (3 đường
+    cùng trục), KHÔNG qua ChartModule. `.fx-chart-*` chuyển sang `base.css`.
+    Giá đỉnh ~190 triệu/lượng tháng 1–3/2026 là THẬT (PNJ xác nhận), đừng lọc.
   - **Bẫy công cụ:** chụp màn hình ở chế độ giả lập điện thoại SAU KHI CUỘN ra
     ảnh trống nửa trên (DOM vẫn đúng — `elementFromPoint` xác nhận). Cách chụp:
     giữ `scrollY=0`, dịch `document.body.style.transform = translateY(-Npx)`.
