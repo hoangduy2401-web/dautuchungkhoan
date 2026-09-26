@@ -1817,11 +1817,13 @@ function renderFundamentals(f) {
 
 // "3 giờ trước" for today-ish items, a date for older ones — news from the
 // VNDirect feed can be weeks old and "700h trước" reads as noise.
-// Items VNDirect dates without a time come as "...T00:00:00+07:00": show the
-// date, since "17 giờ trước" would invent an hour.
+// Items VNDirect stamps at 00:00–00:09 local are not real publish times:
+// date-only rows come as 00:00:00, and its Tạp chí Công Thương items are
+// batch-imported just after midnight (measured 26/09/2026: 00:00:24, 00:00:37,
+// 00:00:28). Show the date, since "17 giờ trước" would invent an hour.
 function newsAge(time) {
   const t = new Date(time);
-  const dateOnly = /T00:00:00\+07:00$/.test(String(time));
+  const dateOnly = /T00:0\d:\d\d\+07:00$/.test(String(time));
   const h = Math.round((Date.now() - t) / 3600000);
   if (dateOnly) return t.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
   if (!Number.isFinite(h)) return "";
