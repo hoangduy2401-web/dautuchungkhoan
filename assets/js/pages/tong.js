@@ -73,14 +73,18 @@ function renderTotals(res) {
   host.innerHTML =
     `<div class="nw-total">` +
     `<div class="label">${dayDu ? "Tổng tài sản ròng" : "Tổng tài sản ròng (chưa đủ)"}</div>` +
-    `<div class="val"><span class="money">${fmtVnd(t.value)}</span></div>` +
+    `<div class="val"><span class="money" id="nwTotalVal">${fmtVnd(t.value)}</span></div>` +
     `</div>` +
     `<div class="nw-total">` +
     `<div class="label">Lãi/lỗ so với giá vốn</div>` +
     `<div class="val ${plClass(t.pl)}">` +
-    `<span class="money">${t.pl === null ? "—" : fmtVnd(t.pl)}</span>` +
+    `<span class="money" id="nwTotalPl">${t.pl === null ? "—" : fmtVnd(t.pl)}</span>` +
     `<small> ${fmtPct(t.plPct)}</small></div>` +
     `</div>`;
+  // Count up to the totals (presentation only — ends on the exact value;
+  // skipped in privacy mode, see motion.js).
+  Motion.countUp("nw:total", document.getElementById("nwTotalVal"), t.value, fmtVnd);
+  if (t.pl !== null) Motion.countUp("nw:pl", document.getElementById("nwTotalPl"), t.pl, fmtVnd);
 }
 
 // Phân bổ tài sản (GĐ 6.3 + 6.7).
@@ -355,6 +359,7 @@ async function renderCashFlows(res) {
       date,
       note: document.getElementById("cfNote").value.trim(),
     });
+    Motion.toast("Đã ghi dòng tiền");
     await renderCashFlows(res);
   });
 

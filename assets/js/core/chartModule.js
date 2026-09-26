@@ -232,6 +232,9 @@ const ChartModule = (function () {
   //   lên nhãn (xem `pages/coin.js`, hàm chartScaleFor).
   function setData(ohlcv, key) {
     const sameDataset = key != null && key === dataKey;
+    // New symbol/range: short fade so the switch reads as a switch. Same
+    // dataset (the 45s refresh) redraws in place, no fade.
+    if (key != null && !sameDataset && ohlcv.length && typeof Motion !== "undefined") Motion.swap(priceContainer);
     dataKey = key != null ? key : null;
     bars = ohlcv;
 

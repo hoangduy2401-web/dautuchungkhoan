@@ -859,3 +859,116 @@ tr:hover td { background: var(--surface-hover); }
   padding-top: 14px; border-radius: 0;
 }
 .tools-body > div:first-child .panel { border-top: none; padding-top: 0; }
+
+
+/* ============================================================
+   MOTION — xem assets/js/core/motion.js.
+   Chỉ là cách HIỆN thay đổi, không bao giờ đổi con số. Dùng transform/opacity
+   /background (không đụng kích thước) nên không gây layout shift. Người dùng
+   bật "giảm chuyển động" trong hệ điều hành thì tắt hết (khối cuối file).
+   ============================================================ */
+:root {
+  --flash-up: rgba(27, 175, 122, 0.30);
+  --flash-down: rgba(229, 72, 77, 0.30);
+  --shimmer: rgba(127, 127, 127, 0.14);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes motion-fade-in { from { opacity: 0; } }
+@keyframes motion-rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes motion-row-enter { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes motion-grow-x { from { transform: scaleX(0); } }
+@keyframes motion-flash-up { from { background-color: var(--flash-up); } }
+@keyframes motion-flash-down { from { background-color: var(--flash-down); } }
+@keyframes motion-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@keyframes motion-attention {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 169, 78, 0); }
+  35% { box-shadow: 0 0 0 4px rgba(240, 169, 78, 0.35); }
+}
+@keyframes motion-toast-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
+
+/* Giá đổi: ô nháy xanh/đỏ rồi mờ về nền của chính nó (bảng điện sàn). */
+.flash-up { animation: motion-flash-up 900ms var(--ease-standard); }
+.flash-down { animation: motion-flash-down 900ms var(--ease-standard); }
+
+/* Đang chờ dữ liệu: vệt sáng chạy qua ô giữ chỗ (thay cho "—" đứng im). */
+.index-card.is-placeholder .val,
+.heat-cell.heat-empty {
+  background-image: linear-gradient(90deg, transparent 0%, var(--shimmer) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: motion-shimmer 1.4s linear infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* Lần tải đầu: các khối nổi lên lần lượt. Chỉ áp cho khung tĩnh (.panel,
+   thẻ tổng) — KHÔNG áp cho thứ vẽ lại mỗi 45s, nếu không sẽ nhấp nháy. */
+.panel, .nw-total { animation: motion-rise 420ms var(--ease-out) both; }
+.market-section .panel { animation-delay: 40ms; }
+.main-grid .panel { animation-delay: 90ms; }
+.main-grid .panel + .panel { animation-delay: 130ms; }
+.portfolio-section .panel { animation-delay: 170ms; }
+
+/* Đổi tab / mở khối: nội dung mờ dần vào. */
+.mtab-pane:not([hidden]),
+[data-apane]:not([hidden]),
+#accountMore:not([hidden]),
+details[open] > :not(summary) { animation: motion-fade-in 220ms var(--ease-standard); }
+.motion-swap { animation: motion-fade-in 260ms var(--ease-standard); }
+
+/* Hàng mới (danh mục, watchlist) trượt vào; motion.js gắn class. */
+.row-enter { animation: motion-row-enter 320ms var(--ease-out) both; }
+
+/* Thanh tỷ trọng: các khúc giãn ra từ trái (chỉ lần vẽ đầu, xem JS). */
+.nw-alloc-bar span,
+.ov-breadth-bar.grow .bp { transform-origin: left center; animation: motion-grow-x 700ms var(--ease-out) both; }
+.nw-alloc-bar span:nth-child(2), .ov-breadth-bar.grow .bp:nth-child(2) { animation-delay: 60ms; }
+.nw-alloc-bar span:nth-child(3), .ov-breadth-bar.grow .bp:nth-child(3) { animation-delay: 120ms; }
+.nw-alloc-bar span:nth-child(4) { animation-delay: 180ms; }
+.nw-alloc-bar span:nth-child(5) { animation-delay: 240ms; }
+
+/* Ô bản đồ nhiệt: nhô lên khi rê chuột. */
+.heat-cell[data-symbol] { transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
+.heat-cell[data-symbol]:hover { transform: scale(1.04); z-index: 2; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18); }
+
+/* Cảnh báo xuất hiện: nhịp viền một lần, không lặp (lặp là gây mệt). */
+.login-warn, .nw-alert-warn, #svAlerts:not([hidden]), .sv-stale:not([hidden]) {
+  animation: motion-attention 1.2s var(--ease-standard) 300ms 1;
+}
+
+/* Nút con mắt: số tiền/chấm che mờ dần khi bật/tắt (nav.js gắn class ~0,3s). */
+:root.privacy-anim .money,
+:root.privacy-anim .money::before { animation: motion-fade-in 240ms var(--ease-standard); }
+
+/* Đổi Sáng/Tối: màu chuyển mượt (theme.js gắn class ~0,35s rồi gỡ). */
+:root.theme-anim,
+:root.theme-anim *,
+:root.theme-anim *::before,
+:root.theme-anim *::after {
+  transition: background-color 300ms var(--ease-standard), color 300ms var(--ease-standard),
+    border-color 300ms var(--ease-standard), fill 300ms var(--ease-standard) !important;
+}
+
+/* Toast xác nhận "Đã lưu". */
+.toast-host {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  z-index: 1000; pointer-events: none;
+}
+.toast {
+  background: var(--surface-pill-active); color: var(--text-on-accent);
+  font-size: var(--text-xs); font-weight: 600; padding: 9px 16px;
+  border-radius: var(--radius-pill); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  animation: motion-toast-in 260ms var(--ease-out);
+  transition: opacity 300ms var(--ease-standard), transform 300ms var(--ease-standard);
+}
+.toast.out { opacity: 0; transform: translateY(8px); }
+
+/* Tôn trọng "giảm chuyển động": tắt mọi animation/transition ở trên. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

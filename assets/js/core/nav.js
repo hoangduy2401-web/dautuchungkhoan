@@ -136,6 +136,11 @@ const Nav = (function () {
 
   async function togglePrivacy() {
     const next = !document.documentElement.classList.contains("privacy");
+    // Fade the masked/unmasked amounts (base.css MOTION). Only on a user
+    // toggle, never on page load.
+    const root = document.documentElement;
+    root.classList.add("privacy-anim");
+    setTimeout(() => root.classList.remove("privacy-anim"), 320);
 
     // Chỉ chặn ở chiều HIỆN số. Chiều ẩn đi luôn cho qua.
     if (!next && (await getPinHash())) {

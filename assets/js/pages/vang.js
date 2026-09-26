@@ -546,6 +546,7 @@ function wireHoldings() {
       date: document.getElementById("holdDate").value || null,
       updatedAt: new Date().toISOString(),
     });
+    Motion.toast("Đã thêm vào danh mục vàng");
     goldState.holdings = await Store.list(HOLDINGS_COLLECTION);
     qtyEl.value = "";
     costEl.value = "";

@@ -31,8 +31,16 @@ function setTheme(t) {
 function wireThemeControls() {
   const light = document.getElementById("tLight");
   const dark = document.getElementById("tDark");
-  if (light) light.addEventListener("click", () => setTheme("light"));
-  if (dark) dark.addEventListener("click", () => setTheme("dark"));
+  // Smooth colour change on a user click only (not on load): base.css turns
+  // on colour transitions while `theme-anim` is on <html>.
+  const animated = (t) => () => {
+    const root = document.documentElement;
+    root.classList.add("theme-anim");
+    setTheme(t);
+    setTimeout(() => root.classList.remove("theme-anim"), 350);
+  };
+  if (light) light.addEventListener("click", animated("light"));
+  if (dark) dark.addEventListener("click", animated("dark"));
   setTheme(currentTheme); // sync button state to the initial theme
 }
 

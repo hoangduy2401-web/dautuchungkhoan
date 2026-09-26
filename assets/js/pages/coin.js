@@ -670,6 +670,7 @@ function wireHoldings() {
       date: document.getElementById("holdDate").value || null,
       updatedAt: new Date().toISOString(),
     });
+    Motion.toast("Đã thêm vào danh mục coin");
     await reloadHoldings();
     qtyEl.value = "";
     costEl.value = "";

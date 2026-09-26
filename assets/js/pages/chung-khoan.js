@@ -393,7 +393,7 @@ function renderIndexStrip() {
   el.innerHTML = state.indices
     .map(
       (ix) => `
-    <div class="index-card${ix.code === state.selected ? " active" : ""}" data-index="${ix.code}">
+    <div class="index-card${ix.code === state.selected ? " active" : ""}${Motion.flash(`ix:${ix.code}`, ix.value)}" data-index="${ix.code}">
       <div class="code">${ix.code}</div>
       <div class="val">${fmt(ix.value, 2)}</div>
       <div class="chg ${trendClass(ix.changePct)}">${arrow(ix.changePct)} ${fmtPct(ix.changePct)}</div>
@@ -511,7 +511,9 @@ function heatCellHtml(s, q, style = "", sizeCls = "") {
   }
   // Selected ticker gets the inset accent ring, same as the watchlist row tint.
   const cls =
-    (q.changePct > 0 ? "up" : q.changePct < 0 ? "down" : "flat") + (s === state.selected ? " active" : "");
+    (q.changePct > 0 ? "up" : q.changePct < 0 ? "down" : "flat") +
+    (s === state.selected ? " active" : "") +
+    Motion.flash(`hm:${s}`, q.price);
   return `<div class="heat-cell ${cls} ${sizeCls}" data-symbol="${s}" style="background:${heatColor(
     q.changePct
   )};${style}" title="${s} · ${fmt(q.price)} · ${fmtPct(q.changePct)}">
@@ -1197,6 +1199,15 @@ function fmtVol(n) {
 // `fetchHistory: false` = paint the placeholder layout only (used at boot,
 // before the backend is awake) so the panel already has its final height —
 // without it the empty panel grew ~220px when data arrived (measured CLS).
+// The breadth bar grows in from the left the first time it has data only —
+// it is re-rendered every 45s and must not replay then.
+let breadthGrown = false;
+function growBreadthOnce() {
+  if (breadthGrown) return "";
+  breadthGrown = true;
+  return " grow";
+}
+
 async function renderOverview({ fetchHistory = true } = {}) {
   const volHost = document.getElementById("ovVolume");
   const breadthHost = document.getElementById("ovBreadth");
@@ -1299,7 +1310,7 @@ async function renderOverview({ fetchHistory = true } = {}) {
         <span class="ov-label">Độ rộng thị trường</span>
         <span class="ov-pct ${adv >= dec ? "up" : "down"}">${adv} tăng / ${dec} giảm</span>
       </div>
-      <div class="ov-breadth-bar">
+      <div class="ov-breadth-bar${growBreadthOnce()}">
         <span class="bp up" style="width:${p(adv).toFixed(1)}%" title="${adv} mã tăng"></span>
         <span class="bp flat" style="width:${p(flat).toFixed(1)}%" title="${flat} mã đứng giá"></span>
         <span class="bp down" style="width:${p(dec).toFixed(1)}%" title="${dec} mã giảm"></span>
@@ -1461,7 +1472,7 @@ function renderWatchlist() {
         ? `<svg class="spark" width="56" height="22" viewBox="0 0 56 22" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${sparkColor}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>`
         : "";
       return `
-      <div class="watch-item ${s === state.selected ? "active" : ""}" data-symbol="${s}">
+      <div class="watch-item ${s === state.selected ? "active" : ""}${q ? Motion.flash(`wl:${s}`, q.price) : ""}" data-symbol="${s}">
         <span class="drag" title="Kéo để sắp xếp" aria-label="Kéo để sắp xếp">☰</span>
         <div>
           <div class="sym">${s}</div>
@@ -1590,6 +1601,7 @@ function wireForms() {
     }
     state.selected = sym;
     saveWatchlist();
+    Motion.toast(`Đã thêm ${sym} vào danh mục theo dõi`);
     DataService.getQuote(sym)
       .then((q) => (state.quotes[sym] = q))
       .catch(() => {}) // no quote yet: the row renders blank until a refresh gets one
@@ -1628,6 +1640,7 @@ function wireForms() {
       date: f.date.value || new Date().toISOString().slice(0, 10),
       note: f.note.value,
     });
+    Motion.toast("Đã lưu giao dịch");
     f.reset();
     refreshPortfolio(); // pull the new symbol's quote if we don't have it yet
   });

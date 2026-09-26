@@ -600,6 +600,7 @@ function wireHoldings() {
       cost, // null = không theo dõi lãi/lỗ cho mã này
       updatedAt: new Date().toISOString(),
     });
+    Motion.toast("Đã thêm vào danh mục ngoại tệ");
     fxState.holdings = await Store.list(HOLDINGS_COLLECTION);
     amountEl.value = "";
     costEl.value = "";

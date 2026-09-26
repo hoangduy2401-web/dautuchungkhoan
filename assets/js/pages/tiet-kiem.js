@@ -541,6 +541,7 @@ function wireBooks() {
       date,
       updatedAt: new Date().toISOString(),
     });
+    Motion.toast("Đã lưu sổ tiết kiệm");
     svState.books = await Store.list(BOOKS_COLLECTION);
     amountEl.value = "";
     rateEl.value = "";
