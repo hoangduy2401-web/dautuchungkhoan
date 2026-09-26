@@ -1059,14 +1059,49 @@ function makeSymbolRegex(sym) {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegex(sym)}(?![\\p{L}\\p{N}])`, "u");
 }
 
+// Per-symbol news from VNDirect finfo (same host as fundamentals/events, which
+// already answer from Render). Measured 26/09/2026: 20 items for each of FPT,
+// VNM, HPG, SSI, VCB, SZC — HOSE disclosures, company news, analyst reports —
+// where the two CafeF RSS feeds alone matched only MWG out of 6 tickers,
+// because RSS headlines rarely spell out the ticker.
+const VNDIRECT_NEWS = "https://api-finfo.vndirect.com.vn/v4/news";
+const NEWS_SOURCE_LABELS = {
+  HOSE: "HOSE",
+  HNX: "HNX",
+  UPCOM: "UPCoM",
+  VNDIRECT: "VNDirect",
+  TAPCHICONGTHUONG: "Tạp chí Công Thương",
+  VNECONOMY: "VnEconomy",
+};
+async function fetchVndirectNews(symbol) {
+  return withCache(`vnnews:${symbol}`, 15 * 60_000, async () => {
+    const rows = await vndirectJson(
+      `${VNDIRECT_NEWS}?q=tagCodes:${symbol}&sort=newsDate:desc,newsTime:desc&size=10` +
+        `&fields=newsTitle,newsDate,newsTime,newsSource,newsUrl,attachments`
+    );
+    return rows
+      .map((r) => ({
+        symbol,
+        title: String(r.newsTitle || "").trim(),
+        source: NEWS_SOURCE_LABELS[r.newsSource] || r.newsSource || "VNDirect",
+        // VNDirect gives a local date + time with no zone: Vietnam time.
+        time: r.newsDate ? `${r.newsDate}T${r.newsTime || "00:00:00"}+07:00` : null,
+        url: r.newsUrl || (r.attachments && r.attachments[0] && r.attachments[0].url) || null,
+      }))
+      .filter((n) => n.title && n.time && n.url);
+  });
+}
+
 async function computeNews(symbols) {
-  const feeds = await Promise.all(
-    CAFEF_FEEDS.map((url) => rssParser.parseURL(url).catch(() => ({ items: [] })))
-  );
+  const [feeds, perSymbol] = await Promise.all([
+    Promise.all(CAFEF_FEEDS.map((url) => rssParser.parseURL(url).catch(() => ({ items: [] })))),
+    // Best-effort per symbol: one failing ticker must not empty the list.
+    Promise.all(symbols.map((sym) => fetchVndirectNews(sym).catch(() => []))),
+  ]);
   const allItems = feeds.flatMap((f) => f.items || []);
   const matchers = symbols.map((sym) => ({ sym, re: makeSymbolRegex(sym) }));
 
-  return allItems
+  const rss = allItems
     .map((item) => {
       const haystack = `${item.title || ""} ${item.contentSnippet || ""}`.toUpperCase();
       const hit = matchers.find((m) => m.re.test(haystack));
@@ -1079,16 +1114,25 @@ async function computeNews(symbols) {
         url: item.link,
       };
     })
-    .filter(Boolean)
+    .filter(Boolean);
+
+  // Same story from both sources -> keep one (compare titles loosely).
+  const seen = new Set();
+  const key = (t) => String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return [...rss, ...perSymbol.flat()]
+    .filter((n) => {
+      const k = key(n.title);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
     .sort((a, b) => new Date(b.time) - new Date(a.time))
-    .slice(0, 30);
+    .slice(0, 60);
 }
 
 app.get("/api/news", async (req, res) => {
-  const symbols = String(req.query.symbols || "")
-    .split(",")
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
+  // Capped: each symbol is one VNDirect call.
+  const symbols = parseSymbols(req.query.symbols, 10);
 
   try {
     const news = await withCache(`news:${symbols.join(",")}`, 5 * 60_000, () => computeNews(symbols));
