@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20260926j`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20261002a`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -169,6 +169,13 @@ lại hash, không thì trình duyệt chặn và cả trang chết:
   lại mỗi 45s** (thẻ chỉ số, dải giá…) bằng CSS thường — nó sẽ chạy lại mỗi
   chu kỳ; dùng `Motion.flash()` (chỉ nháy khi giá trị đổi) hoặc cờ "chỉ lần
   đầu" như `growBreadthOnce()`.
+  **Skeleton (02/10):** chờ dữ liệu = thanh xám shimmer `.sk` (base.css), KHÔNG
+  dùng chữ "Đang tải…". `Motion.skeletonRows/skeletonStats` sinh HTML; bảng ở 4
+  trang tài sản + ô thống kê chart + tin tức/chỉ số cơ bản có **bản chép tĩnh
+  trong HTML** (hiện trước khi JS chạy) — đổi cột bảng thì sửa cả hai. Lớp ô
+  skeleton phải trùng ô thật (`col-cash`, `col-usd`… để điện thoại giấu cùng
+  cột); ô có logo dùng `{cls, html}` để dòng cao đúng. Lỗi tải → `setTableError`
+  (cờ `boardError`) + `Motion.settleSkeletons`, không bao giờ shimmer mãi.
 - `core/numInput.js` — ô nhập số tự chèn dấu chấm nghìn khi gõ. Ô mới chỉ cần
   `data-num="int"` (tiền VND, số cổ phiếu) hoặc `data-num="dec"` (số lượng,
   lãi suất, giá). Chuỗi định dạng kiểu Việt `1.234.567,5` là thứ mọi

@@ -43,3 +43,29 @@ endpoint đó chỉ có snapshot cuối ngày.
 - Đồng bộ giao dịch đa thiết bị → đã nâng thành GĐ 5 của `docs/QUYHOACH.md`.
 
 ---
+
+### Skeleton loading + Chatbot AI (khảo sát 02/10/2026 — user đã chốt hướng)
+
+**Thứ tự đã chốt:** skeleton trước, chatbot sau. **Skeleton ĐÃ LÀM 02/10/2026** (CLAUDE.md mục 4); phần "số liệu lần trước" cho 4 trang tài sản CHƯA làm.
+
+**Skeleton.** ~12 chỗ còn hiện chữ ("Đang chờ máy chủ…" ở bảng 4 trang HTML tĩnh
++ `setTableMessage`; "Đang tải…" ô thống kê chart vang/coin/ngoai-te; xếp hạng
+`chung-khoan.js`; bảng lãi suất `tiet-kiem.js`). Cách làm: lớp `.sk` dùng chung
+trong `base.css` (tái dùng `--shimmer` + `motion-shimmer`), helper trong
+`motion.js`, viết skeleton thẳng vào HTML tĩnh. Dòng skeleton cao ĐÚNG bằng dòng
+thật (giữ CLS ≤0,01). **Giữ dòng trạng thái "Máy chủ đang khởi động… Ns"** —
+Render ngủ 30–50s, shimmer trơn trông như treo. Hết hạn chờ → đổi sang báo lỗi,
+không shimmer mãi. Kèm: mở rộng "số liệu lần trước" (như
+`vn_dashboard_market_snapshot_v1`) sang Vàng/Ngoại tệ/Coin/Lãi suất.
+
+**Chatbot — quyết định của user:**
+- Phạm vi: **CHỈ dữ liệu thị trường.** KHÔNG gửi danh mục/sổ tiết kiệm/giao dịch
+  cá nhân sang API AI. Đừng tự mở rộng — hỏi lại user.
+- Model: **cân bằng** — Haiku cho tra cứu, Sonnet khi cần phân tích; trần chi
+  tiêu/ngày trên server.
+- Kiến trúc dự kiến: `/api/chat` trên Render (khoá API ở env, không ra frontend),
+  khuôn bảo vệ y `/api/account/*` (`x-dashboard-key` + origin allowlist + 503 khi
+  thiếu env). Claude tool use gọi lại hàm dữ liệu sẵn có (quote, history, news,
+  events, gold, fx, savings rates). UI: nút nổi, sheet toàn màn trên điện thoại,
+  `chat.js` nạp lười khi bấm (không đụng thứ tự nạp script). Đây là đổi hợp đồng
+  dữ liệu (mục 2) — user đã đồng ý hướng, chi tiết endpoint chốt khi làm.
