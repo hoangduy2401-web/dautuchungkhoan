@@ -2354,6 +2354,34 @@ app.get("/api/debug/raw", async (req, res) => {
   }
 });
 
+// GET /api/debug/crypto-probe — measure each candidate crypto source FROM THIS
+// HOST (Render's IPs get blocked where a laptop does not, CLAUDE.md §7). Fixed
+// URL list on purpose: no user input reaches fetch, so this is not an SSRF hole.
+const CRYPTO_PROBES = {
+  "binance": "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT",
+  "binance-vision": "https://data-api.binance.vision/api/v3/ticker/24hr?symbol=BTCUSDT",
+  "binance-vision-klines": "https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=2",
+  "okx": "https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT",
+  "okx-candles": "https://www.okx.com/api/v5/market/history-candles?instId=BTC-USDT&bar=1Dutc&limit=2",
+  "kraken": "https://api.kraken.com/0/public/Ticker?pair=XBTUSD",
+  "coinbase": "https://api.exchange.coinbase.com/products/BTC-USD/stats",
+  "coingecko": "https://api.coingecko.com/api/v3/ping",
+};
+app.get("/api/debug/crypto-probe", async (req, res) => {
+  const out = {};
+  await Promise.all(Object.entries(CRYPTO_PROBES).map(async ([name, url]) => {
+    const t0 = Date.now();
+    try {
+      const r = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 10000);
+      const body = (await r.text()).slice(0, 160);
+      out[name] = { status: r.status, ms: Date.now() - t0, retryAfter: r.headers.get("retry-after"), body };
+    } catch (err) {
+      out[name] = { status: null, ms: Date.now() - t0, error: err.message };
+    }
+  }));
+  res.json(out);
+});
+
 // ============================================================
 // `startedAt` / `uptimeSec` tell you whether this instance just cold-started.
 // Render Free spins the instance down after 15 idle minutes, and a cold start
