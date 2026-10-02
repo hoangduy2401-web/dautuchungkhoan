@@ -1716,7 +1716,7 @@ app.get("/api/savings/rates", cacheFor(600), async (req, res) => {
 });
 
 // ============================================================
-// CRYPTO — CoinGecko primary, Binance fallback.
+// CRYPTO — CoinGecko primary, then Binance, then OKX (USD x interbank rate).
 //
 // CoinGecko quotes VND directly, which is the whole reason it is the primary:
 // deriving VND by multiplying a USD price with an exchange rate would stack a
@@ -1732,12 +1732,72 @@ app.get("/api/savings/rates", cacheFor(600), async (req, res) => {
 // ============================================================
 const CG_BASE = process.env.COINGECKO_BASE || "https://api.coingecko.com/api/v3";
 const BINANCE_BASE = process.env.BINANCE_BASE || "https://api.binance.com/api/v3";
-const CRYPTO_TTL_MS = 60_000; // free tier is ~10-30 calls/min; 60s is plenty
+const OKX_BASE = process.env.OKX_BASE || "https://www.okx.com/api/v5";
+const CRYPTO_TTL_MS = 120_000;
+// A coin price a few minutes old beats an error page while every upstream is
+// cooling down; the payload's updatedAt tells the page how old it is.
+const CRYPTO_STALE_MS = 30 * 60_000;
 const CRYPTO_MAX_DAYS = 365;
 
+// ------------------------------------------------------------
+// Upstream cooldown (02/10/2026). Render's outbound IPs are SHARED with other
+// tenants: Binance banned the IP with HTTP 418 "Way too much request weight
+// used" (Retry-After 360) although this server sends a handful of requests per
+// hour, and data-api.binance.vision carries the SAME ban. Binance escalates the
+// ban (2 min -> 3 days) for clients that keep calling while banned, and
+// CoinGecko answers 429 to every call. So on 429/418 a source is skipped
+// entirely until Retry-After passes instead of being hit on every request.
+// ------------------------------------------------------------
+const upstreamCooldown = new Map(); // source name -> epoch ms it may be called again
+
+function assertNotCooling(name) {
+  const until = upstreamCooldown.get(name) || 0;
+  if (until > Date.now()) {
+    const secs = Math.ceil((until - Date.now()) / 1000);
+    throw new Error(`${name} đang tạm nghỉ ${secs}s sau khi bị giới hạn tần suất`);
+  }
+}
+
+function noteRateLimit(name, res) {
+  if (res.status !== 429 && res.status !== 418) return;
+  const retryAfter = Number(res.headers.get("retry-after"));
+  // No header: 418 is a ban (minutes at least), 429 a warning.
+  const fallbackMs = res.status === 418 ? 10 * 60_000 : 60_000;
+  const ms = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : fallbackMs;
+  upstreamCooldown.set(name, Date.now() + ms);
+  console.warn(`[crypto] ${name} HTTP ${res.status} — nghỉ ${Math.round(ms / 1000)}s`);
+}
+
+async function binanceJson(path, timeoutMs = 10000) {
+  assertNotCooling("Binance");
+  const res = await fetchWithTimeout(`${BINANCE_BASE}${path}`, { headers: { Accept: "application/json" } }, timeoutMs);
+  if (!res.ok) {
+    noteRateLimit("Binance", res);
+    throw new Error(`Binance HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function okxJson(path) {
+  assertNotCooling("OKX");
+  const res = await fetchWithTimeout(`${OKX_BASE}${path}`, { headers: { Accept: "application/json" } }, 12000);
+  if (!res.ok) {
+    noteRateLimit("OKX", res);
+    throw new Error(`OKX HTTP ${res.status}`);
+  }
+  // OKX reports API-level errors with HTTP 200 and a non-"0" code.
+  const body = await res.json();
+  if (body?.code !== "0" || !Array.isArray(body.data)) {
+    throw new Error(`OKX lỗi ${body?.code}: ${body?.msg || "không có data"}`);
+  }
+  return body.data;
+}
+
 async function cgJson(path) {
+  assertNotCooling("CoinGecko");
   const res = await fetchWithTimeout(`${CG_BASE}${path}`, { headers: { Accept: "application/json" } }, 12000);
   if (!res.ok) {
+    noteRateLimit("CoinGecko", res);
     // CoinGecko puts the useful part in a nested error_message (e.g. the
     // 365-day limit); the HTTP status alone says nothing.
     let detail = "";
@@ -1814,13 +1874,7 @@ async function computeCryptoFromBinance(ids, symbolById) {
     // Binance muốn một mảng JSON và toàn bộ giá trị phải được URL-encode, kể cả
     // hai dấu ngoặc vuông — encode mỗi phần bên trong thì nó trả HTTP 400.
     const pairs = JSON.stringify(quotable.map((s) => `${s}USDT`));
-    const res = await fetchWithTimeout(
-      `${BINANCE_BASE}/ticker/24hr?symbols=${encodeURIComponent(pairs)}`,
-      { headers: { Accept: "application/json" } },
-      10000
-    );
-    if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-    rows = await res.json();
+    rows = await binanceJson(`/ticker/24hr?symbols=${encodeURIComponent(pairs)}`);
     if (!Array.isArray(rows)) throw new Error("Binance returned no rows");
   }
 
@@ -1923,20 +1977,27 @@ async function computeCryptoHistoryFromBinance(id, days) {
   const sym = CRYPTO_SYMBOLS[id];
   if (!sym) throw new Error(`Binance: chưa có mã ticker cho ${id}`);
 
-  const url = `${BINANCE_BASE}/klines?symbol=${encodeURIComponent(sym)}USDT&interval=1d&limit=${Math.min(days + 1, 1000)}`;
-  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 12000);
-  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-  const rows = await res.json();
+  const rows = await binanceJson(
+    `/klines?symbol=${encodeURIComponent(sym)}USDT&interval=1d&limit=${Math.min(days + 1, 1000)}`,
+    12000
+  );
   if (!Array.isArray(rows) || !rows.length) throw new Error(`Binance: không có dữ liệu cho ${sym}`);
+  // [openTime, open, high, low, close, ...] — lấy giá đóng cửa.
+  const usdByDay = rows.map((k) => [Number(k[0]), Number(k[4])]);
+  return usdHistoryToVnd(id, sym, usdByDay, "Binance");
+}
 
+// Daily USD closes -> VND series. Nhân với tỷ giá USD/VND CỦA CHÍNH NGÀY ĐÓ
+// (không phải tỷ giá hôm nay) — dùng một tỷ giá duy nhất cho cả năm sẽ bóp méo
+// hình dạng đường, biến biến động tỷ giá thành biến động giá coin.
+async function usdHistoryToVnd(id, sym, usdByDay, sourceName) {
   const rates = await usdVndSeries();
   const dates = [...rates.keys()].sort();
-  const items = [];
-  for (const k of rows) {
-    // [openTime, open, high, low, close, ...] — lấy giá đóng cửa.
-    const date = new Date(Number(k[0])).toISOString().slice(0, 10);
-    const usd = Number(k[4]);
+  // One point per UTC date (chart rule, CLAUDE.md §7), ascending.
+  const byDate = new Map();
+  for (const [ts, usd] of [...usdByDay].sort((a, b) => a[0] - b[0])) {
     if (!Number.isFinite(usd)) continue;
+    const date = new Date(ts).toISOString().slice(0, 10);
     // Cuối tuần thị trường ngoại hối đóng nên không có tỷ giá của đúng ngày đó;
     // lấy tỷ giá gần nhất TRƯỚC đó thay vì bỏ điểm — coin giao dịch 24/7.
     let rate = rates.get(date);
@@ -1945,16 +2006,106 @@ async function computeCryptoHistoryFromBinance(id, days) {
       rate = prev ? rates.get(prev) : null;
     }
     if (!rate) continue;
-    items.push({ date, price: usd * rate });
+    byDate.set(date, usd * rate);
   }
-  if (!items.length) throw new Error(`Binance: không ghép được tỷ giá cho ${sym}`);
+  const items = [...byDate].map(([date, price]) => ({ date, price }));
+  if (!items.length) throw new Error(`${sourceName}: không ghép được tỷ giá cho ${sym}`);
   return {
-    source: "Binance × tỷ giá liên ngân hàng",
+    source: `${sourceName} × tỷ giá liên ngân hàng`,
     currency: "VND",
     id,
-    note: "Giá USD của Binance nhân tỷ giá USD/VND cùng ngày",
+    note: `Giá USD của ${sourceName} nhân tỷ giá USD/VND cùng ngày`,
     items,
   };
+}
+
+// ------------------------------------------------------------
+// OKX — third source, added 02/10/2026 when Binance banned Render's IP.
+// Measured from Render (/api/debug/crypto-probe): OKX, Kraken and Coinbase
+// answered 200 while Binance and data-api.binance.vision answered 418.
+// OKX won because it quotes USDT pairs by ticker like Binance (same symbol
+// map) and serves every spot ticker in ONE call.
+// ------------------------------------------------------------
+
+// Tickers OKX lists under a different name. MATIC migrated 1:1 to POL and
+// RNDR was renamed RENDER, so the price is the same asset's.
+const OKX_TICKER_ALIASES = { MATIC: "POL", RNDR: "RENDER" };
+const okxInstId = (sym) => `${OKX_TICKER_ALIASES[sym] || sym}-USDT`;
+
+async function computeCryptoFromOkx(ids, symbolById) {
+  const symbols = ids.map((id) => symbolById[id]).filter(Boolean);
+  if (!symbols.length) throw new Error("OKX: no known symbol for these ids");
+
+  // ~1,100 rows / ~360 KB, but one call covers every id list the pages ask
+  // for, so it is cached once instead of once per watchlist combination.
+  const all = await withCache("crypto:okx:tickers", CRYPTO_TTL_MS, () => okxJson("/market/tickers?instType=SPOT"));
+  const byInst = new Map(all.map((t) => [t.instId, t]));
+
+  let rate = null;
+  let rateDate = null;
+  try {
+    ({ rate, rateDate } = await latestUsdVnd());
+  } catch (err) {
+    console.warn("[crypto] không có tỷ giá USD/VND:", err.message);
+  }
+
+  const items = ids
+    .map((id) => {
+      const sym = symbolById[id];
+      if (sym === "USDT") {
+        return {
+          id, symbol: sym, name: CRYPTO_NAMES.USDT, image: null,
+          vnd: rate || null, usd: 1, change24h: null, marketCap: null,
+        };
+      }
+      const t = sym && byInst.get(okxInstId(sym));
+      if (!t) return null;
+      const usd = num(t.last) || null;
+      const open = num(t.open24h);
+      return {
+        id,
+        symbol: sym,
+        name: CRYPTO_NAMES[sym] || sym,
+        image: null,
+        vnd: usd !== null && rate ? usd * rate : null,
+        usd,
+        // open24h is the rolling-24h open, same window as Binance's figure.
+        change24h: usd !== null && open ? ((usd - open) / open) * 100 : null,
+        marketCap: null,
+      };
+    })
+    .filter(Boolean);
+  if (!items.length) throw new Error("OKX: nothing matched");
+  return {
+    updatedAt: new Date().toISOString(),
+    source: "OKX",
+    vndFrom: rate ? { rate, rateDate, source: "FXRatesAPI (liên ngân hàng)" } : null,
+    items,
+  };
+}
+
+// history-candles returns at most 100 rows per call, newest first; page back
+// with `after` (= oldest ts seen). 365 days -> 4 calls.
+async function computeCryptoHistoryFromOkx(id, days) {
+  const sym = CRYPTO_SYMBOLS[id];
+  if (!sym) throw new Error(`OKX: chưa có mã ticker cho ${id}`);
+  const inst = encodeURIComponent(okxInstId(sym));
+  const want = days + 1;
+  const rows = [];
+  let after = "";
+  while (rows.length < want) {
+    const page = await okxJson(
+      `/market/history-candles?instId=${inst}&bar=1Dutc&limit=100${after ? `&after=${after}` : ""}`
+    );
+    if (!page.length) break;
+    rows.push(...page);
+    after = page[page.length - 1][0];
+    if (page.length < 100) break;
+  }
+  if (!rows.length) throw new Error(`OKX: không có dữ liệu cho ${sym}`);
+  // [ts, open, high, low, close, ...] — newest first; keep the last `want` days.
+  const usdByDay = rows.slice(0, want).map((k) => [Number(k[0]), Number(k[4])]);
+  return usdHistoryToVnd(id, sym, usdByDay, "OKX");
 }
 
 // CoinGecko -> Binance. Nguồn nào trả lời thì tên nằm ở `source`, và đường dự
@@ -1963,18 +2114,30 @@ async function computeCryptoHistoryFromBinance(id, days) {
 //
 // CoinMarketCap đã bị GỠ ngày 07/08/2026: mọi endpoint đòi API key và gói có key
 // là gói trả phí — không hợp với dự án. Đừng dựng lại.
+//
+// Thứ tự CoinGecko -> Binance -> OKX. Nguồn đang "tạm nghỉ" (xem
+// upstreamCooldown) bị bỏ qua ngay, không tốn request.
 async function computeCryptoPrices(ids) {
   try {
     return await computeCryptoFromCoinGecko(ids);
-  } catch (err) {
-    console.warn("[crypto] CoinGecko lỗi, thử Binance:", err.message);
-    const data = await computeCryptoFromBinance(ids, CRYPTO_SYMBOLS);
-    return {
-      ...data,
-      note: data.vndFrom
-        ? `Giá USD từ Binance, quy đổi VND theo tỷ giá liên ngân hàng ngày ${data.vndFrom.rateDate}`
-        : `CoinGecko lỗi (${err.message}), đang dùng Binance — chưa có tỷ giá nên cột VND để trống`,
-    };
+  } catch (cgErr) {
+    console.warn("[crypto] CoinGecko lỗi, thử nguồn USD:", cgErr.message);
+    const errors = [`CoinGecko: ${cgErr.message}`];
+    for (const [name, fn] of [["Binance", computeCryptoFromBinance], ["OKX", computeCryptoFromOkx]]) {
+      try {
+        const data = await fn(ids, CRYPTO_SYMBOLS);
+        return {
+          ...data,
+          note: data.vndFrom
+            ? `Giá USD từ ${name}, quy đổi VND theo tỷ giá liên ngân hàng ngày ${data.vndFrom.rateDate}`
+            : `CoinGecko lỗi (${cgErr.message}), đang dùng ${name} — chưa có tỷ giá nên cột VND để trống`,
+        };
+      } catch (err) {
+        console.warn(`[crypto] ${name} lỗi:`, err.message);
+        errors.push(`${name}: ${err.message}`);
+      }
+    }
+    throw new Error(errors.join(" | "));
   }
 }
 
@@ -1988,7 +2151,9 @@ app.get("/api/crypto/prices", async (req, res) => {
   if (!ids.length) return res.status(400).json({ error: "missing_ids" });
 
   try {
-    res.json(await withCache(`crypto:prices:${ids.join(",")}`, CRYPTO_TTL_MS, () => computeCryptoPrices(ids)));
+    res.json(await withCache(`crypto:prices:${ids.join(",")}`, CRYPTO_TTL_MS, () => computeCryptoPrices(ids), {
+      staleMs: CRYPTO_STALE_MS,
+    }));
   } catch (err) {
     console.error("[/api/crypto/prices]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
@@ -2024,9 +2189,14 @@ app.get("/api/crypto/history", cacheFor(600), async (req, res) => {
         return { source: "CoinGecko", currency: "VND", id, items };
       } catch (err) {
         console.warn("[crypto] CoinGecko history lỗi, thử Binance:", err.message);
-        return computeCryptoHistoryFromBinance(id, days);
       }
-    });
+      try {
+        return await computeCryptoHistoryFromBinance(id, days);
+      } catch (err) {
+        console.warn("[crypto] Binance history lỗi, thử OKX:", err.message);
+      }
+      return computeCryptoHistoryFromOkx(id, days);
+    }, { staleMs: 6 * 3600_000 });
     res.json(data);
   } catch (err) {
     console.error("[/api/crypto/history]", err.message);
