@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20261002a`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20261002c`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -82,7 +82,9 @@ danh mục SSI thật (chỉ đọc), lịch sử giao dịch cá nhân tính l�
 - `localStorage` keys: `vn_dashboard_transactions_v1` (lịch sử giao dịch),
   `vn_dashboard_watchlist_v1` (watchlist), `vn_dashboard_api_key_v1` (khoá
   dashboard), `vn_dashboard_account_more_v1` + `vn_dashboard_account_tab_v1`
-  (trạng thái accordion). Lãi/lỗ tính theo **giá vốn bình quân gia quyền**.
+  (trạng thái accordion), `vn_dashboard_cache_{gold,fx,coin,savings}_v1`
+  (bảng giá lần trước của 4 trang tài sản — cache thị trường, KHÔNG qua Store).
+  Lãi/lỗ tính theo **giá vốn bình quân gia quyền**.
 - `DEFAULT_WATCHLIST` trong `config.js` chỉ seed lần đầu; sau đó watchlist
   đọc/ghi qua `Store`. Danh sách rỗng: tôn trọng, không tự nạp lại seed.
 - **Ngôn ngữ thiết kế: Fey design system** (từ 03/08/2026, xem mục 9). Bề mặt
@@ -176,6 +178,11 @@ lại hash, không thì trình duyệt chặn và cả trang chết:
   skeleton phải trùng ô thật (`col-cash`, `col-usd`… để điện thoại giấu cùng
   cột); ô có logo dùng `{cls, html}` để dòng cao đúng. Lỗi tải → `setTableError`
   (cờ `boardError`) + `Motion.settleSkeletons`, không bao giờ shimmer mãi.
+  **Số liệu lần trước (02/10):** 4 trang tài sản lưu câu trả lời bảng giá tốt gần
+  nhất (`DataService.save/loadPageCache`, 7 ngày), vẽ ngay khi mở trang qua
+  `apply…()` của từng trang, nhãn + làm mờ bằng `setSnapshotNote()` (theme.js,
+  ô `#dataAsOf`). Máy chủ lỗi mà có cache → GIỮ số cũ có nhãn, không xoá bảng.
+  Coin lọc cache theo watchlist hiện tại. Sổ tiết kiệm không làm mờ (lãi đã chốt).
 - `core/numInput.js` — ô nhập số tự chèn dấu chấm nghìn khi gõ. Ô mới chỉ cần
   `data-num="int"` (tiền VND, số cổ phiếu) hoặc `data-num="dec"` (số lượng,
   lãi suất, giá). Chuỗi định dạng kiểu Việt `1.234.567,5` là thứ mọi

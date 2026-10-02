@@ -46,7 +46,7 @@ endpoint đó chỉ có snapshot cuối ngày.
 
 ### Skeleton loading + Chatbot AI (khảo sát 02/10/2026 — user đã chốt hướng)
 
-**Thứ tự đã chốt:** skeleton trước, chatbot sau. **Skeleton ĐÃ LÀM 02/10/2026** (CLAUDE.md mục 4); phần "số liệu lần trước" cho 4 trang tài sản CHƯA làm.
+**Thứ tự đã chốt:** skeleton trước, chatbot sau. **Skeleton ĐÃ LÀM 02/10/2026** (CLAUDE.md mục 4); "số liệu lần trước" cho 4 trang tài sản cũng ĐÃ LÀM 02/10. Còn lại: chatbot.
 
 **Skeleton.** ~12 chỗ còn hiện chữ ("Đang chờ máy chủ…" ở bảng 4 trang HTML tĩnh
 + `setTableMessage`; "Đang tải…" ô thống kê chart vang/coin/ngoai-te; xếp hạng
