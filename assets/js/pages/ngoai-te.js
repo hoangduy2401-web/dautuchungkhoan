@@ -105,7 +105,7 @@ async function bootData() {
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableMessage("Không kết nối được máy chủ.");
+    setTableError("Không kết nối được máy chủ.");
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -130,7 +130,7 @@ async function loadRates() {
   } catch (err) {
     console.warn("[ngoai-te] tỷ giá lỗi:", err.message);
     DataService.markAsleep();
-    setTableMessage("Nguồn lỗi — chưa lấy được tỷ giá.");
+    setTableError("Nguồn lỗi — chưa lấy được tỷ giá.");
   }
 }
 
@@ -145,6 +145,23 @@ function renderUpdatedAt() {
   el.textContent = Number.isNaN(d.getTime())
     ? ""
     : ` · cập nhật ${d.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}`;
+}
+
+// Set once loading has failed: later re-renders (search, unit/sort switch)
+// keep the error instead of going back to an endless shimmer.
+let boardError = null;
+function setTableError(msg) {
+  boardError = msg;
+  setTableMessage(msg);
+  Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+}
+
+// Waiting for the board: shimmer rows. Classes mirror the real cells so the
+// phone layout hides the same "Mua tiền mặt" column.
+const FX_SK_COLS = ["th-pin", "code", "th-name", "num col-cash", "num", "num", "num"];
+function setTableSkeleton() {
+  if (boardError) return setTableMessage(boardError);
+  document.getElementById("fxTableBody").innerHTML = Motion.skeletonRows(8, FX_SK_COLS);
 }
 
 function setTableMessage(msg) {
@@ -199,7 +216,8 @@ function visibleRates() {
 function renderTable() {
   const rows = visibleRates();
   if (!rows.length) {
-    setTableMessage(fxState.rates.length ? "Không có mã nào khớp." : "Đang chờ máy chủ…");
+    if (fxState.rates.length) setTableMessage("Không có mã nào khớp.");
+    else setTableSkeleton();
     return;
   }
 
@@ -308,7 +326,7 @@ async function loadChart() {
   const days = fxState.range;
   const title = document.getElementById("fxChartTitle");
   title.textContent = `${code}/VND — ${FX_NAMES_VI[code] || code}`;
-  document.getElementById("fxChartStats").innerHTML = `<span class="muted">Đang tải…</span>`;
+  document.getElementById("fxChartStats").innerHTML = Motion.skeletonStats(4);
 
   fxState.loadingChart = true;
   try {

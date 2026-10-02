@@ -25,6 +25,18 @@
 //   Sliding tab ink (automatic): .market-tabs, .range-tabs, .ov-ex and
 //       .segmented get one pill behind the active button that slides to the
 //       newly active one, instead of the background jumping.
+//   Motion.skeletonRows(rows, cols)  -> "<tr>…" HTML
+//       Grey shimmer bars shaped like the table rows on their way, instead
+//       of a "Đang chờ máy chủ…" line. `cols` = one class string per column:
+//       "num" right-aligns; mobile-hide classes (col-cash, col-usd…) must be
+//       the SAME as on the real cells so a narrow screen hides the same ones.
+//       A column can be { cls, html } when the real cell is taller than one
+//       line of text (logo, two-line name) — the row must end up as tall.
+//   Motion.skeletonStats(n, sub)  -> "<div class=stat>…" HTML
+//       Same for the stat tiles under a chart (`sub` = also a third line,
+//       for tiles whose real version carries a date under the value).
+//   Motion.settleSkeletons(msg)
+//       After a load failure: any stat skeleton still showing becomes `msg`.
 //   Row enter (automatic): any direct child row with [data-hid] (holdings
 //   tables) or .watch-item[data-symbol] (watchlist) that was not there on
 //   the previous render slides in. First population never animates.
@@ -232,6 +244,49 @@ const Motion = (function () {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scanHints);
   else scanHints();
 
+  // ---- Skeleton -----------------------------------------------------------
+  // Fixed width pattern (not random): re-rendering the skeleton while waiting
+  // must not make the bars jump around.
+  const SK_W = [72, 56, 84, 64, 78, 50, 68, 88];
+  const bar = (w) => `<span class="sk" style="width:${w}%"></span>`;
+  function skeletonRows(rows, cols) {
+    let html = "";
+    for (let r = 0; r < rows; r++) {
+      html +=
+        `<tr class="sk-row" aria-hidden="true">` +
+        cols
+          .map((c, i) => {
+            // { cls, html }: a cell with its own inner shape (logo + two-line name…)
+            const cls = typeof c === "string" ? c : c.cls;
+            const inner = typeof c === "string" ? bar(SK_W[(r * 3 + i) % SK_W.length]) : c.html;
+            return `<td${cls ? ` class="${cls}"` : ""}>${inner}</td>`;
+          })
+          .join("") +
+        `</tr>`;
+    }
+    return html;
+  }
+  function skeletonStats(n, sub = false) {
+    let html = "";
+    for (let i = 0; i < n; i++) {
+      html +=
+        `<div class="stat sk-stat" aria-hidden="true"><span class="label">${bar(SK_W[i] - 10)}</span>` +
+        `<span class="val">${bar(SK_W[(i + 3) % SK_W.length])}</span>` +
+        (sub ? `<span class="muted">${bar(40)}</span>` : "") +
+        `</div>`;
+    }
+    return html;
+  }
+
+  // Loading failed: every stat-tile group still shimmering becomes one muted
+  // line, so nothing on the page keeps "loading" forever.
+  function settleSkeletons(msg) {
+    const boxes = new Set([...document.querySelectorAll(".stat.sk-stat")].map((el) => el.parentElement));
+    boxes.forEach((box) => {
+      box.innerHTML = `<span class="muted">${msg}</span>`;
+    });
+  }
+
   // ---- Row enter ----------------------------------------------------------
   const ROW_SEL = ":scope > [data-hid], :scope > .watch-item[data-symbol]";
   const rowKey = (r) => r.dataset.hid || r.dataset.symbol;
@@ -257,5 +312,5 @@ const Motion = (function () {
   });
   observer.observe(document.body, { childList: true, subtree: true });
 
-  return { reduced, flash, countUp, toast, swap, leave, flip };
+  return { reduced, flash, countUp, toast, swap, leave, flip, skeletonRows, skeletonStats, settleSkeletons };
 })();

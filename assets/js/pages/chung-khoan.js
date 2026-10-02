@@ -47,6 +47,7 @@ const state = {
   wlExpanded: false, // watchlist: show all rows (else the first LIST_PREVIEW)
   newsExpanded: false,
   newsItems: [], // last /api/news answer, so the toggle re-renders without a fetch
+  fundSym: null, // symbol whose ratios #fundGrid shows (skeleton only on a switch)
   fromSnapshot: false, // true while the board shows the saved last-good data
   quotesAsOf: null, // ms — when SSI was read for the oldest quote on screen
   quotesGotAt: null, // ms — when the browser received them (fallback label)
@@ -184,6 +185,7 @@ async function bootData() {
     renderWatchlist();
   } else {
     document.getElementById("indexStrip").innerHTML = indexStripPlaceholder("Đang kết nối máy chủ…");
+    renderWatchlist(); // symbols are known already; prices shimmer until quotes land
   }
   renderOverview({ fetchHistory: false });
 
@@ -652,6 +654,34 @@ function rankBasket(ex) {
   return APP_CONFIG.VN30;
 }
 
+// Skeleton blocks for the non-table panels: same markup/classes as the real
+// rows, so the box keeps its height when the numbers land. The static HTML of
+// chung-khoan.html carries the same blocks for the first paint.
+// Number = % of the cell; string = fixed ("48px") for shrink-to-fit boxes where
+// a percentage would resolve to zero.
+const skBar = (w) => `<span class="sk" style="width:${typeof w === "number" ? w + "%" : w}"></span>`;
+function rankSkeleton(n) {
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    html += `<div class="rank-row" aria-hidden="true"><div class="r-sym">${skBar(70)}</div><div class="r-price">${skBar(80)}</div><div class="r-chg">${skBar(70)}</div></div>`;
+  }
+  return html;
+}
+function fundSkeleton(n) {
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    html += `<div class="fund-cell" aria-hidden="true"><div class="label">${skBar(55 + ((i * 7) % 30))}</div><div class="value">${skBar(40 + ((i * 11) % 35))}</div></div>`;
+  }
+  return html;
+}
+function newsSkeleton(n) {
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    html += `<div class="news-item" aria-hidden="true"><div class="meta">${skBar(30)}</div><div class="title">${skBar(60 + ((i * 13) % 35))}</div></div>`;
+  }
+  return html;
+}
+
 function renderRankings() {
   const gEl = document.getElementById("topGainers");
   const lEl = document.getElementById("topLosers");
@@ -662,7 +692,7 @@ function renderRankings() {
     .map((r) => ({ s: r.s, chg: r.q.changePct, price: r.q.price }));
 
   if (quoted.length === 0) {
-    gEl.innerHTML = lEl.innerHTML = `<div class="empty-state">Đang tải…</div>`;
+    gEl.innerHTML = lEl.innerHTML = rankSkeleton(5);
     return;
   }
   const sorted = quoted.sort((a, b) => b.chg - a.chg);
@@ -1172,6 +1202,23 @@ function ovBar(label, now, prev, unit, sub) {
   // ngay ai hơn ai mà không phải đọc số.
   const max = Math.max(now || 0, prev || 0) || 1;
   const w = (v) => `${Math.max(2, Math.min(100, ((v || 0) / max) * 100)).toFixed(1)}%`;
+  // Nothing from the server yet (boot placeholder): shimmer the bars and
+  // numbers instead of a card full of "—" — same card box, so no shift.
+  if (!state.indices.length) {
+    const row = (lbl, wv) => `<div class="ov-row">
+      <span class="ov-row-lbl">${lbl}</span>
+      <span class="ov-track"><span class="ov-fill sk-fill" style="width:${wv}%"></span></span>
+      <span class="ov-val">${skBar("52px")}</span>
+    </div>`;
+    return `<div class="ov-card" aria-busy="true">
+    <div class="ov-card-head">
+      <span class="ov-label">${escapeHtml(label)}</span>
+      <span class="ov-pct">${skBar("44px")}</span>
+    </div>
+    ${row("Kỳ này", 80)}${row("Kỳ trước", 64)}
+    <div class="ov-unit">${escapeHtml(unit)}</div>
+  </div>`;
+  }
 
   return `<div class="ov-card">
     <div class="ov-card-head">
@@ -1300,16 +1347,16 @@ async function renderOverview({ fetchHistory = true } = {}) {
   if (!total) {
     // Same card shape as the filled one (not a bare empty-state line) so the
     // panel keeps its height; the legend row carries the reason instead.
-    const reason = state.indices.length
-      ? `Chưa có số mã tăng/giảm cho ${escapeHtml(code)}.`
-      : "Đang chờ máy chủ…";
+    // No indices yet = still waiting: shimmer. Indices but no breadth = SSI
+    // doesn't publish it for this index: say so.
+    const waiting = !state.indices.length;
     breadthHost.innerHTML = `<div class="ov-card">
       <div class="ov-card-head">
         <span class="ov-label">Độ rộng thị trường</span>
-        <span class="ov-pct">—</span>
+        <span class="ov-pct">${waiting ? skBar("96px") : "—"}</span>
       </div>
-      <div class="ov-breadth-bar"></div>
-      <div class="ov-breadth-legend"><span>${reason}</span></div>
+      <div class="ov-breadth-bar">${waiting ? `<span class="bp sk-fill" style="width:100%"></span>` : ""}</div>
+      <div class="ov-breadth-legend"><span>${waiting ? skBar("140px") : `Chưa có số mã tăng/giảm cho ${escapeHtml(code)}.`}</span></div>
     </div>`;
   } else {
     const p = (v) => ((v || 0) / total) * 100;
@@ -1485,7 +1532,9 @@ function renderWatchlist() {
   el.innerHTML = state.watchlist
     .map((s) => {
       // No quote yet -> "—", not 0.00. A zero price reads as real data.
+      // Before the first quotes answer at all: shimmer instead of "—".
       const q = state.quotes[s] || null;
+      const pending = !q && !state.quotesGotAt;
       const info = DataService.getCompanyInfo(s);
       const pts = sparkPoints(state.sparks[s]);
       const sparkColor = q && q.changePct < 0 ? "var(--down)" : "var(--up)";
@@ -1501,8 +1550,8 @@ function renderWatchlist() {
         </div>
         ${spark}
         <div class="right">
-          <div class="price">${q ? fmt(q.price) : "—"}</div>
-          <div class="chg ${q ? trendClass(q.changePct) : ""}">${q ? fmtPct(q.changePct) : "—"}</div>
+          <div class="price">${q ? fmt(q.price) : pending ? skBar("44px") : "—"}</div>
+          <div class="chg ${q ? trendClass(q.changePct) : ""}">${q ? fmtPct(q.changePct) : pending ? skBar("36px") : "—"}</div>
         </div>
         <span class="rm" data-remove="${s}" title="Bỏ theo dõi">✕</span>
       </div>`;
@@ -1725,6 +1774,9 @@ async function loadSelectedSymbol() {
   // Nhưng hai khoảng đó chồng lấn hoàn toàn — cửa sổ rộng hơn đã chứa trọn cửa
   // sổ hẹp hơn. Xin đúng một lần cửa sổ rộng nhất rồi cắt ra dùng là đủ cả hai,
   // và cắt ở trình duyệt thì không tốn gì.
+  // Switched symbol: the previous one's ratios must not sit under the new
+  // title while loading. Same symbol (45s refresh) keeps them — no flicker.
+  if (state.fundSym !== sym) document.getElementById("fundGrid").innerHTML = fundSkeleton(10);
   const fetchDays = Math.max(state.range, SIG_DAYS);
   const [full, fundamentals, news, events] = await Promise.all([
     DataService.getHistory(sym, fetchDays).catch(() => null),
@@ -1747,6 +1799,7 @@ async function loadSelectedSymbol() {
     if (state.marketTab === "overview") renderOverview();
   }
   renderFundamentals(fundamentals);
+  state.fundSym = sym;
   renderEvents(events);
   renderNews(news);
 
@@ -1793,6 +1846,7 @@ async function loadSelectedIndex(code) {
   if (state.selected !== code || state.range !== range) return;
   drawChartOrClear(history, key);
   renderIndexStats(ix);
+  state.fundSym = null;
   // Indices have no company events — hide the dividend panel and collapse its
   // column so the chart takes the full width.
   const ep = document.getElementById("eventsPanel");
@@ -1820,6 +1874,10 @@ function renderIndexStats(ix) {
   const billions = (v) => (v == null ? dash : fmt(v / 1e9, 0)); // VND -> tỷ
   const millions = (v) => (v == null ? dash : fmt(v / 1e6, 1)); // CP -> triệu
   const count = (v) => (v == null ? dash : String(v));
+  if (!ix) {
+    document.getElementById("fundGrid").innerHTML = fundSkeleton(5);
+    return;
+  }
   const cells = ix
     ? [
         ["GTGD toàn sàn (tỷ)", billions(ix.totalVal)],

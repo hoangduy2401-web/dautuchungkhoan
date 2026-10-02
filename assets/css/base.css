@@ -963,6 +963,28 @@ tr:hover td { background: var(--surface-hover); }
   border-radius: var(--radius-sm);
 }
 
+/* Skeleton: thanh xám đúng hình dòng/ô sắp hiện (Motion.skeletonRows/Stats,
+   hoặc viết sẵn trong HTML tĩnh để hiện cả trước khi JS chạy). Thanh nằm
+   trong ô bảng thật nên dòng skeleton cao đúng bằng dòng dữ liệu — không giật
+   bố cục khi số thật thay vào. */
+:root { --sk-base: rgba(127, 127, 127, 0.14); --sk-hi: rgba(255, 255, 255, 0.65); }
+:root[data-theme="dark"] { --sk-base: rgba(255, 255, 255, 0.07); --sk-hi: rgba(255, 255, 255, 0.09); }
+.sk, .sk-fill {
+  background-color: var(--sk-base);
+  background-image: linear-gradient(90deg, transparent 0%, var(--sk-hi) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: motion-shimmer 1.4s linear infinite;
+}
+.sk {
+  display: inline-block; vertical-align: middle;
+  height: 0.9em; max-width: 100%;
+  border-radius: 6px;
+}
+/* .sk-fill: paint only, keeps the element's own box (e.g. the breadth bar). */
+.asset-table tbody tr.sk-row:hover { background: none; }
+.sk-row td { cursor: default; }
+.stat.sk-stat .sk { height: 0.8em; }
+
 /* Lần tải đầu: các khối nổi lên lần lượt. Chỉ áp cho khung tĩnh (.panel,
    thẻ tổng) — KHÔNG áp cho thứ vẽ lại mỗi 45s, nếu không sẽ nhấp nháy. */
 .panel, .nw-total { animation: motion-rise 420ms var(--ease-out) both; }

@@ -142,7 +142,7 @@ async function bootData() {
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableMessage("Không kết nối được máy chủ.");
+    setTableError("Không kết nối được máy chủ.");
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -172,7 +172,7 @@ async function loadRates() {
   } catch (err) {
     console.warn("[tiet-kiem] lãi suất lỗi:", err.message);
     DataService.markAsleep();
-    setTableMessage("Nguồn lỗi — chưa lấy được bảng lãi suất.");
+    setTableError("Nguồn lỗi — chưa lấy được bảng lãi suất.");
   }
 }
 
@@ -193,6 +193,30 @@ function renderSource() {
   } else {
     el.hidden = true;
   }
+}
+
+// Set once loading has failed: later re-renders (search, unit/sort switch)
+// keep the error instead of going back to an endless shimmer.
+let boardError = null;
+function setTableError(msg) {
+  boardError = msg;
+  setTableMessage(msg);
+  Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+}
+
+// Waiting for the board: header + rows as shimmer bars. CafeF lists 8 terms;
+// the exact count only matters for the first paint.
+const SV_SK_TERMS = 8;
+// Logo square + name, like the real bank cell (the logo makes the row taller).
+const SV_SK_BANK =
+  '<span class="sv-bank-in"><span class="sk" style="width:18px;height:18px;border-radius:4px;flex:0 0 18px"></span><span class="sk" style="width:110px"></span></span>';
+function setTableSkeleton() {
+  if (boardError) return setTableMessage(boardError);
+  const bar = '<span class="sk" style="width:70%"></span>';
+  document.getElementById("svHead").innerHTML =
+    `<th>Ngân hàng</th>` + `<th class="num">${bar}</th>`.repeat(SV_SK_TERMS);
+  document.getElementById("svBody").innerHTML =
+    Motion.skeletonRows(10, [{ cls: "sv-bank", html: SV_SK_BANK }, ...Array(SV_SK_TERMS).fill("num")]);
 }
 
 function setTableMessage(msg) {
@@ -247,7 +271,7 @@ function orderedTerms() {
 
 function renderTable() {
   if (!svState.banks.length) {
-    setTableMessage("Đang chờ máy chủ…");
+    setTableSkeleton();
     return;
   }
   const terms = orderedTerms();
@@ -343,12 +367,27 @@ function renderCalc() {
   const host = document.getElementById("calcTop");
   const amount = parseAmount(document.getElementById("calcAmount").value);
   const term = document.getElementById("calcTerm").value;
-  if (!svState.banks.length) {
-    host.innerHTML = `<div class="empty-state">Đang chờ bảng lãi suất…</div>`;
-    return;
-  }
   if (amount === null || amount <= 0) {
     host.innerHTML = `<div class="empty-state">Nhập số tiền để xem ngân hàng nào lời nhất.</div>`;
+    return;
+  }
+  if (!svState.banks.length && boardError) {
+    host.innerHTML = `<div class="empty-state">Chưa có bảng lãi suất để so sánh.</div>`;
+    return;
+  }
+  if (!svState.banks.length) {
+    // Amount typed before the board arrived: shimmer the top-5 list.
+    const bar = (w) => `<span class="sk" style="width:${w}%"></span>`;
+    host.innerHTML = [62, 48, 70, 54, 66]
+      .map(
+        (w, i) => `<div class="sv-top-row" aria-hidden="true">
+          <span class="sv-top-rank">${i + 1}</span>
+          <span class="sv-top-name">${bar(w)}</span>
+          <span class="sv-top-rate">${bar(80)}</span>
+          <span class="sv-top-interest">${bar(90)}</span>
+        </div>`
+      )
+      .join("");
     return;
   }
 

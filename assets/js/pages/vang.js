@@ -144,7 +144,7 @@ async function bootData() {
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableMessage("Không kết nối được máy chủ.");
+    setTableError("Không kết nối được máy chủ.");
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -173,7 +173,7 @@ async function loadPrices() {
   } catch (err) {
     console.warn("[vang] giá lỗi:", err.message);
     DataService.markAsleep();
-    setTableMessage("Nguồn lỗi — chưa lấy được giá vàng.");
+    setTableError("Nguồn lỗi — chưa lấy được giá vàng.");
   }
 }
 
@@ -209,6 +209,22 @@ function renderSource() {
   fb.hidden = !goldState.note;
 }
 
+// Set once loading has failed: later re-renders (search, unit/sort switch)
+// keep the error instead of going back to an endless shimmer.
+let boardError = null;
+function setTableError(msg) {
+  boardError = msg;
+  setTableMessage(msg);
+  Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+}
+
+// Waiting for the board: shimmer rows (one per main PNJ type) instead of text.
+const GOLD_SK_COLS = ["", "num", "num", "num"];
+function setTableSkeleton() {
+  if (boardError) return setTableMessage(boardError);
+  document.getElementById("goldTableBody").innerHTML = Motion.skeletonRows(PNJ_MAIN.length, GOLD_SK_COLS);
+}
+
 function setTableMessage(msg) {
   document.getElementById("goldTableBody").innerHTML =
     `<tr><td colspan="4" class="empty-state">${escapeHtml(msg)}</td></tr>`;
@@ -222,7 +238,8 @@ function visibleItems() {
 function renderTable() {
   const rows = visibleItems();
   if (!rows.length) {
-    setTableMessage(goldState.items.length ? "Không có loại nào." : "Đang chờ máy chủ…");
+    if (goldState.items.length) setTableMessage("Không có loại nào.");
+    else setTableSkeleton();
     return;
   }
 
@@ -738,7 +755,7 @@ const fmtDay = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("vi-VN", 
 async function loadGoldHistory() {
   const days = goldHist.range;
   const stats = document.getElementById("goldHistStats");
-  stats.innerHTML = `<span class="muted">Đang tải lịch sử…</span>`;
+  stats.innerHTML = Motion.skeletonStats(4, true);
   try {
     const d = await DataService.getGoldHistory(days);
     if (days !== goldHist.range) return; // user switched range meanwhile

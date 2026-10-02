@@ -465,6 +465,16 @@ async function loadNetWorth() {
   if (!host) return;
   const status = document.getElementById("nwStatus");
   if (status) status.textContent = "Đang tính…";
+  // First computation only (empty panel): shimmer cards + one row per channel.
+  // "Tính lại" keeps the current numbers on screen until the new ones land.
+  const totals = document.getElementById("nwTotals");
+  if (totals && !totals.innerHTML.trim()) {
+    const bar = (w) => `<span class="sk" style="width:${w}%"></span>`;
+    totals.innerHTML = [0, 1]
+      .map(() => `<div class="nw-total" aria-hidden="true"><div class="label">${bar(45)}</div><div class="val">${bar(70)}</div></div>`)
+      .join("");
+    document.getElementById("nwTableBody").innerHTML = Motion.skeletonRows(5, ["", "num", "num", "num", "num"]);
+  }
 
   try {
     const res = await NetWorth.compute();
@@ -478,6 +488,11 @@ async function loadNetWorth() {
     }
   } catch (err) {
     if (status) status.textContent = "";
+    // Drop the first-load skeleton; the alert below says why there is nothing.
+    if (totals && totals.querySelector(".sk")) {
+      totals.innerHTML = "";
+      document.getElementById("nwTableBody").innerHTML = "";
+    }
     const alerts = document.getElementById("nwAlerts");
     if (alerts) {
       alerts.innerHTML =

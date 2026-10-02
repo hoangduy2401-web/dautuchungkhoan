@@ -162,7 +162,7 @@ async function bootData() {
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableMessage("Không kết nối được máy chủ.");
+    setTableError("Không kết nối được máy chủ.");
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -202,7 +202,7 @@ async function loadPrices() {
   } catch (err) {
     console.warn("[coin] giá lỗi:", err.message);
     DataService.markAsleep();
-    setTableMessage("Nguồn lỗi — chưa lấy được giá coin.");
+    setTableError("Nguồn lỗi — chưa lấy được giá coin.");
   }
 }
 
@@ -217,6 +217,33 @@ function renderSource() {
   fb.hidden = !coinState.note;
 }
 
+// Set once loading has failed: later re-renders (search, unit/sort switch)
+// keep the error instead of going back to an endless shimmer.
+let boardError = null;
+function setTableError(msg) {
+  boardError = msg;
+  setTableMessage(msg);
+  Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+}
+
+// Waiting for prices: one shimmer row per watched coin (the count is known
+// before the server answers). Classes mirror the real cells (phone hides
+// USD + market cap).
+const COIN_SK_COLS = [
+  {
+    cls: "coin-cell",
+    html:
+      '<span class="sk coin-logo"></span><span class="coin-names"><strong><span class="sk" style="width:40px"></span></strong>' +
+      '<small><span class="sk" style="width:72px"></span></small></span>',
+  },
+  "num", "num col-usd", "num", "num col-cap", "act",
+];
+function setTableSkeleton() {
+  if (boardError) return setTableMessage(boardError);
+  document.getElementById("coinTableBody").innerHTML =
+    Motion.skeletonRows(Math.min(coinState.watch.length || 5, 10), COIN_SK_COLS);
+}
+
 function setTableMessage(msg) {
   document.getElementById("coinTableBody").innerHTML =
     `<tr><td colspan="6" class="empty-state">${escapeHtml(msg)}</td></tr>`;
@@ -228,7 +255,7 @@ function renderTable() {
     return;
   }
   if (!coinState.items.length) {
-    setTableMessage("Đang chờ máy chủ…");
+    setTableSkeleton();
     return;
   }
 
@@ -422,7 +449,7 @@ async function loadChart() {
   }
 
   updateChartTitle();
-  stats.innerHTML = `<span class="muted">Đang tải…</span>`;
+  stats.innerHTML = Motion.skeletonStats(4);
 
   try {
     const d = await DataService.getCryptoHistory(id, days);
@@ -457,8 +484,11 @@ async function loadChart() {
   } catch (err) {
     console.warn("[coin] lịch sử lỗi:", err.message);
     DataService.markAsleep();
-    if (chartReady && coinState.selected === id && coinState.range === days) {
-      ChartModule.setData([], null); // xoá trắng, đừng để chuỗi coin khác nằm dưới tên này
+    if (coinState.selected === id && coinState.range === days) {
+      // xoá trắng, đừng để chuỗi coin khác nằm dưới tên này
+      if (chartReady) ChartModule.setData([], null);
+      // Báo lỗi cả khi chart chưa từng dựng (lỗi ngay lần đầu) — nếu không ô
+      // thống kê shimmer mãi.
       stats.innerHTML = `<span class="muted">Nguồn lỗi — chưa lấy được lịch sử.</span>`;
     }
   }
