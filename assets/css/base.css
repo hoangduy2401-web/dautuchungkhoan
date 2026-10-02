@@ -985,6 +985,13 @@ tr:hover td { background: var(--surface-hover); }
 .sk-row td { cursor: default; }
 .stat.sk-stat .sk { height: 0.8em; }
 
+/* Trang tài sản đang hiện số liệu lưu lần trước (theme.js setSnapshotNote):
+   làm mờ bảng giá + phần danh mục định giá theo giá đó (gắn .dim-on-cache —
+   sổ tiết kiệm KHÔNG gắn: lãi suất sổ đã chốt lúc gửi). Như .showing-snapshot
+   của trang Chứng khoán. */
+.showing-cache :is(.gold-table, .fx-table, .coin-table, .sv-table) tbody,
+.showing-cache .dim-on-cache { opacity: 0.55; transition: opacity var(--duration-base) var(--ease-standard); }
+
 /* Lần tải đầu: các khối nổi lên lần lượt. Chỉ áp cho khung tĩnh (.panel,
    thẻ tổng) — KHÔNG áp cho thứ vẽ lại mỗi 45s, nếu không sẽ nhấp nháy. */
 .panel, .nw-total { animation: motion-rise 420ms var(--ease-out) both; }

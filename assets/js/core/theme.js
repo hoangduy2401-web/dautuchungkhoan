@@ -49,6 +49,25 @@ function tickClock() {
   if (el) el.textContent = new Date().toLocaleString("vi-VN");
 }
 
+// Header label + dimming while a page shows its saved last-good data
+// (DataService.loadPageCache). savedAt = null clears both. `failed` = the
+// server did not answer, so the old numbers are all there is for now.
+function setSnapshotNote(savedAt, failed = false) {
+  document.body.classList.toggle("showing-cache", !!savedAt);
+  const el = document.getElementById("dataAsOf");
+  if (!el) return;
+  if (!savedAt) {
+    el.textContent = "";
+    el.classList.remove("late");
+    return;
+  }
+  const d = new Date(savedAt);
+  const p2 = (n) => String(n).padStart(2, "0");
+  const when = `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}`;
+  el.textContent = `Số liệu lưu lần trước (lúc ${when}) — ${failed ? "máy chủ chưa trả lời" : "đang lấy số mới"}`;
+  el.classList.add("late");
+}
+
 // Pages that only need the standard chrome (no data loading) can stop here.
 function initChrome() {
   wireThemeControls();

@@ -12,6 +12,7 @@
 const fxState = {
   rates: [], // [{code, name, buyCash, buyTransfer, sell}] — null = VCB không niêm yết
   updatedAt: null,
+  cachedAt: null, // savedAt of the saved board on screen; null = live numbers
   pinned: [], // mã ghim, lưu qua Store
   search: "",
   sortKey: "code",
@@ -100,12 +101,26 @@ async function bootData() {
     setBackendStatus(s < 5 ? "Đang kết nối máy chủ…" : `Máy chủ đang khởi động (thường 30–50s)… ${s}s`, "warn");
   }, 500);
 
+  // Last good board from this browser, painted now and labelled as old while
+  // Render wakes (30-50s). The live answer replaces it.
+  const cache = DataService.loadPageCache("fx");
+  if (cache && applyRates(cache.data)) {
+    fxState.cachedAt = cache.savedAt;
+    setSnapshotNote(cache.savedAt);
+  }
+
   const awake = await DataService.wakeBackend();
   clearInterval(tick);
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableError("Không kết nối được máy chủ.");
+    if (fxState.cachedAt) {
+      // Keep the labelled old numbers: real data with a date beats an empty table.
+      setSnapshotNote(fxState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Không kết nối được máy chủ.");
+    }
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -116,21 +131,36 @@ async function bootData() {
 /* ============================================================
    BẢNG TỶ GIÁ (Vietcombank — bán lẻ)
    ============================================================ */
+// Draw the board (and everything priced off it) from one /fx answer — live,
+// or the saved copy at boot. Returns false when there is nothing to draw.
+function applyRates(data) {
+  fxState.rates = Array.isArray(data.rates) ? data.rates : [];
+  fxState.updatedAt = data.updatedAt || null;
+  renderUpdatedAt();
+  renderTable();
+  fillConverterCodes();
+  updateConverter("foreign");
+  fillHoldCodes();
+  renderHoldings(); // vẽ lại: giờ mới có tỷ giá để quy đổi giá trị danh mục
+  return fxState.rates.length > 0;
+}
+
 async function loadRates() {
   try {
     const data = await DataService.getFxRates();
-    fxState.rates = Array.isArray(data.rates) ? data.rates : [];
-    fxState.updatedAt = data.updatedAt || null;
-    renderUpdatedAt();
-    renderTable();
-    fillConverterCodes();
-    updateConverter("foreign");
-    fillHoldCodes();
-    renderHoldings(); // vẽ lại: giờ mới có tỷ giá để quy đổi giá trị danh mục
+    if (applyRates(data)) DataService.savePageCache("fx", data);
+    fxState.cachedAt = null;
+    setSnapshotNote(null);
   } catch (err) {
     console.warn("[ngoai-te] tỷ giá lỗi:", err.message);
     DataService.markAsleep();
-    setTableError("Nguồn lỗi — chưa lấy được tỷ giá.");
+    if (fxState.cachedAt) {
+      // Keep the labelled old numbers: real data with a date beats an empty table.
+      setSnapshotNote(fxState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Nguồn lỗi — chưa lấy được tỷ giá.");
+    }
   }
 }
 

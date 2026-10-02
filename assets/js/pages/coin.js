@@ -16,6 +16,7 @@ const coinState = {
   source: null,
   note: null,
   vndFrom: null, // có khi giá VND là QUY ĐỔI từ USD chứ không phải giá gốc
+  cachedAt: null, // savedAt of the saved prices on screen; null = live numbers
   selected: null,
   range: 90,
   holdings: [],
@@ -157,12 +158,26 @@ async function bootData() {
     setBackendStatus(s < 5 ? "Đang kết nối máy chủ…" : `Máy chủ đang khởi động (thường 30–50s)… ${s}s`, "warn");
   }, 500);
 
+  // Last good prices from this browser, painted now and labelled as old while
+  // Render wakes (30-50s). The live answer replaces them.
+  const cache = DataService.loadPageCache("coin");
+  if (cache && coinState.watch.length && applyPrices(cache.data, true)) {
+    coinState.cachedAt = cache.savedAt;
+    setSnapshotNote(cache.savedAt);
+  }
+
   const awake = await DataService.wakeBackend();
   clearInterval(tick);
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableError("Không kết nối được máy chủ.");
+    if (coinState.cachedAt) {
+      // Keep the labelled old numbers: real data with a date beats an empty table.
+      setSnapshotNote(coinState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Không kết nối được máy chủ.");
+    }
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -190,20 +205,42 @@ async function loadPrices() {
 
   try {
     const d = await DataService.getCryptoPrices(coinState.watch);
-    coinState.items = Array.isArray(d.items) ? d.items : [];
-    coinState.source = d.source || null;
-    coinState.note = d.note || null;
-    coinState.vndFrom = d.vndFrom || null;
-    renderSource();
-    renderTable();
-    fillHoldCoins();
-    updateChartTitle(); // giá về sau chart: tiêu đề đang là slug, đổi lại thành tên
-    renderHoldings(); // giờ mới có giá để định giá danh mục
+    if (applyPrices(d)) DataService.savePageCache("coin", d);
+    coinState.cachedAt = null;
+    setSnapshotNote(null);
   } catch (err) {
     console.warn("[coin] giá lỗi:", err.message);
     DataService.markAsleep();
-    setTableError("Nguồn lỗi — chưa lấy được giá coin.");
+    if (coinState.cachedAt) {
+      setSnapshotNote(coinState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Nguồn lỗi — chưa lấy được giá coin.");
+    }
   }
+}
+
+// Draw the table (and everything priced off it) from one /prices answer —
+// live, or the saved copy at boot (`fromCache`). The saved copy may predate a
+// watchlist edit, so it keeps only coins still watched, in watchlist order.
+// Returns false when there is nothing to draw.
+function applyPrices(d, fromCache = false) {
+  const items = Array.isArray(d.items) ? d.items : [];
+  if (fromCache) {
+    const byId = new Map(items.map((c) => [c.id, c]));
+    coinState.items = coinState.watch.map((id) => byId.get(id)).filter(Boolean);
+  } else {
+    coinState.items = items;
+  }
+  coinState.source = d.source || null;
+  coinState.note = d.note || null;
+  coinState.vndFrom = d.vndFrom || null;
+  renderSource();
+  renderTable();
+  fillHoldCoins();
+  updateChartTitle(); // giá về sau chart: tiêu đề đang là slug, đổi lại thành tên
+  renderHoldings(); // giờ mới có giá để định giá danh mục
+  return coinState.items.length > 0;
 }
 
 function renderSource() {

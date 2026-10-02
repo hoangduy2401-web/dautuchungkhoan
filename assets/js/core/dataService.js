@@ -120,6 +120,29 @@ const DataService = (function () {
     }
   }
 
+  // Same idea for the four asset pages (gold / fx / coin / savings): the last
+  // good board answer per page, painted at once on the next visit while
+  // Render wakes, labelled as old (theme.js setSnapshotNote). Same reasons for
+  // localStorage-not-Store as above.
+  const pageCacheKey = (name) => `vn_dashboard_cache_${name}_v1`;
+  function savePageCache(name, data) {
+    try {
+      localStorage.setItem(pageCacheKey(name), JSON.stringify({ data, savedAt: Date.now() }));
+    } catch (err) {
+      /* private mode / quota — the cache is only a convenience */
+    }
+  }
+  // -> { data, savedAt } | null
+  function loadPageCache(name) {
+    try {
+      const c = JSON.parse(localStorage.getItem(pageCacheKey(name)) || "null");
+      if (!c || !c.data || !(Date.now() - c.savedAt <= SNAP_MAX_AGE_MS)) return null;
+      return c;
+    } catch (err) {
+      return null;
+    }
+  }
+
   // Called by the UI when a data call fails: forces the next cycle to re-probe
   // instead of trusting the cached "awake" flag.
   function markAsleep() {
@@ -432,6 +455,8 @@ const DataService = (function () {
     markAsleep,
     saveMarketSnapshot,
     loadMarketSnapshot,
+    savePageCache,
+    loadPageCache,
     getCompanyInfo,
     getIndices,
     getQuote,

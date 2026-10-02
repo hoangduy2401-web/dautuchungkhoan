@@ -17,6 +17,7 @@ const svState = {
   fetchedAt: null,
   stale: false,
   snapshotAt: null,
+  cachedAt: null, // savedAt of the board saved in THIS browser; null = live numbers
   search: "",
   sortTerm: "12T", // kỳ hạn dùng để sắp bảng
   // Cảnh báo đáo hạn user đã ẩn: "idSổ:mức" (mức = d30|d15|d7|past). Ẩn theo
@@ -137,12 +138,26 @@ async function bootData() {
     setBackendStatus(s < 5 ? "Đang kết nối máy chủ…" : `Máy chủ đang khởi động (thường 30–50s)… ${s}s`, "warn");
   }, 500);
 
+  // Last good board from this browser, painted now and labelled as old while
+  // Render wakes (30-50s). The live answer replaces it.
+  const cache = DataService.loadPageCache("savings");
+  if (cache && applyRates(cache.data)) {
+    svState.cachedAt = cache.savedAt;
+    setSnapshotNote(cache.savedAt);
+  }
+
   const awake = await DataService.wakeBackend();
   clearInterval(tick);
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableError("Không kết nối được máy chủ.");
+    if (svState.cachedAt) {
+      // Keep the labelled old numbers: real data with a date beats an empty table.
+      setSnapshotNote(svState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Không kết nối được máy chủ.");
+    }
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -153,26 +168,41 @@ async function bootData() {
 /* ============================================================
    BẢNG LÃI SUẤT
    ============================================================ */
+// Draw the board from one /savings answer — live, or the saved copy at boot.
+// Returns false when there is nothing to draw.
+function applyRates(d) {
+  svState.terms = Array.isArray(d.terms) ? d.terms : [];
+  svState.banks = Array.isArray(d.banks) ? d.banks : [];
+  svState.fetchedAt = d.fetchedAt || null;
+  svState.stale = !!d.stale;
+  svState.snapshotAt = d.snapshotAt || null;
+  if (!svState.terms.includes(svState.sortTerm)) svState.sortTerm = svState.terms[svState.terms.length - 1] || "";
+
+  renderSource();
+  fillTermSelects();
+  fillBankList();
+  renderTable();
+  renderCalc();
+  renderBooks(); // giờ mới gợi ý được lãi suất theo bảng
+  return svState.banks.length > 0;
+}
+
 async function loadRates() {
   try {
     const d = await DataService.getSavingsRates();
-    svState.terms = Array.isArray(d.terms) ? d.terms : [];
-    svState.banks = Array.isArray(d.banks) ? d.banks : [];
-    svState.fetchedAt = d.fetchedAt || null;
-    svState.stale = !!d.stale;
-    svState.snapshotAt = d.snapshotAt || null;
-    if (!svState.terms.includes(svState.sortTerm)) svState.sortTerm = svState.terms[svState.terms.length - 1] || "";
-
-    renderSource();
-    fillTermSelects();
-    fillBankList();
-    renderTable();
-    renderCalc();
-    renderBooks(); // giờ mới gợi ý được lãi suất theo bảng
+    if (applyRates(d)) DataService.savePageCache("savings", d);
+    svState.cachedAt = null;
+    setSnapshotNote(null);
   } catch (err) {
     console.warn("[tiet-kiem] lãi suất lỗi:", err.message);
     DataService.markAsleep();
-    setTableError("Nguồn lỗi — chưa lấy được bảng lãi suất.");
+    if (svState.cachedAt) {
+      // Keep the labelled old numbers: real data with a date beats an empty table.
+      setSnapshotNote(svState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Nguồn lỗi — chưa lấy được bảng lãi suất.");
+    }
   }
 }
 

@@ -15,6 +15,7 @@ const goldState = {
   branch: null,
   updatedAt: null,
   note: null, // chỉ có khi nguồn dự phòng trả lời
+  cachedAt: null, // savedAt of the saved board on screen; null = live numbers
   unit: "luong", // đơn vị hiển thị của bảng giá
   showAll: false, // hiện cả vàng tuổi thấp (18K trở xuống)
   spreadBase: null, // code -> {median, limit, days}; null = chưa có lịch sử
@@ -139,12 +140,26 @@ async function bootData() {
   }, 500);
 
   renderGoldRangeTabs();
+  // Last good board from this browser, painted now and labelled as old while
+  // Render wakes (30-50s). The live answer replaces it.
+  const cache = DataService.loadPageCache("gold");
+  if (cache && applyPrices(cache.data)) {
+    goldState.cachedAt = cache.savedAt;
+    setSnapshotNote(cache.savedAt);
+  }
+
   const awake = await DataService.wakeBackend();
   clearInterval(tick);
 
   if (!awake) {
     setBackendStatus("Máy chủ không phản hồi — tải lại trang để thử lại", "err");
-    setTableError("Không kết nối được máy chủ.");
+    if (goldState.cachedAt) {
+      // Keep the labelled old numbers: real data with a date beats an empty table.
+      setSnapshotNote(goldState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Không kết nối được máy chủ.");
+    }
     return; // không vẽ gì: bảng trống hơn hẳn bảng số bịa
   }
 
@@ -156,24 +171,38 @@ async function bootData() {
 /* ============================================================
    BẢNG GIÁ
    ============================================================ */
-async function loadPrices() {
-  try {
-    const d = await DataService.getGoldPrices();
-    goldState.items = Array.isArray(d.items) ? d.items : [];
+// Draw the board (and everything priced off it) from one /gold answer —
+// live, or the saved copy at boot. Returns false when there is nothing to draw.
+function applyPrices(d) {
+  goldState.items = Array.isArray(d.items) ? d.items : [];
     goldState.source = d.source || null;
     goldState.branch = d.branch || null;
     goldState.updatedAt = d.updatedAt || null;
-    goldState.note = d.note || null;
-    renderSource();
-    renderTable();
-    loadSpreadBaseline(); // non-blocking: ▲ switches to per-product limits when it lands
-    fillTypeSelects();
-    updateConverter();
-    renderHoldings(); // giờ mới có giá để định giá danh mục
+  goldState.note = d.note || null;
+  renderSource();
+  renderTable();
+  loadSpreadBaseline(); // non-blocking: ▲ switches to per-product limits when it lands
+  fillTypeSelects();
+  updateConverter();
+  renderHoldings(); // giờ mới có giá để định giá danh mục
+  return goldState.items.length > 0;
+}
+
+async function loadPrices() {
+  try {
+    const d = await DataService.getGoldPrices();
+    if (applyPrices(d)) DataService.savePageCache("gold", d);
+    goldState.cachedAt = null;
+    setSnapshotNote(null);
   } catch (err) {
     console.warn("[vang] giá lỗi:", err.message);
     DataService.markAsleep();
-    setTableError("Nguồn lỗi — chưa lấy được giá vàng.");
+    if (goldState.cachedAt) {
+      setSnapshotNote(goldState.cachedAt, true);
+      Motion.settleSkeletons("Chưa lấy được dữ liệu.");
+    } else {
+      setTableError("Nguồn lỗi — chưa lấy được giá vàng.");
+    }
   }
 }
 
