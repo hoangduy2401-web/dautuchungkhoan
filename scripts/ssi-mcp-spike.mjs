@@ -7,6 +7,7 @@
 //   node scripts/ssi-mcp-spike.mjs refresh          # use refresh_token, report rotation + lifetime
 //   node scripts/ssi-mcp-spike.mjs tools [out.json] # list tools
 //   node scripts/ssi-mcp-spike.mjs call <tool> '<json args>' [out.json]
+//   node scripts/ssi-mcp-spike.mjs soak [1,2,4,8,15,30,60]  # refresh-token lifetime
 //
 // Tokens live in server/.ssi-mcp-token.json (gitignored). They are never printed.
 
@@ -135,6 +136,29 @@ async function refresh() {
   }, null, 2));
 }
 
+// Refresh at growing gaps after a fresh login, to tell "refresh token expires
+// after N minutes" apart from "only one refresh works". Each success rotates
+// the token, so every gap is measured from the PREVIOUS refresh.
+async function soak(gapsArg = "1,2,4,8,15,30,60") {
+  const gaps = gapsArg.split(",").map(Number);
+  console.log(new Date().toISOString(), "soak start, gaps (min):", gaps.join(","));
+  for (const g of gaps) {
+    await new Promise((r) => setTimeout(r, g * 60_000));
+    const old = loadToken();
+    try {
+      const { tok, ms } = await tokenRequest({
+        grant_type: "refresh_token", refresh_token: old.refresh_token, client_id: old.client_id, resource: MCP_URL,
+      });
+      saveToken({ ...old, ...tok, refresh_token: tok.refresh_token || old.refresh_token, obtained_at: new Date().toISOString() });
+      console.log(new Date().toISOString(), `gap ${g}m: OK ${ms}ms rotated=${tok.refresh_token !== old.refresh_token}`);
+    } catch (e) {
+      console.log(new Date().toISOString(), `gap ${g}m: FAIL ${e.message}`);
+      return;
+    }
+  }
+  console.log(new Date().toISOString(), "soak done — all refreshes OK");
+}
+
 // ---- Minimal MCP Streamable HTTP client ----
 let sessionId = null;
 let rpcId = 0;
@@ -206,7 +230,7 @@ async function call(name, argsJson, outFile) {
 }
 
 const [cmd, ...args] = process.argv.slice(2);
-const cmds = { login, refresh, tools, call };
+const cmds = { login, refresh, tools, call, soak };
 if (!cmds[cmd]) {
   console.error("usage: login | refresh | tools [out] | call <tool> '<json>' [out]");
   process.exit(1);
