@@ -899,6 +899,62 @@ app.get("/api/fundamentals/:symbol", cacheFor(3600), async (req, res) => {
 });
 
 // ============================================================
+// Valuation history — daily P/E and P/B from VNDirect /v4/ratios (the same
+// ratio codes /ratios/latest serves, but every trading day). One call carries
+// both codes: measured 03/10/2026, FPT/HPG/VCB 2 years = 497 + 497 rows,
+// 0.4-0.9s. History reaches back to 2017-12 for FPT.
+//
+// Loss-making periods are ABSENT, not negative: HNG had 0 P/E rows, HVN 300 of
+// 497 P/B rows (negative equity). Dates are merged, so a missing ratio is null
+// on that date — never 0, and never filled from a neighbour.
+//
+// SSI MCP serves the same series (11.66 vs VNDirect 11.71 for FPT on
+// 02/10/2026) but its refresh token cannot be kept alive server-side
+// (CLAUDE.md §7), so VNDirect it is.
+// ============================================================
+const VNDIRECT_RATIO_HISTORY = "https://api-finfo.vndirect.com.vn/v4/ratios";
+const VALUATION_MAX_DAYS = 730;
+
+async function computeValuationHistory(symbol, days) {
+  const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+  const rows = await vndirectJson(
+    `${VNDIRECT_RATIO_HISTORY}?q=code:${symbol}~ratioCode:PRICE_TO_EARNINGS,PRICE_TO_BOOK` +
+      `~reportDate:gte:${since}&size=2000`
+  );
+  const byDate = new Map();
+  for (const r of rows) {
+    const v = Number(r.value);
+    if (!r.reportDate || !Number.isFinite(v) || v <= 0) continue;
+    const row = byDate.get(r.reportDate) || { date: r.reportDate, pe: null, pb: null };
+    if (r.ratioCode === "PRICE_TO_EARNINGS") row.pe = v;
+    else if (r.ratioCode === "PRICE_TO_BOOK") row.pb = v;
+    byDate.set(r.reportDate, row);
+  }
+  const items = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+  // No rows at all (e.g. ROS) is an answer, not an outage: 200 with an empty
+  // list, and the page says VNDirect has no figure for this symbol.
+  return { source: "VNDirect", symbol, asOf: items.length ? items[items.length - 1].date : null, items };
+}
+
+// GET /api/valuation/history?symbol=FPT&days=730
+app.get("/api/valuation/history", cacheFor(3600), async (req, res) => {
+  const symbol = String(req.query.symbol || "").trim().toUpperCase();
+  const days = Number(req.query.days) || VALUATION_MAX_DAYS;
+  if (!/^[A-Z0-9]{1,10}$/.test(symbol)) return res.status(400).json({ error: "bad_symbol" });
+  if (days > VALUATION_MAX_DAYS) {
+    return res.status(400).json({ error: "range_too_long", maxDays: VALUATION_MAX_DAYS });
+  }
+  try {
+    // Ratios move once a day: 6h fresh, a stale copy for a day if VNDirect is down.
+    res.json(await withCache(`valuation:${symbol}:${days}`, 6 * 3600_000,
+      () => computeValuationHistory(symbol, days), { staleMs: 24 * 3600_000 }));
+  } catch (err) {
+    console.error("[/api/valuation/history]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
 // Corporate actions (cổ tức / cổ phiếu thưởng / phát hành quyền) — VNDirect
 // finfo /v4/events, the same source as fundamentals. Two consumers:
 //   1. back-adjusting the price chart (below), and
