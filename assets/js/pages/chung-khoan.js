@@ -681,6 +681,14 @@ function valSkeleton() {
     `<div class="val-pct">${skBar(`${w}px`)}</div></div>`;
   return row(70) + row(62);
 }
+function finSkeleton() {
+  const td = (w, c = "") => `<td class="${c}">${skBar(`${w}px`)}</td>`;
+  let html = "";
+  for (let i = 0; i < 8; i++) {
+    html += `<tr aria-hidden="true">${td(40)}${td(70)}${td(34)}${td(60)}${td(34)}${td(38, "col-gm")}${td(44, "col-cfo")}</tr>`;
+  }
+  return html;
+}
 function newsSkeleton(n) {
   let html = "";
   for (let i = 0; i < n; i++) {
@@ -1787,16 +1795,21 @@ async function loadSelectedSymbol() {
     document.getElementById("fundGrid").innerHTML = fundSkeleton(10);
     document.getElementById("valRows").innerHTML = valSkeleton();
     document.getElementById("valSrc").textContent = "";
+    document.getElementById("finRows").innerHTML = finSkeleton();
+    document.getElementById("finSrc").textContent = "";
+    document.getElementById("finHint").textContent = "";
   }
   document.getElementById("valBlock").hidden = false;
+  document.getElementById("finBlock").hidden = false;
   const fetchDays = Math.max(state.range, SIG_DAYS);
-  const [full, fundamentals, news, events, valuation] = await Promise.all([
+  const [full, fundamentals, news, events, valuation, quarterly] = await Promise.all([
     DataService.getHistory(sym, fetchDays).catch(() => null),
     DataService.getFundamentals(sym),
     DataService.getNews(state.watchlist.slice(0, 20)), // backend caps at 20 symbols
     DataService.getEvents(sym),
     // Its own catch: a VNDirect hiccup here must not take the chart down.
     DataService.getValuationHistory(sym).catch(() => null),
+    DataService.getQuarterlyFinancials(sym).catch(() => null),
   ]);
 
   // Backend cắt lịch sử theo `end - days`; lặp lại đúng công thức đó ở đây để
@@ -1816,6 +1829,7 @@ async function loadSelectedSymbol() {
   // The 45s refresh keeps the last good band rather than blanking it on a
   // transient failure; after a switch the skeleton above is replaced either way.
   if (valuation || state.fundSym !== sym) renderValuation(valuation);
+  if (quarterly || state.fundSym !== sym) renderQuarterly(quarterly);
   state.fundSym = sym;
   renderEvents(events);
   renderNews(news);
@@ -1864,8 +1878,9 @@ async function loadSelectedIndex(code) {
   drawChartOrClear(history, key);
   renderIndexStats(ix);
   state.fundSym = null;
-  // An index has no P/E band of its own.
+  // An index has no P/E band and no income statement of its own.
   document.getElementById("valBlock").hidden = true;
+  document.getElementById("finBlock").hidden = true;
   // Indices have no company events — hide the dividend panel and collapse its
   // column so the chart takes the full width.
   const ep = document.getElementById("eventsPanel");
@@ -2000,6 +2015,68 @@ function renderValuation(v) {
     valRow("P/B", valStats(items, "pb"), v.asOf) +
     `<div class="val-hint">Phân vị 0% = thấp nhất, 100% = cao nhất của chính mã này trong 2 năm. Vạch xám là trung vị. Chỉ để tham khảo, không phải khuyến nghị.</div>`;
   src.textContent = `Nguồn: ${v.source} · đến ${fmtDateVN(v.asOf)}`;
+}
+
+// "Kết quả kinh doanh 8 quý": newest quarter on top. YoY compares with the
+// same quarter a year earlier (4 rows back), which is why the server sends 12
+// quarters for 8 shown. A YoY against a loss or a missing quarter is "—":
+// "+250%" off a negative base reads as growth when it is not.
+const FIN_SHOWN = 8;
+
+function finYoY(now, prev) {
+  if (!hasVal(now) || !hasVal(prev) || prev <= 0) return null;
+  return ((now - prev) / prev) * 100;
+}
+
+function finBar(v, max) {
+  if (!hasVal(v) || v <= 0 || !(max > 0)) return "";
+  // Capped at 60% of the cell so the right-aligned figure never sits on the bar.
+  return `<span class="fin-bar" style="width:${Math.max(2, (v / max) * 60)}%"></span>`;
+}
+
+function renderQuarterly(q) {
+  const body = document.getElementById("finRows");
+  const src = document.getElementById("finSrc");
+  const hint = document.getElementById("finHint");
+  const empty = (msg) => {
+    body.innerHTML = `<tr><td colspan="7" class="fin-empty">${msg}</td></tr>`;
+    hint.textContent = "";
+  };
+  if (!q) {
+    src.textContent = "";
+    return empty("Nguồn lỗi — chưa lấy được báo cáo tài chính.");
+  }
+  src.textContent = `Nguồn: ${q.source} · ${q.unit}`;
+  document.getElementById("finRevLabel").textContent = q.revenueLabel === "Doanh thu thuần" ? "Doanh thu" : "Thu nhập HĐ";
+  const all = Array.isArray(q.items) ? q.items : [];
+  if (!all.length) return empty("VNDirect không có báo cáo tài chính theo quý cho mã này.");
+
+  const shown = all.slice(-FIN_SHOWN);
+  const offset = all.length - shown.length;
+  const maxRev = Math.max(0, ...shown.map((r) => (hasVal(r.revenue) ? r.revenue : 0)));
+  const maxNp = Math.max(0, ...shown.map((r) => (hasVal(r.netProfit) ? r.netProfit : 0)));
+  const yoyCell = (v) => `<td class="fin-yoy ${hasVal(v) ? trendClass(v) : ""}">${hasVal(v) ? `${v >= 0 ? "+" : ""}${fmt(v, 0)}%` : "—"}</td>`;
+
+  body.innerHTML = shown
+    .map((r, i) => {
+      const prev = all[offset + i - 4] || null;
+      const gm = hasVal(r.grossProfit) && hasVal(r.revenue) && r.revenue > 0 ? (r.grossProfit / r.revenue) * 100 : null;
+      return `<tr>
+        <td class="fin-period">${r.period}</td>
+        <td class="fin-num">${finBar(r.revenue, maxRev)}<span>${fmt(r.revenue, 0)}</span></td>
+        ${yoyCell(finYoY(r.revenue, prev?.revenue))}
+        <td class="fin-num ${hasVal(r.netProfit) && r.netProfit < 0 ? "down" : ""}">${finBar(r.netProfit, maxNp)}<span>${fmt(r.netProfit, 0)}</span></td>
+        ${yoyCell(finYoY(r.netProfit, prev?.netProfit))}
+        <td class="col-gm">${hasVal(gm) ? `${fmt(gm, 1)}%` : "—"}</td>
+        <td class="col-cfo ${hasVal(r.operatingCashFlow) && r.operatingCashFlow < 0 ? "down" : ""}">${fmt(r.operatingCashFlow, 0)}</td>
+      </tr>`;
+    })
+    .reverse()
+    .join("");
+  hint.textContent =
+    "YoY = so với cùng quý năm trước. LNST mẹ = lợi nhuận sau thuế của cổ đông công ty mẹ. " +
+    "CFO = dòng tiền thuần từ hoạt động kinh doanh trong quý." +
+    (q.revenueLabel === "Doanh thu thuần" ? "" : " Ngân hàng: cột đầu là tổng thu nhập hoạt động, không có biên gộp.");
 }
 
 // "3 giờ trước" for today-ish items, a date for older ones — news from the

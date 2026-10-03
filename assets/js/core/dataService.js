@@ -321,6 +321,14 @@ const DataService = (function () {
     return fetchJson(`${cfg.valuationProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`, T_FAST);
   }
 
+  // ---- Quarterly results: {source, symbol, unit:"tỷ đồng", revenueLabel,
+  //      items:[{period:"Q2/2026", fiscalDate, revenue, grossProfit, netProfit,
+  //      operatingCashFlow}]} ascending. null = no figure (banks have no gross
+  //      profit) — never 0. No mock, same reason as valuation.
+  function getQuarterlyFinancials(symbol, quarters = 12) {
+    return fetchJson(`${cfg.financialsProvider.baseUrl}/quarterly?symbol=${encodeURIComponent(symbol)}&quarters=${quarters}`, T_FAST);
+  }
+
   // ---- Corporate actions: [{type, typeDesc, note, exDate, recordDate, ratio,
   //      cash, issuePrice, year}] newest first. type: DIVIDEND | KINDDIV | ISSUE.
   // Best-effort history for the dividend tab; empty array on failure so the
@@ -475,6 +483,7 @@ const DataService = (function () {
     getIndexHistory,
     getFundamentals,
     getValuationHistory,
+    getQuarterlyFinancials,
     getEvents,
     getNews,
     getFxRates,

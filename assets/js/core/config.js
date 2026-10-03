@@ -103,6 +103,8 @@ const APP_CONFIG = {
   eventsProvider:       { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/events" },
   // Daily P/E + P/B history (VNDirect /v4/ratios) for "Định giá so với 2 năm".
   valuationProvider:    { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/valuation" },
+  // Quarterly results (revenue, gross profit, NPATMI, CFO) — VNDirect statements.
+  financialsProvider:   { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/financials" },
   newsProvider:         { name: "CafeF RSS",  baseUrl: "https://dashboard-chung-khoan.onrender.com/api/news" },
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;
   // never mocked — an empty account panel is better than fake holdings.
