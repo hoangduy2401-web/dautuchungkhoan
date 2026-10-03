@@ -368,6 +368,45 @@
   font-size: var(--text-base); font-weight: 700; margin-top: auto; font-variant-numeric: tabular-nums;
 }
 
+/* "Định giá so với 2 năm" — today's P/E, P/B inside the symbol's own range. */
+.val-block {
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.val-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.val-title { font-size: var(--text-xs); font-weight: 700; }
+.val-src { font-size: var(--text-2xs); color: var(--text-secondary); text-align: right; }
+.val-row {
+  display: grid; grid-template-columns: 40px 64px minmax(80px, 1fr) auto;
+  grid-template-areas: "name now bar pct" ". . range range";
+  align-items: center; column-gap: 10px; padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.val-head + div > .val-row:first-child { border-top: none; }
+.val-name { grid-area: name; font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); }
+.val-now { grid-area: now; font-weight: 700; font-variant-numeric: tabular-nums; }
+.val-bar { grid-area: bar; position: relative; height: 14px; }
+.val-track {
+  position: absolute; left: 0; right: 0; top: 6px; height: 2px;
+  background: var(--border-default); border-radius: 1px;
+}
+.val-med {
+  position: absolute; top: 2px; width: 2px; height: 10px; margin-left: -1px;
+  background: var(--text-muted);
+}
+.val-dot {
+  position: absolute; top: 2px; width: 10px; height: 10px; margin-left: -5px;
+  border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 2px var(--surface-inset);
+}
+.val-pct { grid-area: pct; font-size: var(--text-xs); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.val-range { grid-area: range; font-size: var(--text-2xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.val-note { font-size: var(--text-2xs); font-weight: 400; color: var(--text-secondary); }
+.val-empty { grid-column: 2 / -1; font-size: var(--text-xs); color: var(--text-secondary); }
+.val-hint { margin-top: 6px; font-size: var(--text-2xs); color: var(--text-secondary); line-height: 1.4; }
+/* Skeleton rows have no range line. */
+.val-row[aria-hidden="true"] { grid-template-areas: "name now bar pct"; }
+
 /* News */
 .news-item { padding: 10px 0; border-top: 1px solid var(--border-subtle); }
 .news-item:first-child { border-top: none; }

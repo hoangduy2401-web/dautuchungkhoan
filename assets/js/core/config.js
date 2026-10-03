@@ -101,6 +101,8 @@ const APP_CONFIG = {
   // Drives the dividend-history tab; the chart back-adjusts from the same data
   // server-side (see server computeHistory / backAdjustHistory).
   eventsProvider:       { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/events" },
+  // Daily P/E + P/B history (VNDirect /v4/ratios) for "Định giá so với 2 năm".
+  valuationProvider:    { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/valuation" },
   newsProvider:         { name: "CafeF RSS",  baseUrl: "https://dashboard-chung-khoan.onrender.com/api/news" },
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;
   // never mocked — an empty account panel is better than fake holdings.

@@ -674,6 +674,13 @@ function fundSkeleton(n) {
   }
   return html;
 }
+function valSkeleton() {
+  const row = (w) =>
+    `<div class="val-row" aria-hidden="true"><div class="val-name">${skBar("28px")}</div>` +
+    `<div class="val-now">${skBar("44px")}</div><div class="val-bar">${skBar(100)}</div>` +
+    `<div class="val-pct">${skBar(`${w}px`)}</div></div>`;
+  return row(70) + row(62);
+}
 function newsSkeleton(n) {
   let html = "";
   for (let i = 0; i < n; i++) {
@@ -1776,13 +1783,20 @@ async function loadSelectedSymbol() {
   // và cắt ở trình duyệt thì không tốn gì.
   // Switched symbol: the previous one's ratios must not sit under the new
   // title while loading. Same symbol (45s refresh) keeps them — no flicker.
-  if (state.fundSym !== sym) document.getElementById("fundGrid").innerHTML = fundSkeleton(10);
+  if (state.fundSym !== sym) {
+    document.getElementById("fundGrid").innerHTML = fundSkeleton(10);
+    document.getElementById("valRows").innerHTML = valSkeleton();
+    document.getElementById("valSrc").textContent = "";
+  }
+  document.getElementById("valBlock").hidden = false;
   const fetchDays = Math.max(state.range, SIG_DAYS);
-  const [full, fundamentals, news, events] = await Promise.all([
+  const [full, fundamentals, news, events, valuation] = await Promise.all([
     DataService.getHistory(sym, fetchDays).catch(() => null),
     DataService.getFundamentals(sym),
     DataService.getNews(state.watchlist.slice(0, 20)), // backend caps at 20 symbols
     DataService.getEvents(sym),
+    // Its own catch: a VNDirect hiccup here must not take the chart down.
+    DataService.getValuationHistory(sym).catch(() => null),
   ]);
 
   // Backend cắt lịch sử theo `end - days`; lặp lại đúng công thức đó ở đây để
@@ -1799,6 +1813,9 @@ async function loadSelectedSymbol() {
     if (state.marketTab === "overview") renderOverview();
   }
   renderFundamentals(fundamentals);
+  // The 45s refresh keeps the last good band rather than blanking it on a
+  // transient failure; after a switch the skeleton above is replaced either way.
+  if (valuation || state.fundSym !== sym) renderValuation(valuation);
   state.fundSym = sym;
   renderEvents(events);
   renderNews(news);
@@ -1847,6 +1864,8 @@ async function loadSelectedIndex(code) {
   drawChartOrClear(history, key);
   renderIndexStats(ix);
   state.fundSym = null;
+  // An index has no P/E band of its own.
+  document.getElementById("valBlock").hidden = true;
   // Indices have no company events — hide the dividend panel and collapse its
   // column so the chart takes the full width.
   const ep = document.getElementById("eventsPanel");
@@ -1908,6 +1927,79 @@ function renderFundamentals(f) {
   document.getElementById("fundGrid").innerHTML = cells
     .map(([label, value]) => `<div class="fund-cell"><div class="label">${label}</div><div class="value">${value}</div></div>`)
     .join("");
+}
+
+// "Định giá so với 2 năm": where today's P/E and P/B sit inside this
+// symbol's OWN two-year range — same idea as the gold page's per-product
+// spread threshold, not a market-wide cut-off. Percentile = share of trading
+// days at or below today's value. Descriptive only: no buy/sell wording.
+const VAL_MIN_POINTS = 60; // fewer days than this is too short to call a range
+
+function valStats(items, key) {
+  const pts = items.filter((it) => hasVal(it[key]));
+  if (!pts.length) return null;
+  const vals = pts.map((it) => it[key]).sort((a, b) => a - b);
+  const last = pts[pts.length - 1];
+  const cur = last[key];
+  const mid = vals.length >> 1;
+  return {
+    cur,
+    curDate: last.date,
+    n: vals.length,
+    min: vals[0],
+    max: vals[vals.length - 1],
+    median: vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2,
+    pct: Math.round((vals.filter((v) => v <= cur).length / vals.length) * 100),
+  };
+}
+
+function valRow(label, st, asOf) {
+  if (!st) {
+    return `<div class="val-row"><div class="val-name">${label}</div>` +
+      `<div class="val-empty">VNDirect không có ${label} cho mã này (thường do công ty lỗ hoặc vốn chủ âm).</div></div>`;
+  }
+  const span = st.max - st.min;
+  const pos = (v) => (span > 0 ? ((v - st.min) / span) * 100 : 50);
+  // Today's figure missing (e.g. a loss quarter just started): say whose date it is.
+  const stale = st.curDate !== asOf ? ` <span class="val-note">(${fmtDateVN(st.curDate)})</span>` : "";
+  const short = st.n < VAL_MIN_POINTS ? ` <span class="val-note">chỉ ${st.n} phiên</span>` : "";
+  return `<div class="val-row">
+    <div class="val-name">${label}</div>
+    <div class="val-now">${fmt(st.cur, label === "P/B" ? 2 : 1)}${stale}</div>
+    <div class="val-bar" title="Thấp nhất ${fmt(st.min, 2)} · trung vị ${fmt(st.median, 2)} · cao nhất ${fmt(st.max, 2)}">
+      <span class="val-track"></span>
+      <span class="val-med" style="left:${pos(st.median)}%"></span>
+      <span class="val-dot" style="left:${pos(st.cur)}%"></span>
+    </div>
+    <div class="val-pct">Phân vị ${st.pct}%${short}</div>
+    <div class="val-range">${fmt(st.min, 1)} – ${fmt(st.max, 1)} · trung vị ${fmt(st.median, 1)}</div>
+  </div>`;
+}
+
+function fmtDateVN(iso) {
+  const [y, m, d] = String(iso || "").split("-");
+  return d ? `${d}/${m}/${y}` : "—";
+}
+
+function renderValuation(v) {
+  const rows = document.getElementById("valRows");
+  const src = document.getElementById("valSrc");
+  if (!v) {
+    rows.innerHTML = `<div class="empty-state">Nguồn lỗi — chưa lấy được lịch sử P/E, P/B.</div>`;
+    src.textContent = "";
+    return;
+  }
+  const items = Array.isArray(v.items) ? v.items : [];
+  if (!items.length) {
+    rows.innerHTML = `<div class="empty-state">VNDirect không có lịch sử P/E, P/B cho mã này.</div>`;
+    src.textContent = `Nguồn: ${v.source}`;
+    return;
+  }
+  rows.innerHTML =
+    valRow("P/E", valStats(items, "pe"), v.asOf) +
+    valRow("P/B", valStats(items, "pb"), v.asOf) +
+    `<div class="val-hint">Phân vị 0% = thấp nhất, 100% = cao nhất của chính mã này trong 2 năm. Vạch xám là trung vị. Chỉ để tham khảo, không phải khuyến nghị.</div>`;
+  src.textContent = `Nguồn: ${v.source} · đến ${fmtDateVN(v.asOf)}`;
 }
 
 // "3 giờ trước" for today-ish items, a date for older ones — news from the

@@ -313,6 +313,14 @@ const DataService = (function () {
     );
   }
 
+  // ---- Valuation history: {source:"VNDirect", symbol, asOf, items:[{date, pe, pb}]}
+  // Ascending, one row per day. pe/pb = null when VNDirect has no figure that
+  // day (loss-making / negative equity) — never 0. Max 730 days. No mock: a
+  // made-up P/E band would read as a real one.
+  function getValuationHistory(symbol, days = 730) {
+    return fetchJson(`${cfg.valuationProvider.baseUrl}/history?symbol=${encodeURIComponent(symbol)}&days=${days}`, T_FAST);
+  }
+
   // ---- Corporate actions: [{type, typeDesc, note, exDate, recordDate, ratio,
   //      cash, issuePrice, year}] newest first. type: DIVIDEND | KINDDIV | ISSUE.
   // Best-effort history for the dividend tab; empty array on failure so the
@@ -466,6 +474,7 @@ const DataService = (function () {
     getHistory,
     getIndexHistory,
     getFundamentals,
+    getValuationHistory,
     getEvents,
     getNews,
     getFxRates,
