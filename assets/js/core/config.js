@@ -106,6 +106,8 @@ const APP_CONFIG = {
   // Quarterly results (revenue, gross profit, NPATMI, CFO) — VNDirect statements.
   financialsProvider:   { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/financials" },
   // Same-industry comparison (ICB level 3) — VNDirect classification + ratios.
+  // Daily foreign flow (VN30, ~20 sessions) — SSI rows shared with the quote cache.
+  foreignProvider:      { name: "SSI FCData", baseUrl: "https://dashboard-chung-khoan.onrender.com/api/foreign" },
   peersProvider:        { name: "VNDirect",   baseUrl: "https://dashboard-chung-khoan.onrender.com/api/peers" },
   newsProvider:         { name: "CafeF RSS",  baseUrl: "https://dashboard-chung-khoan.onrender.com/api/news" },
   // Read-only SSI account sync. Needs a dashboard API key entered by the user;

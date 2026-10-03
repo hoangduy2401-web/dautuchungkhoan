@@ -329,6 +329,13 @@ const DataService = (function () {
     return fetchJson(`${cfg.financialsProvider.baseUrl}/quarterly?symbol=${encodeURIComponent(symbol)}&quarters=${quarters}`, T_FAST);
   }
 
+  // ---- Foreign flow history: {asOf, items:{A:[{date, buyVal, sellVal, netVal}]},
+  //      errors} — tỷ đồng, ascending, up to `sessions` rows (fewer around
+  //      holidays: SSI serves 30 days per call). Shares the quote cache server-side.
+  function getForeignHistory(symbols, sessions = 20) {
+    return fetchJson(`${cfg.foreignProvider.baseUrl}/history?symbols=${encodeURIComponent(symbols.join(","))}&sessions=${sessions}`, 30000);
+  }
+
   // ---- Peers: {source, symbol, asOf, industry:{code, name, level, total} | null,
   //      items:[{symbol, self, marketCap, pe, pb, roe, dividendYield}],
   //      median:{pe, pb, roe, dividendYield}}. A cold industry of 400+ codes
@@ -493,6 +500,7 @@ const DataService = (function () {
     getValuationHistory,
     getQuarterlyFinancials,
     getPeers,
+    getForeignHistory,
     getEvents,
     getNews,
     getFxRates,

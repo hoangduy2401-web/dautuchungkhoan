@@ -53,6 +53,9 @@ const state = {
   quotesGotAt: null, // ms — when the browser received them (fallback label)
   mcaps: null, // {source, asOf, items:{SYM: nghìn tỷ}} — heatmap tile sizes
   marketTab: "overview", // overview | heatmap | sector | rank | foreign | signal
+  foreignMode: "today", // today | hist (20 sessions)
+  foreignHist: null, // { data, at } — /api/foreign/history for VN30, refetched after 10'
+  foreignHistLoading: false,
   rankExchange: "VNINDEX", // VNINDEX | HNXINDEX | UPCOM — rankings tab exchange
   ovExchange: "VNINDEX", // sàn đang xem ở tab Tổng quan thị trường
   ovVolHistory: {}, // mã chỉ số -> [{date, volume}] — nạp lười, cache cả phiên
@@ -765,6 +768,12 @@ function wireRankExchanges() {
 function renderForeign() {
   const el = document.getElementById("foreignList");
   if (!el) return;
+  document.querySelectorAll("#foreignMode button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.fmode === state.foreignMode));
+  if (state.foreignMode === "hist") return renderForeignHist();
+  document.getElementById("foreignSum").textContent = "";
+  document.getElementById("foreignNote").textContent =
+    "Đơn vị: tỷ đồng · dương = mua ròng, âm = bán ròng · rổ VN30 · phiên gần nhất";
   const rows = APP_CONFIG.VN30
     .map((s) => ({ s, v: state.quotes[s] ? state.quotes[s].netForeignVal : null }))
     .filter((r) => hasVal(r.v))
@@ -787,6 +796,114 @@ function renderForeign() {
       </div>`;
     })
     .join("");
+}
+
+// 20-session view: VN30 ranked by cumulative net foreign value, each with a
+// mini column chart of its daily net and the current buy/sell streak. Data is
+// fetched lazily (first switch to this mode) and at most every 10 minutes:
+// it changes once a day, and the server answers from the quote cache anyway.
+const FOREIGN_HIST_TTL = 10 * 60_000;
+
+async function loadForeignHist() {
+  if (state.foreignHistLoading) return;
+  if (state.foreignHist && Date.now() - state.foreignHist.at < FOREIGN_HIST_TTL) return;
+  state.foreignHistLoading = true;
+  try {
+    const data = await DataService.getForeignHistory(APP_CONFIG.VN30, 20);
+    state.foreignHist = { data, at: Date.now() };
+  } catch {
+    // Keep a previous good copy; with none, the view says the source failed.
+    if (!state.foreignHist) state.foreignHist = { data: null, at: Date.now() };
+  } finally {
+    state.foreignHistLoading = false;
+  }
+  if (state.foreignMode === "hist") renderForeignHist();
+}
+
+function foreignStreak(series) {
+  let n = 0;
+  let sign = 0;
+  for (let i = series.length - 1; i >= 0; i--) {
+    const v = series[i].netVal;
+    if (!hasVal(v) || v === 0) break;
+    const s = v > 0 ? 1 : -1;
+    if (sign && s !== sign) break;
+    sign = s;
+    n++;
+  }
+  return { n, sign };
+}
+
+function foreignSpark(series) {
+  const vals = series.map((d) => (hasVal(d.netVal) ? d.netVal : 0));
+  const max = Math.max(...vals.map(Math.abs), 0.01);
+  const w = 4, gap = 1, h = 22, mid = h / 2;
+  const bars = vals
+    .map((v, i) => {
+      const bh = Math.max(1, (Math.abs(v) / max) * (mid - 1));
+      const y = v >= 0 ? mid - bh : mid;
+      return `<rect x="${i * (w + gap)}" y="${y.toFixed(1)}" width="${w}" height="${bh.toFixed(1)}" fill="${v >= 0 ? "var(--up)" : "var(--down)"}"/>`;
+    })
+    .join("");
+  const width = vals.length * (w + gap);
+  return `<svg class="f-spark" width="${width}" height="${h}" viewBox="0 0 ${width} ${h}" aria-hidden="true">` +
+    `<line x1="0" x2="${width}" y1="${mid}" y2="${mid}" stroke="var(--border-default)" stroke-width="1"/>${bars}</svg>`;
+}
+
+function renderForeignHist() {
+  const el = document.getElementById("foreignList");
+  const sum = document.getElementById("foreignSum");
+  const note = document.getElementById("foreignNote");
+  if (!state.foreignHist) {
+    el.innerHTML = Array.from({ length: 8 }, () =>
+      `<div class="sector-row" aria-hidden="true"><div class="s-name">${skBar(60)}</div><div class="s-track"></div><div class="s-val">${skBar(80)}</div></div>`).join("");
+    sum.textContent = "";
+    loadForeignHist();
+    return;
+  }
+  loadForeignHist(); // refresh in the background once the copy is 10' old
+  const data = state.foreignHist.data;
+  if (!data) {
+    el.innerHTML = `<div class="empty-state">Nguồn lỗi — chưa lấy được lịch sử khối ngoại.</div>`;
+    sum.textContent = "";
+    return;
+  }
+  const rows = Object.entries(data.items || {})
+    .map(([s, series]) => {
+      const known = series.filter((d) => hasVal(d.netVal));
+      return { s, series, total: known.reduce((a, d) => a + d.netVal, 0), n: series.length, ok: known.length > 0 };
+    })
+    .filter((r) => r.ok);
+  if (!rows.length) {
+    el.innerHTML = `<div class="empty-state">Chưa có dữ liệu khối ngoại.</div>`;
+    sum.textContent = "";
+    return;
+  }
+  const total = rows.reduce((a, r) => a + r.total, 0);
+  const buyers = rows.filter((r) => r.total > 0).length;
+  const sessions = Math.max(...rows.map((r) => r.n));
+  sum.innerHTML = `VN30 cộng dồn ${sessions} phiên: <b class="${total >= 0 ? "up" : "down"}">${total >= 0 ? "+" : ""}${fmt(total, 1)} tỷ</b> · mua ròng ${buyers} · bán ròng ${rows.length - buyers} mã`;
+  const shown = rows.sort((a, b) => Math.abs(b.total) - Math.abs(a.total)).slice(0, 15);
+  const maxAbs = Math.max(...shown.map((r) => Math.abs(r.total)), 0.1);
+  el.innerHTML = shown
+    .map((r) => {
+      const buy = r.total >= 0;
+      const color = buy ? "var(--up)" : "var(--down)";
+      const st = foreignStreak(r.series);
+      const streak = st.n ? `<span class="${st.sign > 0 ? "up" : "down"}">${st.sign > 0 ? "mua" : "bán"} ${st.n} phiên</span>` : "—";
+      return `<div class="sector-row foreign-hist-row">
+        <div class="s-name">${r.s}${r.n < sessions ? ` <small>(${r.n} phiên)</small>` : ""}</div>
+        <div class="s-track"><div class="s-fill" style="width:${((Math.abs(r.total) / maxAbs) * 100).toFixed(1)}%;background:${color}"></div></div>
+        <div class="s-val" style="color:${color}">${buy ? "+" : ""}${fmt(r.total, 1)} tỷ</div>
+        <div class="f-spark-wrap" title="Mua/bán ròng từng phiên, cũ → mới">${foreignSpark(r.series)}</div>
+        <div class="f-streak">${streak}</div>
+      </div>`;
+    })
+    .join("");
+  const first = rows[0].series[0]?.date;
+  note.textContent =
+    `Đơn vị: tỷ đồng · cộng dồn ${sessions} phiên ${first ? `${fmtDateVN(first)} → ` : ""}${fmtDateVN(data.asOf)} · ` +
+    "cột nhỏ = mua/bán ròng từng phiên (cũ → mới) · chuỗi = số phiên liên tiếp cùng chiều tính tới phiên gần nhất · 15 mã biến động lớn nhất rổ VN30";
 }
 
 /* ============================================================
@@ -1429,6 +1546,13 @@ function wireMarketTabs() {
       if (state.marketTab === "overview") renderOverview();
       // Treemap needs the pane's real width, which is 0 while it is hidden.
       if (state.marketTab === "heatmap") renderHeatmap();
+    });
+  });
+  // "Phiên gần nhất | 20 phiên" switch inside the foreign tab.
+  document.querySelectorAll("#foreignMode button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.foreignMode = btn.dataset.fmode;
+      renderForeign();
     });
   });
 }
