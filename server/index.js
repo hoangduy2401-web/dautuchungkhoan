@@ -2552,6 +2552,32 @@ app.get("/api/debug/crypto-probe", async (req, res) => {
   res.json(out);
 });
 
+// GET /api/debug/ssi-mcp-probe — can THIS host reach SSI MCP at all? No token
+// is sent: a healthy answer is HTTP 401 "Unauthorized" from the MCP server
+// itself, the same as from a laptop. A Cloudflare 403/challenge page instead
+// means Render's IP is blocked before auth even matters (CLAUDE.md §7).
+app.get("/api/debug/ssi-mcp-probe", async (req, res) => {
+  const probe = async (url, init) => {
+    const t0 = Date.now();
+    try {
+      const r = await fetchWithTimeout(url, init, 10000);
+      return { status: r.status, ms: Date.now() - t0, body: (await r.text()).slice(0, 200) };
+    } catch (err) {
+      return { status: null, ms: Date.now() - t0, error: err.message };
+    }
+  };
+  const [initialize, metadata] = await Promise.all([
+    probe("https://mcp.ssi.com.vn/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {
+        protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "probe", version: "0" } } }),
+    }),
+    probe("https://mcp.ssi.com.vn/.well-known/oauth-authorization-server", {}),
+  ]);
+  res.json({ initialize, metadata });
+});
+
 // ============================================================
 // `startedAt` / `uptimeSec` tell you whether this instance just cold-started.
 // Render Free spins the instance down after 15 idle minutes, and a cold start
