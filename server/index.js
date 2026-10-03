@@ -955,6 +955,85 @@ app.get("/api/valuation/history", cacheFor(3600), async (req, res) => {
 });
 
 // ============================================================
+// Quarterly results — VNDirect /v4/financial_statements, one call per symbol
+// (measured 03/10/2026: FPT/VCB/SSI/BVH 0.3-0.5s, no duplicate rows across
+// model types). Item codes from /v4/financial_models, the same across the
+// four company forms except revenue:
+//   21001 Doanh thu thuần (non-finance, securities, insurance)
+//   421701 Tổng thu nhập hoạt động (banks — they have no 21001 and no 23100)
+//   23100 Lợi nhuận gộp · 23000 LNST công ty mẹ
+//   32000 Lưu chuyển tiền thuần từ HĐKD — STANDALONE per quarter, not
+//         year-to-date (FPT 2025: -2,507 / 4,190 / 4,344 / 4,108 tỷ)
+// Cross-check: FPT Q1/2026 revenue 12,480 tỷ and Q2/2026 13,789 tỷ match SSI MCP.
+// ============================================================
+const ITEM_GROSS_PROFIT = 23100;
+const ITEM_CFO = 32000;
+const FIN_MAX_QUARTERS = 20;
+
+async function computeQuarterly(symbol, quarters) {
+  // ~92 days per quarter plus one spare quarter, so the oldest one is not cut.
+  const since = new Date(Date.now() - (quarters + 1) * 92 * 86400_000).toISOString().slice(0, 10);
+  const codes = [ITEM_REVENUE, ITEM_REVENUE_BANK, ITEM_GROSS_PROFIT, ITEM_NPATMI, ITEM_CFO].join(",");
+  const rows = await vndirectJson(
+    `${VNDIRECT_STATEMENTS}?q=code:${symbol}~reportType:QUARTER~itemCode:${codes}` +
+      `~fiscalDate:gte:${since}&size=2000`
+  );
+  // Own grouping rather than groupByFiscalDate(): that one runs Number(null),
+  // which would turn a missing figure into 0.
+  const byDate = new Map();
+  for (const r of rows) {
+    if (r.numericValue === null || r.numericValue === undefined || r.numericValue === "") continue;
+    const v = Number(r.numericValue);
+    if (!Number.isFinite(v)) continue;
+    if (!byDate.has(r.fiscalDate)) byDate.set(r.fiscalDate, {});
+    byDate.get(r.fiscalDate)[Math.round(Number(r.itemCode))] = v;
+  }
+  const isBank = rows.some((r) => Math.round(Number(r.itemCode)) === ITEM_REVENUE_BANK);
+  // Numbers come in VND; the page works in tỷ đồng. null stays null.
+  const ty = (v) => (Number.isFinite(v) ? v / 1e9 : null);
+  const items = [...byDate.keys()]
+    .sort()
+    .slice(-quarters)
+    .map((fiscalDate) => {
+      const v = byDate.get(fiscalDate);
+      const [y, m] = fiscalDate.split("-").map(Number);
+      return {
+        period: `Q${Math.ceil(m / 3)}/${y}`,
+        fiscalDate,
+        revenue: ty(isBank ? v[ITEM_REVENUE_BANK] : v[ITEM_REVENUE]),
+        grossProfit: isBank ? null : ty(v[ITEM_GROSS_PROFIT]),
+        netProfit: ty(v[ITEM_NPATMI]),
+        operatingCashFlow: ty(v[ITEM_CFO]),
+      };
+    });
+  return {
+    source: "VNDirect",
+    symbol,
+    unit: "tỷ đồng",
+    revenueLabel: isBank ? "Tổng thu nhập hoạt động" : "Doanh thu thuần",
+    items,
+  };
+}
+
+// GET /api/financials/quarterly?symbol=FPT&quarters=12
+app.get("/api/financials/quarterly", cacheFor(3600), async (req, res) => {
+  const symbol = String(req.query.symbol || "").trim().toUpperCase();
+  const quarters = Math.round(Number(req.query.quarters) || 12);
+  if (!/^[A-Z0-9]{1,10}$/.test(symbol)) return res.status(400).json({ error: "bad_symbol" });
+  if (quarters < 1 || quarters > FIN_MAX_QUARTERS) {
+    return res.status(400).json({ error: "bad_quarters", maxQuarters: FIN_MAX_QUARTERS });
+  }
+  try {
+    // Statements change once a quarter: 12h fresh, 2 days stale if VNDirect is down.
+    res.json(await withCache(`fin:q:${symbol}:${quarters}`, 12 * 3600_000,
+      () => computeQuarterly(symbol, quarters), { staleMs: 48 * 3600_000 }));
+  } catch (err) {
+    console.error("[/api/financials/quarterly]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
 // Corporate actions (cổ tức / cổ phiếu thưởng / phát hành quyền) — VNDirect
 // finfo /v4/events, the same source as fundamentals. Two consumers:
 //   1. back-adjusting the price chart (below), and
