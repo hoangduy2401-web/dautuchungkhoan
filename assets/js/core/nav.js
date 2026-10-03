@@ -21,8 +21,12 @@ const Nav = (function () {
   ];
 
   const PRIVACY_SETTING = "privacyMode";
-  const EYE_ON = "🙈"; // đang che
-  const EYE_OFF = "👁"; // đang hiện
+  // Icons supplied by the user (03/10/2026): closed padlock = amounts hidden,
+  // open padlock with a banknote = amounts shown. Every page sits at the site
+  // root, so one relative path serves all six.
+  const ICON_HIDDEN = "assets/img/privacy-hidden.png";
+  const ICON_SHOWN = "assets/img/privacy-shown.png";
+  const eyeIcon = (on) => `<img src="${on ? ICON_HIDDEN : ICON_SHOWN}" alt="" width="20" height="20">`;
 
   // Current file name, with "" (directory root) treated as index.html.
   function currentPage() {
@@ -38,9 +42,10 @@ const Nav = (function () {
     document.documentElement.classList.toggle("privacy", !!on);
     const btn = document.getElementById("eyeBtn");
     if (btn) {
-      btn.textContent = on ? EYE_ON : EYE_OFF;
+      btn.innerHTML = eyeIcon(on);
       btn.classList.toggle("on", !!on);
       btn.title = on ? "Đang ẩn số tiền — bấm để hiện" : "Ẩn số tiền";
+      btn.setAttribute("aria-label", btn.title);
       btn.setAttribute("aria-pressed", String(!!on));
     }
   }
@@ -170,7 +175,7 @@ const Nav = (function () {
         return `<a href="${p.href}"${cls ? ` class="${cls}"` : ""}>${p.label}</a>`;
       }).join("") +
       `</div>` +
-      `<button type="button" class="eye-btn" id="eyeBtn" aria-pressed="false" title="Ẩn số tiền">${EYE_OFF}</button>`;
+      `<button type="button" class="eye-btn" id="eyeBtn" aria-pressed="false" title="Ẩn số tiền" aria-label="Ẩn số tiền">${eyeIcon(false)}</button>`;
 
     document.getElementById("eyeBtn").addEventListener("click", togglePrivacy);
 

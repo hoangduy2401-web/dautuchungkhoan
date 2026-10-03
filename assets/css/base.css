@@ -473,7 +473,10 @@ tr:hover td { background: var(--surface-hover); }
   padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid currentColor;
 }
 /* Links take the slack so the eye button sits hard right on desktop. */
-.nav-links { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; }
+/* margin-left = minus the link's own left padding: the TEXT of the first link
+   then starts on the same line as the page title below (both at the nav's
+   padding edge), instead of 12px to the right of it. */
+.nav-links { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; margin-left: -12px; }
 
 /* Nut con mat — bat/tat che so tien. Xem khoi CHE DO RIENG TU ben duoi. */
 .eye-btn {
@@ -484,7 +487,10 @@ tr:hover td { background: var(--surface-hover); }
   transition: background var(--duration-fast) var(--ease-standard);
 }
 .eye-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
-.eye-btn.on { background: var(--accent-orange); color: var(--text-on-accent); border-color: var(--accent-orange); }
+/* The padlock icons are already orange: an orange "on" fill would swallow the
+   closed lock, so "on" is an accent ring instead. */
+.eye-btn.on { border-color: var(--accent-orange); box-shadow: 0 0 0 1px var(--accent-orange); }
+.eye-btn img { display: block; width: 20px; height: 20px; }
 
 /* ============================================================
    CHE DO RIENG TU
