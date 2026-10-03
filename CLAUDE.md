@@ -313,8 +313,8 @@ GET /api/gold/history?days=30|90|180|365     (26/09 — xem docs/VANG.md mục 4
 ```
 
 ```
-GET /api/crypto/prices?ids=bitcoin,ethereum   (Binance ở production, xem mục 7)
-→ { updatedAt, source:"CoinGecko"|"Binance"|"CoinMarketCap", note?,
+GET /api/crypto/prices?ids=bitcoin,ethereum   (OKX ở production từ 02/10, mục 7)
+→ { updatedAt, source:"CoinGecko"|"Binance"|"OKX", note?,
     vndFrom?: { rate, rateDate, source },
     items:[{ id, symbol, name, image, vnd, usd, change24h, marketCap }] }
    `id` là SLUG CoinGecko ("matic-network"), không phải ticker.
@@ -803,7 +803,7 @@ còn MA10/MA20 vẫn vẽ — khớp đúng triệu chứng cũ.
   thư viện, dễ lẫn; và 5 "thử và không phải nguyên nhân" hồi đó (minMove, chờ
   2 khung hình, tuần tự nạp, dựng lười, chia bậc) đều đúng là không phải.
 - **Đã sửa hai lớp:** server giữ 1 điểm/ngày (điểm cuối), `coin.js` lọc lại lần
-  nữa. Production đang chạy Binance (không trùng) nên lỗi này ẩn cho tới khi
+  nữa. Production đang chạy OKX/Binance (không trùng) nên lỗi này ẩn cho tới khi
   CoinGecko hết chặn IP Render. **Luật chung: mọi chuỗi đưa vào chart phải duy
   nhất theo ngày.**
 
@@ -909,6 +909,46 @@ cũng ở đó. **Chi tiết + số đo: `docs/BAIHOC-CU.md`. Đọc trước kh
 
 ---
 
+### Giá coin: Render bị Binance chặn 418 — nguồn thứ ba là OKX (02/10/2026)
+
+**Triệu chứng.** `/api/crypto/prices` → 502 `{"detail":"Binance HTTP 418"}`, trang
+Coin "Nguồn lỗi". Do phiên song song sửa (`85d0c49`), số đo theo commit đó:
+Binance 418 `Retry-After: 360`, **`data-api.binance.vision` dính cùng lệnh cấm**,
+CoinGecko 429. OKX, Kraken, Coinbase trả 200 — đo TỪ Render bằng
+**`/api/debug/crypto-probe`** (danh sách URL cố định, không SSRF). Đo từ laptop vô
+nghĩa: IP khác. **Đã loại trừ:** đổi sang binance.vision (cùng cấm).
+**Cách sửa:** mỗi nguồn nghỉ theo `Retry-After` sau 429/418 (gọi tiếp chỉ làm lệnh
+cấm dài thêm), thêm OKX (MATIC→POL, RNDR→RENDER), giá cache 120s, lịch sử stale 6h.
+
+**KHÔNG phải do server mình gọi nhiều** (đã loại trừ): giá cache 60s/tổ hợp coin,
+vòng warm KHÔNG đụng crypto, trọng số `ticker/24hr` ≤20 mã = 2 trên hạn mức 6000/phút.
+IP ra của Render **dùng chung** với tenant khác; Binance cấm theo IP. Nên không có
+cách "gọi ít đi" nào gỡ được — chỉ có đổi nguồn.
+
+**Số đo:** stub local (CoinGecko 429, Binance 418): Binance bị gọi đúng **1 lần**
+rồi bỏ qua, OKX trả giá + 366 điểm/365 ngày, 0 trùng ngày. Live sau deploy: 4 request
+crypto đều 200 (0,45–1,8s), trang Coin hiện "OKX · VND quy đổi". **03/10 lệnh cấm
+vẫn còn và DÀI HƠN: `Retry-After` 360 → 2899s** → coi Binance từ Render là chết hẳn.
+
+**OKX khác Binance ở 3 chỗ:** `change24h` tự tính `(last − open24h)/open24h` (cửa
+sổ 24h trượt, cùng nghĩa Binance); 1 call `tickers?instType=SPOT` ~360 KB cho mọi
+coin (cache chung khoá `crypto:okx:tickers`); lịch sử `history-candles` tối đa 100
+nến/lần → 365 ngày = 4 call. `image`/`marketCap` null như đường Binance.
+**`/api/debug/crypto-probe` gọi thẳng Binance, bỏ qua cooldown** — đừng spam nó.
+
+### Skeleton: bẫy khi làm (02/10/2026)
+
+- **Thử local mà không bump `?v=`** → trình duyệt dùng JS cũ trong cache dù file
+  đã sửa: cache trang không được lưu, console báo `DataService.loadPageCache is
+  not a function` (file trang mới + `dataService.js` cũ). Bump TRƯỚC khi thử, kể
+  cả với `python3 -m http.server`.
+- CSS trang (nạp sau `base.css`) có `background:` dạng shorthand ĐÈ màu shimmer:
+  `.sv-logo{background:#fff}` làm ô logo skeleton trắng, `.ov-breadth-bar` nuốt
+  `.sk-fill`. Cách đã dùng: kích thước inline thay vì mượn lớp logo; shimmer đặt
+  ở span con bên trong thanh.
+- `.sk` width theo **%** trong hộp co theo nội dung (flex item, `.ov-pct`, giá
+  watchlist) → rộng 0, không thấy gì. Ở đó dùng px (`skBar("44px")`).
+
 ## 8. FastConnect Trading — GĐ1 chỉ đọc (ĐÃ triển khai, đang chạy)
 
 Endpoint `/api/account/{otp,login,portfolio}`, chỉ đọc, không đặt lệnh được.
@@ -930,10 +970,9 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20260926j`. Nhánh `main` sạch, đã push (commit `6dcbf85`),
-backend deploy lại 26/09 (endpoint gom lô, tin VNDirect, lọc trùng ngày coin,
-header cache). Bản live đã kiểm sau deploy: 9 request lúc tải trang Chứng
-khoán, CLS 0,004, 0 lỗi console.
+Cache busting `?v=20261002c`. Nhánh `main` đã push (commit `ee86607`), backend
+deploy lại 02/10 (nguồn coin OKX — phiên song song). Bản live đã kiểm 02/10:
+`?v=20261002c` lên, trang Vàng lưu cache, 0 lỗi console.
 
 **Dữ liệu đọc từ Supabase** (`STORE_ENABLED: true` từ 15/08). Mỗi thiết bị đăng
 nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm đường lui — chưa xoá.
@@ -964,7 +1003,7 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Lịch sử giá vàng SJC** | CafeF (dự phòng PNJ) + FXRatesAPI XAU | biểu đồ 3 đường bán/mua/thế giới quy đổi, 1M–1Y, ô "Cao hơn thế giới %" (26/09) |
 | **Bảng giá vàng** | PNJ (dự phòng BTMC) | 20 loại; đổi đơn vị lượng/chỉ/gram; cảnh báo chênh lệch mua-bán ≥5% |
 | **Danh mục vàng** | `Store` (`holdings_gold`) | cùng khuôn `holdings_fx`; giá vốn nhập theo **triệu ₫/lượng**; định giá theo giá tiệm **mua vào** |
-| **Giá coin** | Binance + tỷ giá dự án | CoinGecko **chặn IP Render** — xem mục 7. VND là số **quy đổi**, trang ghi nhãn |
+| **Giá coin** | CoinGecko → Binance → **OKX** + tỷ giá dự án | Binance **418** + CoinGecko **429** từ IP Render — mục 7. Nguồn bị chặn nghỉ theo `Retry-After`. VND là số **quy đổi**, trang ghi nhãn |
 | **Danh mục coin** | `Store` (`holdings_crypto`) | cùng khuôn hai trang kia; giá vốn nhập theo **₫/1 coin** |
 | **Tổng quan thị trường** | `/indices` + `/index-history` | tab đầu của trang chứng khoán: KL phiên/tuần/mã chọn + độ rộng; **0 endpoint mới** |
 | **Lãi suất tiết kiệm** | CafeF CDN | 29 NH × 8 kỳ hạn, có logo; ô cao nhất mỗi kỳ hạn tô đậm; nhãn **"lấy lúc"** |
@@ -988,9 +1027,35 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Nhãn thời điểm giá** | `asOf` của `/quotes` | "Giá SSI đọc lúc …" dưới đồng hồ; cam "trễ N phút" khi trong giờ mà cũ ≥3' |
 | **Ô nhập số** | `numInput.js` | chấm nghìn tự động, 25 ô / 6 trang (mục 4) |
 | **Animation** | `motion.js` | nháy giá, shimmer, số chạy, hàng trượt vào, toast… (mục 4) |
+| **Skeleton loading** | `motion.js` + `.sk` (base.css) | thay mọi chữ "Đang tải…/Đang chờ máy chủ…"; bản chép tĩnh trong HTML; lỗi → báo lỗi, không shimmer mãi (mục 4) |
+| **Số liệu lần trước 4 trang tài sản** | localStorage `vn_dashboard_cache_*_v1` | Vàng/Ngoại tệ/Coin/Tiết kiệm vẽ bảng cũ ngay, mờ + nhãn giờ lưu; máy chủ lỗi thì giữ số cũ (mục 4) |
 | **Ảnh xem trước link** | `assets/og-image.png` | OG + description cả 6 trang; ảnh không có con số nào |
 
 ### Nhật ký theo phiên
+
+**02/10/2026 (phiên 16) — skeleton loading + số liệu lần trước cho 4 trang tài sản; chốt hướng chatbot.**
+Bump `?v=20260926j` → **`?v=20261002c`** (3 lần, qua `scripts/bump-v.sh`).
+**KHÔNG đụng `server/`** ở phiên này. Commit `9c92579`, `870fc10` (+ docs `f04d151`, `ee86607`).
+
+- **Skeleton** (`9c92579`): `.sk`/`.sk-fill` + `Motion.skeletonRows/skeletonStats/
+  settleSkeletons`. Phủ: bảng 4 trang tài sản, ô thống kê chart, thẻ khối lượng +
+  độ rộng, Top tăng/giảm, chỉ số cơ bản, tin tức, giá watchlist, lần tính đầu trang
+  tổng. Bản chép tĩnh trong HTML. Đo với backend giả lập trễ 8s: dòng skeleton cao
+  ĐÚNG dòng thật (33px; tiết kiệm 37px có logo; coin 48px tên 2 dòng), CLS 0,002–
+  0,008 ở 4 trang tài sản, 0,023 trang Chứng khoán; 375px giấu đúng cột.
+- **Hai lỗi cũ sửa kèm:** (1) coin: lịch sử lỗi ngay lần đầu (chart chưa dựng) thì
+  câu báo lỗi bị bỏ vì kẹp trong `if (chartReady …)` → ô thống kê kẹt "Đang tải…";
+  (2) Chứng khoán không có snapshot: watchlist TRỐNG suốt lúc chờ máy chủ (chỉ
+  nhánh có snapshot gọi `renderWatchlist`).
+- **Số liệu lần trước** (`870fc10`): mục 4. Thử cả 4 trang × 3 tình huống (lần
+  đầu lưu / chậm 8s thay bằng số mới / máy chủ lỗi giữ số cũ). Coin lọc cache theo
+  watchlist (thử cache có coin lạ + thiếu coin: đúng).
+- **Chatbot:** user chốt hướng, CHƯA code — `docs/YTUONG.md` mục cuối.
+- **Phiên song song** (do user bấm thẻ việc): `f5b81a5` + `85d0c49` sửa giá coin
+  Binance 418 → thêm OKX (mục 7). **ĐỤNG `server/index.js`** — Render deploy lại,
+  đã kiểm live 200. Thêm `/api/debug/crypto-probe` (giữ lại, dùng khi dò nguồn).
+- File: `base.css`, `core/{motion,dataService,theme}.js`, `pages/{chung-khoan,
+  vang,ngoai-te,coin,tiet-kiem,tong}.js`, 6 HTML, `docs/YTUONG.md`.
 
 **26/09/2026 (phiên 15) — rà soát toàn hệ thống: 4 giai đoạn tốc độ + độ chính xác + animation.**
 Bump `?v=20260817c` → **`?v=20260926j`** (10 lần, 4 lần cuối qua `scripts/bump-v.sh`).
@@ -1059,33 +1124,38 @@ Bump `?v=20260817c` → **`?v=20260926j`** (10 lần, 4 lần cuối qua `script
     ảnh trống nửa trên (DOM vẫn đúng — `elementFromPoint` xác nhận). Cách chụp:
     giữ `scrollY=0`, dịch `document.body.style.transform = translateY(-Npx)`.
 
-**17/08/2026 (phiên 14) — chart điều chỉnh cổ tức + tab lịch cổ tức.**
-Bump `?v=20260816m` → **`?v=20260817a`** (1 lần, 77 chỗ). **ĐỤNG `server/`** —
-Render deploy lại. Commit `a254ddf`.
-
-- User báo: SSI hôm nay chia cổ tức tiền + cổ phiếu, chart hiện **vách -19% giả**
-  và quote sai -19,2%. Kiểm với SSI API: `DailyOhlc` trả giá THÔ, cột
-  `ClosePriceAdjusted` KHÔNG back-adjust (đo factor 1.0), trường `RefPrice` ex-div
-  vẫn ghi giá thô hôm qua. Chi tiết + cách sửa: **mục 7**.
-- Sửa `computeQuote`: ref = `(ceiling+floor)/2`. Back-adjust `DailyOhlc` theo
-  VNDirect events (cổ tức tiền + cổ phiếu thưởng, KHÔNG rights). Endpoint mới
-  `/api/events/:symbol` + panel "Lịch cổ tức & sự kiện quyền" mỗi mã.
-- File: `server/index.js`, `config.js` (thêm `eventsProvider`), `dataService.js`
-  (`getEvents`), `chung-khoan.js` (`renderEvents`), `base.css` (badge),
-  `chung-khoan.html` (panel). User yêu cầu tab lịch cổ tức — đã làm.
-- Đo sau sửa: SSI quote +1,02% (trước -19,2%); 14/08 24,5 → **19,58** (liền mạch
-  19,8 hôm nay); rights 08/12/2025 giữ nguyên (không adjust). Verify trên browser
-  local: chart liền mạch, tab đủ 12 sự kiện.
-
-Các phiên trước đó (kể cả phiên 13): **`docs/NHATKY.md`**.
+Các phiên trước đó (kể cả phiên 14): **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
 
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
-Cây làm việc sạch, đã push, bản live đã kiểm (26/09). **Checklist rà soát 4
-giai đoạn + animation của phiên 15 đã xong hết.** Quy hoạch chính thức còn đúng
-**GĐ 7** (đang hoãn, xem dưới).
+Cây làm việc sạch, đã push, bản live đã kiểm (02/10). Skeleton + số liệu lần
+trước xong (phiên 16). Quy hoạch chính thức còn **GĐ 7** (đang hoãn) và việc mới
+**chatbot AI** (dưới).
+
+#### Chatbot AI — hướng đã chốt, chưa code (phiên 16)
+
+Đọc **`docs/YTUONG.md` mục cuối** trước. Tóm tắt quyết định của user: **CHỈ dữ
+liệu thị trường** (không gửi danh mục/sổ/giao dịch sang API AI), Haiku tra cứu +
+Sonnet phân tích, trần chi tiêu/ngày trên server, `/api/chat` theo khuôn bảo vệ
+`/api/account/*`, `chat.js` nạp lười khi bấm nút. Đổi hợp đồng dữ liệu (mục 2) —
+chốt chi tiết endpoint với user khi bắt tay. Trước khi code: đọc skill `claude-api`
+lấy model ID + giá hiện hành, đừng viết từ trí nhớ.
+
+**⚠ USER TỰ LÀM TRƯỚC:**
+1. Vào console.anthropic.com → tạo API key (nên đặt giới hạn chi tiêu tháng ở
+   mục Billing/Limits).
+2. Render Dashboard → service backend → Environment → thêm biến (tên sẽ chốt,
+   dự kiến `ANTHROPIC_API_KEY`). **Không** đưa key vào repo hay frontend.
+
+#### Kiểm skeleton + cache trên live khi Render NGỦ thật
+
+Phiên 16 chỉ đo bằng trễ giả lập — live lúc đó máy chủ thức nên chưa thấy nhãn
+"Số liệu lưu lần trước". Lần tới mở trang sau >15 phút im: bảng cũ phải hiện
+ngay, mờ, nhãn cam dưới đồng hồ; số mới về thì hết mờ. Trang tổng (`/`) chưa
+thấy skeleton chạy thật (máy local chưa đăng nhập → tính tức thì) — xem trên
+thiết bị đã đăng nhập.
 
 #### Việc đầu tiên phiên sau — kiểm trong PHIÊN GIAO DỊCH THẬT (T2–T6, 9:20–15:00)
 
@@ -1123,6 +1193,9 @@ như `/api/account/*` đang chạy (mục 8) — header `x-dashboard-key` so b�
 **⚠ USER TỰ LÀM TRƯỚC KHI BẮT ĐẦU:**
 1. Tạo API key trên Binance, **CHỈ bật "Enable Reading"**. Tắt Spot Trading, tắt
    Withdrawals. Bật khoá IP về IP tĩnh của Render nếu Binance cho.
+   **⚠ Đo 02–03/10: IP Render bị Binance CẤM 418** (mục 7) — API ký HMAC cũng đi
+   qua IP đó nên GĐ 7 chạy từ Render sẽ hỏng. Render Free không có IP tĩnh riêng.
+   Phải chốt chỗ gọi khác (máy local, gói Render có IP tĩnh, hoặc proxy) TRƯỚC khi code.
 2. Đặt key vào **env của Render**, không bao giờ vào repo, không bao giờ ra
    frontend. Tên biến sẽ chốt khi làm 7.2.
 

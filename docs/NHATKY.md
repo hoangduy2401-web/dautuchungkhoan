@@ -5,6 +5,24 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**17/08/2026 (phiên 14) — chart điều chỉnh cổ tức + tab lịch cổ tức.**
+Bump `?v=20260816m` → **`?v=20260817a`** (1 lần, 77 chỗ). **ĐỤNG `server/`** —
+Render deploy lại. Commit `a254ddf`.
+
+- User báo: SSI hôm nay chia cổ tức tiền + cổ phiếu, chart hiện **vách -19% giả**
+  và quote sai -19,2%. Kiểm với SSI API: `DailyOhlc` trả giá THÔ, cột
+  `ClosePriceAdjusted` KHÔNG back-adjust (đo factor 1.0), trường `RefPrice` ex-div
+  vẫn ghi giá thô hôm qua. Chi tiết + cách sửa: **mục 7**.
+- Sửa `computeQuote`: ref = `(ceiling+floor)/2`. Back-adjust `DailyOhlc` theo
+  VNDirect events (cổ tức tiền + cổ phiếu thưởng, KHÔNG rights). Endpoint mới
+  `/api/events/:symbol` + panel "Lịch cổ tức & sự kiện quyền" mỗi mã.
+- File: `server/index.js`, `config.js` (thêm `eventsProvider`), `dataService.js`
+  (`getEvents`), `chung-khoan.js` (`renderEvents`), `base.css` (badge),
+  `chung-khoan.html` (panel). User yêu cầu tab lịch cổ tức — đã làm.
+- Đo sau sửa: SSI quote +1,02% (trước -19,2%); 14/08 24,5 → **19,58** (liền mạch
+  19,8 hôm nay); rights 08/12/2025 giữ nguyên (không adjust). Verify trên browser
+  local: chart liền mạch, tab đủ 12 sự kiện.
+
 **16/08/2026 (phiên 13) — trang tổng đọc tài khoản SSI thật + quy hoạch lại bố cục.**
 Bump `?v=20260816k` → **`?v=20260816m`** (2 lần). **KHÔNG đụng `server/`.**
 
