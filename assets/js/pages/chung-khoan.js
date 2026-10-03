@@ -689,6 +689,12 @@ function finSkeleton() {
   }
   return html;
 }
+function peerSkeleton() {
+  const td = (w) => `<td>${skBar(`${w}px`)}</td>`;
+  let html = "";
+  for (let i = 0; i < 8; i++) html += `<tr aria-hidden="true">${td(34)}${td(44)}${td(30)}${td(30)}${td(34)}${td(30)}</tr>`;
+  return html;
+}
 function newsSkeleton(n) {
   let html = "";
   for (let i = 0; i < n; i++) {
@@ -1791,6 +1797,21 @@ async function loadSelectedSymbol() {
   // và cắt ở trình duyệt thì không tốn gì.
   // Switched symbol: the previous one's ratios must not sit under the new
   // title while loading. Same symbol (45s refresh) keeps them — no flicker.
+  const switched = state.fundSym !== sym;
+  if (switched) {
+    document.getElementById("peerRows").innerHTML = peerSkeleton();
+    document.getElementById("peerSrc").textContent = "";
+    document.getElementById("peerHint").textContent = "";
+    document.getElementById("peerTitle").textContent = "Cùng ngành";
+  }
+  // Peers load on their own: a cold 400-code industry takes ~14s server-side
+  // and must not hold the chart back inside the Promise.all below.
+  DataService.getPeers(sym)
+    .catch(() => null)
+    .then((peers) => {
+      if (state.selected !== sym) return; // user moved on
+      if (peers || switched) renderPeers(peers);
+    });
   if (state.fundSym !== sym) {
     document.getElementById("fundGrid").innerHTML = fundSkeleton(10);
     document.getElementById("valRows").innerHTML = valSkeleton();
@@ -1801,6 +1822,7 @@ async function loadSelectedSymbol() {
   }
   document.getElementById("valBlock").hidden = false;
   document.getElementById("finBlock").hidden = false;
+  document.getElementById("peerBlock").hidden = false;
   const fetchDays = Math.max(state.range, SIG_DAYS);
   const [full, fundamentals, news, events, valuation, quarterly] = await Promise.all([
     DataService.getHistory(sym, fetchDays).catch(() => null),
@@ -1881,6 +1903,7 @@ async function loadSelectedIndex(code) {
   // An index has no P/E band and no income statement of its own.
   document.getElementById("valBlock").hidden = true;
   document.getElementById("finBlock").hidden = true;
+  document.getElementById("peerBlock").hidden = true;
   // Indices have no company events — hide the dividend panel and collapse its
   // column so the chart takes the full width.
   const ep = document.getElementById("eventsPanel");
@@ -2077,6 +2100,44 @@ function renderQuarterly(q) {
     "YoY = so với cùng quý năm trước. LNST mẹ = lợi nhuận sau thuế của cổ đông công ty mẹ. " +
     "CFO = dòng tiền thuần từ hoạt động kinh doanh trong quý." +
     (q.revenueLabel === "Doanh thu thuần" ? "" : " Ngân hàng: cột đầu là tổng thu nhập hoạt động, không có biên gộp.");
+}
+
+// "Cùng ngành": the largest companies of the symbol's ICB level-3 industry by
+// market cap, the viewed symbol always included and highlighted, and the
+// median of exactly the rows shown — small UPCoM names do not skew it.
+function renderPeers(p) {
+  const body = document.getElementById("peerRows");
+  const title = document.getElementById("peerTitle");
+  const src = document.getElementById("peerSrc");
+  const hint = document.getElementById("peerHint");
+  const empty = (msg) => {
+    body.innerHTML = `<tr><td colspan="6" class="fin-empty">${msg}</td></tr>`;
+    hint.textContent = "";
+  };
+  if (!p) {
+    title.textContent = "Cùng ngành";
+    src.textContent = "";
+    return empty("Nguồn lỗi — chưa lấy được số liệu cùng ngành.");
+  }
+  src.textContent = p.asOf ? `Nguồn: ${p.source} · đến ${fmtDateVN(p.asOf)}` : `Nguồn: ${p.source}`;
+  if (!p.industry) {
+    title.textContent = "Cùng ngành";
+    return empty("VNDirect chưa phân ngành mã này.");
+  }
+  title.textContent = `Cùng ngành — ${p.industry.name} (${p.industry.total} mã)`;
+  const items = Array.isArray(p.items) ? p.items : [];
+  const pct = (v) => (hasVal(v) ? `${fmt(v, 1)}%` : "—");
+  const cells = (r) =>
+    `<td>${fmt(r.marketCap, 1)}</td><td>${fmt(r.pe, 1)}</td><td>${fmt(r.pb, 2)}</td><td>${pct(r.roe)}</td><td>${pct(r.dividendYield)}</td>`;
+  const m = p.median || {};
+  body.innerHTML =
+    items.map((r) => `<tr class="${r.self ? "peer-self" : ""}"><td class="fin-period">${r.symbol}</td>${cells(r)}</tr>`).join("") +
+    `<tr class="peer-median"><td class="fin-period">Trung vị</td><td></td>` +
+    `<td>${fmt(m.pe, 1)}</td><td>${fmt(m.pb, 2)}</td><td>${pct(m.roe)}</td><td>${pct(m.dividendYield)}</td></tr>`;
+  hint.textContent =
+    `${items.filter((r) => !r.self).length >= 8 ? "8 công ty" : "Các công ty"} vốn hoá lớn nhất cùng ngành ICB cấp 3 theo VNDirect` +
+    " (mã đang xem luôn có, tô nổi). Trung vị tính trên chính các dòng trong bảng." +
+    " Vốn hoá: nghìn tỷ đồng · ROE: 4 quý gần nhất.";
 }
 
 // "3 giờ trước" for today-ish items, a date for older ones — news from the

@@ -431,6 +431,10 @@
 .fin-table .up { color: var(--positive); }
 .fin-table .down { color: var(--negative); }
 .fin-empty { text-align: center !important; color: var(--text-secondary); padding: 14px 6px !important; }
+.peer-table td:first-child { font-weight: 600; }
+.peer-self td { background: var(--surface-raised, rgba(240, 169, 78, 0.10)); }
+.peer-self td:first-child { color: var(--amber); }
+.peer-median td { border-top: 1px solid var(--border-default); color: var(--text-secondary); font-weight: 600; }
 @media (max-width: 640px) {
   .fin-table .col-gm, .fin-table .col-cfo { display: none; }
   /* Too narrow for a bar beside the figure: numbers + YoY only. */

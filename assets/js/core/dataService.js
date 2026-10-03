@@ -329,6 +329,14 @@ const DataService = (function () {
     return fetchJson(`${cfg.financialsProvider.baseUrl}/quarterly?symbol=${encodeURIComponent(symbol)}&quarters=${quarters}`, T_FAST);
   }
 
+  // ---- Peers: {source, symbol, asOf, industry:{code, name, level, total} | null,
+  //      items:[{symbol, self, marketCap, pe, pb, roe, dividendYield}],
+  //      median:{pe, pb, roe, dividendYield}}. A cold industry of 400+ codes
+  //      took 14s server-side (measured 03/10/2026), hence its own 30s budget.
+  function getPeers(symbol, limit = 8) {
+    return fetchJson(`${cfg.peersProvider.baseUrl}?symbol=${encodeURIComponent(symbol)}&limit=${limit}`, 30000);
+  }
+
   // ---- Corporate actions: [{type, typeDesc, note, exDate, recordDate, ratio,
   //      cash, issuePrice, year}] newest first. type: DIVIDEND | KINDDIV | ISSUE.
   // Best-effort history for the dividend tab; empty array on failure so the
@@ -484,6 +492,7 @@ const DataService = (function () {
     getFundamentals,
     getValuationHistory,
     getQuarterlyFinancials,
+    getPeers,
     getEvents,
     getNews,
     getFxRates,
