@@ -633,15 +633,41 @@ app.get("/api/price/index-history", async (req, res) => {
 
 // Latest quote for one symbol, in thousands of VND. Shared by /api/price/quote
 // and the account panel (FCTrading returns marketPrice = 0 outside market hours).
+// Per-symbol daily foreign flow, filled as a side effect of computeQuote: the
+// same DailyStockPrice rows carry it, so /api/foreign/history costs no extra
+// SSI call. symbol -> [{ date, buyVal, sellVal, netVal }] ascending, tỷ đồng.
+const foreignSeries = new Map();
+
+// The window was 7 days; widened to 29 (03/10/2026) so the rows also cover
+// ~20 sessions of foreign flow. SSI refuses more than 30 days per call
+// ("max range 30 days", measured 03/10/2026), and 30 days gave 22 sessions.
+const QUOTE_WINDOW_DAYS = 29;
+
+function foreignRow(r, date) {
+  const field = (names) => {
+    const v = pickField(r, names);
+    return v === undefined || v === null || v === "" ? null : num(v) / 1e9;
+  };
+  const buyVal = field(["ForeignBuyValTotal", "ForeignBuyValueTotal"]);
+  const sellVal = field(["ForeignSellValTotal", "ForeignSellValueTotal"]);
+  return {
+    date,
+    buyVal,
+    sellVal,
+    // Missing side = unknown net, not a one-sided flow.
+    netVal: buyVal !== null && sellVal !== null ? buyVal - sellVal : null,
+  };
+}
+
 async function computeQuote(symbol) {
   // DailyStockPrice carries close + reference price for the change% calc.
   const today = new Date();
   const raw = await ssiGet("/api/v2/Market/DailyStockPrice", {
     Symbol: symbol,
-    FromDate: fmtSsiDate(new Date(today.getTime() - 7 * 24 * 3600 * 1000)),
+    FromDate: fmtSsiDate(new Date(today.getTime() - QUOTE_WINDOW_DAYS * 24 * 3600 * 1000)),
     ToDate: fmtSsiDate(today),
     PageIndex: 1,
-    PageSize: 10,
+    PageSize: 50,
     Market: "",
     ascending: false,
   });
@@ -649,6 +675,10 @@ async function computeQuote(symbol) {
   const rows = extractRows(raw)
     .map((r) => ({ row: r, date: normalizeDate(pickField(r, ["TradingDate", "Date"])) }))
     .sort((a, b) => b.date.localeCompare(a.date));
+
+  if (rows.length) {
+    foreignSeries.set(symbol, rows.filter((x) => x.date).map((x) => foreignRow(x.row, x.date)).reverse());
+  }
 
   const d = rows[0]?.row || {};
   const price = toThousandVnd(pickField(d, ["ClosePrice", "MatchPrice", "MatchedPrice", "Close"]));
@@ -723,6 +753,36 @@ app.get("/api/price/quotes", async (req, res) => {
   const times = Object.keys(quotes).map(quoteFetchedAt).filter(Number.isFinite);
   const asOf = times.length ? new Date(Math.min(...times)).toISOString() : null;
   res.json({ quotes, errors, asOf });
+});
+
+// GET /api/foreign/history?symbols=FPT,VCB&sessions=20
+// -> { asOf, items: { FPT: [{ date, buyVal, sellVal, netVal }] }, errors }
+// Rides on fetchQuote's cache: VN30 is warmed every few minutes, so this is
+// normally answered without touching SSI. Fewer than `sessions` rows when the
+// 29-day window holds fewer sessions (holidays) — the page prints the count.
+app.get("/api/foreign/history", async (req, res) => {
+  const symbols = parseSymbols(req.query.symbols, 60);
+  const sessions = Math.round(Number(req.query.sessions) || 20);
+  if (!symbols.length) return res.status(400).json({ error: "missing symbols" });
+  if (sessions < 1 || sessions > 21) return res.status(400).json({ error: "bad_sessions", maxSessions: 21 });
+
+  const items = {};
+  const errors = {};
+  await Promise.all(
+    symbols.map((sym) =>
+      fetchQuote(sym)
+        .then(() => {
+          const series = foreignSeries.get(sym);
+          if (series && series.length) items[sym] = series.slice(-sessions);
+          else errors[sym] = "SSI không trả dữ liệu khối ngoại";
+        })
+        .catch((err) => {
+          errors[sym] = err.message;
+        })
+    )
+  );
+  const lastDates = Object.values(items).map((s) => s[s.length - 1].date);
+  res.json({ asOf: lastDates.length ? lastDates.sort().pop() : null, items, errors });
 });
 
 // GET /api/price/quote?symbol=VNM  (used by dataService.getQuote)
