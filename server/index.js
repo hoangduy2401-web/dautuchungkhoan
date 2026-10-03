@@ -757,8 +757,8 @@ const ITEM_NPATMI = 23000; // Lợi nhuận sau thuế của Công ty mẹ
 const ITEM_LIABILITIES = 13000; // Nợ phải trả
 const ITEM_EQUITY = 14000; // Vốn chủ sở hữu
 
-async function vndirectJson(url) {
-  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 8000);
+async function vndirectJson(url, timeoutMs = 8000) {
+  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, timeoutMs);
   if (!res.ok) throw new Error(`VNDirect ${res.status}`);
   return (await res.json()).data || [];
 }
@@ -1029,6 +1029,129 @@ app.get("/api/financials/quarterly", cacheFor(3600), async (req, res) => {
       () => computeQuarterly(symbol, quarters), { staleMs: 48 * 3600_000 }));
   } catch (err) {
     console.error("[/api/financials/quarterly]", err.message);
+    res.status(502).json({ error: "upstream_failed", detail: err.message });
+  }
+});
+
+// ============================================================
+// Peers — same ICB level-3 industry from VNDirect /v4/industry_classification
+// (level 3 measured 03/10/2026: FPT -> "Phần mềm & Dịch vụ máy tính" 13 codes,
+// VCB -> Banks 44, HPG -> Industrial Metals 41; level 4 left FPT with 5, level
+// 2 lumped steel into 123 "Basic Resources"). Every code sits in exactly one
+// level-3 group (2,088 codes, 0 overlaps).
+//
+// Groups run up to 424 codes and /ratios/latest took 6.9s for 165, so codes
+// go in chunks of 150, in parallel, with a 20s timeout of their own — and the
+// page loads this block on its own, never inside the chart's Promise.all.
+// ============================================================
+const VNDIRECT_ICB = "https://api-finfo.vndirect.com.vn/v4/industry_classification";
+const PEER_CODES = ["MARKETCAP", "PRICE_TO_EARNINGS", "PRICE_TO_BOOK", "ROAE_TR_AVG5Q", "DIVIDEND_YIELD"];
+const PEER_MAX_LIMIT = 15;
+const PEER_CHUNK = 150;
+// A code whose market cap is this much older than the group's newest row is
+// most likely delisted (rows dated 21/07 next to 02/10 measured in group 8770).
+const PEER_STALE_DAYS = 14;
+
+function icbLevel3() {
+  return withCache("vnd:icb3", 24 * 3600_000, async () => {
+    const rows = await vndirectJson(`${VNDIRECT_ICB}?q=industryLevel:3&size=500`, 15000);
+    if (!rows.length) throw new Error("VNDirect: không có bảng phân ngành");
+    return rows.map((r) => ({
+      code: r.industryCode,
+      name: String(r.vietnameseName || r.englishName || "").trim(),
+      codes: String(r.codeList || "").split(",").filter(Boolean),
+    }));
+  });
+}
+
+// Latest ratios for every code in one industry, shared by all its members.
+function industryRatios(industry) {
+  return withCache(`peers:grp:${industry.code}`, 6 * 3600_000, async () => {
+    const chunks = [];
+    for (let i = 0; i < industry.codes.length; i += PEER_CHUNK) chunks.push(industry.codes.slice(i, i + PEER_CHUNK));
+    const parts = await Promise.all(chunks.map((codes) =>
+      vndirectJson(
+        `${VNDIRECT_RATIOS}?filter=ratioCode:${PEER_CODES.join(",")}&where=code:${codes.join(",")}` +
+          `&order=reportDate&fields=code,ratioCode,value,reportDate&size=${codes.length * PEER_CODES.length + 50}`,
+        20000
+      )));
+    const byCode = {};
+    for (const r of parts.flat()) {
+      const v = Number(r.value);
+      if (r.value === null || !Number.isFinite(v)) continue;
+      (byCode[r.code] ||= {})[r.ratioCode] = { v, date: r.reportDate };
+    }
+    return byCode;
+  }, { staleMs: 24 * 3600_000 });
+}
+
+function medianOf(vals) {
+  const xs = vals.filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const m = xs.length >> 1;
+  return xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
+}
+
+async function computePeers(symbol, limit) {
+  const industries = await icbLevel3();
+  const industry = industries.find((g) => g.codes.includes(symbol));
+  if (!industry) return { source: "VNDirect", symbol, asOf: null, industry: null, items: [], median: null };
+
+  const byCode = await industryRatios(industry);
+  const newest = Object.values(byCode).map((r) => r.MARKETCAP?.date).filter(Boolean).sort().pop() || null;
+  const cutoff = newest
+    ? new Date(Date.parse(newest) - PEER_STALE_DAYS * 86400_000).toISOString().slice(0, 10)
+    : null;
+  const row = (code) => {
+    const r = byCode[code] || {};
+    const val = (k) => (r[k] ? r[k].v : null);
+    const pos = (x) => (x !== null && x > 0 ? x : null); // P/E, P/B <= 0 are meaningless multiples
+    return {
+      symbol: code,
+      self: code === symbol,
+      marketCap: pos(val("MARKETCAP")) !== null ? val("MARKETCAP") / 1e12 : null, // -> nghìn tỷ
+      pe: pos(val("PRICE_TO_EARNINGS")),
+      pb: pos(val("PRICE_TO_BOOK")),
+      roe: val("ROAE_TR_AVG5Q") !== null ? val("ROAE_TR_AVG5Q") * 100 : null,
+      dividendYield: val("DIVIDEND_YIELD") !== null ? val("DIVIDEND_YIELD") * 100 : null,
+    };
+  };
+  const ranked = industry.codes
+    .filter((c) => byCode[c]?.MARKETCAP && byCode[c].MARKETCAP.v > 0 && (!cutoff || byCode[c].MARKETCAP.date >= cutoff))
+    .sort((a, b) => byCode[b].MARKETCAP.v - byCode[a].MARKETCAP.v);
+  const top = ranked.slice(0, limit);
+  // The symbol being viewed is always shown, even outside the top N or
+  // without a market cap of its own.
+  if (!top.includes(symbol)) top.push(symbol);
+  const items = top.map(row);
+  return {
+    source: "VNDirect",
+    symbol,
+    asOf: newest,
+    industry: { code: industry.code, name: industry.name, level: 3, total: industry.codes.length },
+    items,
+    median: {
+      pe: medianOf(items.map((i) => i.pe)),
+      pb: medianOf(items.map((i) => i.pb)),
+      roe: medianOf(items.map((i) => i.roe)),
+      dividendYield: medianOf(items.map((i) => i.dividendYield)),
+    },
+  };
+}
+
+// GET /api/peers?symbol=FPT&limit=8
+app.get("/api/peers", cacheFor(3600), async (req, res) => {
+  const symbol = String(req.query.symbol || "").trim().toUpperCase();
+  const limit = Math.round(Number(req.query.limit) || 8);
+  if (!/^[A-Z0-9]{1,10}$/.test(symbol)) return res.status(400).json({ error: "bad_symbol" });
+  if (limit < 1 || limit > PEER_MAX_LIMIT) {
+    return res.status(400).json({ error: "bad_limit", maxLimit: PEER_MAX_LIMIT });
+  }
+  try {
+    res.json(await withCache(`peers:${symbol}:${limit}`, 6 * 3600_000, () => computePeers(symbol, limit),
+      { staleMs: 24 * 3600_000 }));
+  } catch (err) {
+    console.error("[/api/peers]", err.message);
     res.status(502).json({ error: "upstream_failed", detail: err.message });
   }
 });
