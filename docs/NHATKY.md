@@ -5,6 +5,73 @@
 > — commit message của dự án viết rất chi tiết.
 > **`/handoff` ghi phiên mới vào `CLAUDE.md`, và đẩy phiên cũ xuống file này.**
 
+**26/09/2026 (phiên 15) — rà soát toàn hệ thống: 4 giai đoạn tốc độ + độ chính xác + animation.**
+Bump `?v=20260817c` → **`?v=20260926j`** (10 lần, 4 lần cuối qua `scripts/bump-v.sh`).
+**ĐỤNG `server/`** 5 lần — Render deploy lại, đã kiểm live. 16 commit code
+`0a64999`…`6dcbf85` (+ 3 commit handoff).
+
+- **GĐ1 (CLS + gọi trùng):** thẻ giữ chỗ cho dải chỉ số + panel Tổng quan vẽ
+  khung sẵn → CLS 0,387 → 0,010 (desktop) / 0,007 (375px), đo với backend giả
+  lập chậm 4s. `ensureOvHistory` dùng chung promise → `index-history` 2 → 1 lần.
+- **GĐ2 (tốc độ):** endpoint `/quotes`, `/closes`, `/marketcaps` (mục 5);
+  request lúc tải trang Chứng khoán **43 → 9**; dừng làm mới khi tab ẩn, 10'
+  ngoài giờ; nhãn "Giá SSI đọc lúc"; treemap vốn hoá (nợ từ tháng 8, xong);
+  preconnect; trang tổng hỏi giá danh mục tay theo lô.
+- **Chen ngang theo yêu cầu user:** lỗi coin trùng ngày (mục 7 — cũng là căn
+  nguyên lỗi "lần vẽ đầu" treo từ 07/08); **ô nhập số tự chấm nghìn** (`numInput.js`).
+- **GĐ3 (độ chính xác):** tin VNDirect theo mã (0 → 49 tin); số liệu lần trước
+  khi máy chủ ngủ; ngày lễ theo `tradingDate`; ngưỡng chênh lệch vàng riêng
+  từng loại (mục 7); `QUYHOACH.md` sửa 7 → 9 bảng.
+- **GĐ4 (dọn):** SRI cho 2 thư viện CDN; OG + description; `scripts/bump-v.sh`;
+  xoá `server/temp`, `style.css.pre-glass.bak`, worktree `amazing-kalam`.
+- **Animation:** `motion.js` + khối MOTION cuối `base.css` (mục 4).
+- File: `server/index.js` + `package.json` (thêm `compression`),
+  `core/{dataService,networth,chartModule,nav,theme,motion,numInput}.js`,
+  cả 6 `pages/*.js`, `base.css`, `chung-khoan.css`, 6 HTML, `.gitignore`,
+  `docs/QUYHOACH.md`, `scripts/bump-v.sh`, `assets/og-image.png` + favicon.
+- Commit `d83d6eb` (bố cục 3 cột, 23/08) có từ trước phiên này, chưa được ghi
+  handoff — nó đã nằm trong bản live.
+- **Phần tiếp sau handoff đầu tiên (cùng ngày, `7e0238c` + `160b006`):**
+  - **Bỏ trần 5 mã watchlist** theo yêu cầu user. Watchlist + Tin tức hiện 5
+    dòng, nút "Xem thêm N mã/tin" mở rộng trong khung cuộn 460px (giữ bố cục
+    cột). `LIST_PREVIEW = 5` trong `chung-khoan.js` phải khớp `:nth-child(n + 6)`
+    trong `chung-khoan.css`. `/api/news` nhận 20 mã (trước 10); `/closes` chia lô 20.
+  - 5 tin đầu ưu tiên mỗi mã 1 tin, phần mở rộng xếp mới nhất bên dưới — 5 tin
+    đầu không đổi thứ tự khi bấm mở.
+  - 3 animation còn nợ: kéo thả FLIP, vạch nền trượt dưới tab, hàng thu lại khi xoá.
+  - **Bẫy đã gặp khi thử:** bấm "Xem thêm" rồi xoá ngay → animation mở rộng
+    (`.list-scroll.just-expanded > :nth-child`, độ ưu tiên cao hơn) đè
+    `.row-leave`, hàng biến mất không hiệu ứng (vẫn xoá đúng nhờ timeout 320ms
+    trong `Motion.leave`). Sửa: `.row-leave` dùng `!important`.
+  - Kéo thả khi thu gọn: chỉ hàng ĐANG HIỆN là đích thả, thả dưới hàng cuối thì
+    chèn trước hàng ẩn đầu tiên — nếu `appendChild` như cũ, hàng rơi vào vùng ẩn.
+    Thử bằng PointerEvent giả lập: `left_click_drag` của trình duyệt nhúng KHÔNG
+    kích hoạt được kéo thả này (không có pointermove trung gian).
+  - **Rà bản live trên điện thoại (375px) + sửa:** bảng Vàng/Ngoại tệ/Tiết
+    kiệm giấu đúng cột quan trọng (Bán, Chênh lệch, kỳ hạn đang sắp) → cột đầu
+    `position: sticky` + gọn lề (base.css, ≤640px), Ngoại tệ ẩn "Mua tiền mặt"
+    trên điện thoại, Tiết kiệm đưa kỳ hạn đang sắp lên sau tên NH (chỉ khi
+    màn hẹp). **Ô bảng muốn dính cột phải là ô bảng thật** — `td` mang
+    `display:flex` thì sticky hỏng (đã tách flex vào span `.sv-bank-in`).
+  - `.range-tabs` chuyển từ `chung-khoan.css` sang **`base.css`**: trang Ngoại tệ
+    và Coin trước giờ hiện nút mặc định trình duyệt (viền nổi, Arial) vì không
+    nạp `chung-khoan.css`. Thành phần dùng ở >1 trang phải nằm ở `base.css`.
+  - Dải mờ mép cuộn ngang (`.fade-l/.fade-r`, motion.js) cho thanh điều hướng,
+    tab thị trường, bảng; thanh điều hướng tự cuộn tới trang hiện tại MỘT lần.
+  - Trang tổng: cả 5 kênh không có dòng nào → "—" + lý do, không "0 ₫".
+  - Tiết kiệm: nút ✕ ẩn từng cảnh báo đáo hạn + "Ẩn tất cả". Ẩn theo **mức**
+    (`idSổ:d30|d15|d7|past`, setting `svAlertDismissed` qua Store) — tới mốc kế
+    tiếp cảnh báo hiện lại. Đừng đổi thành ẩn vĩnh viễn.
+  - **Biểu đồ lịch sử giá vàng SJC** (`aab04ac` server + `6dcbf85` trang):
+    CafeF chính / PNJ dự phòng (≤31 ngày) / đường thế giới = XAU FXRatesAPI.
+    Nguồn, đối chiếu, cạm bẫy: **`docs/VANG.md` mục 4** — đọc trước khi động
+    vào. Biểu đồ là instance Lightweight Charts riêng trong `vang.js` (3 đường
+    cùng trục), KHÔNG qua ChartModule. `.fx-chart-*` chuyển sang `base.css`.
+    Giá đỉnh ~190 triệu/lượng tháng 1–3/2026 là THẬT (PNJ xác nhận), đừng lọc.
+  - **Bẫy công cụ:** chụp màn hình ở chế độ giả lập điện thoại SAU KHI CUỘN ra
+    ảnh trống nửa trên (DOM vẫn đúng — `elementFromPoint` xác nhận). Cách chụp:
+    giữ `scrollY=0`, dịch `document.body.style.transform = translateY(-Npx)`.
+
 **17/08/2026 (phiên 14) — chart điều chỉnh cổ tức + tab lịch cổ tức.**
 Bump `?v=20260816m` → **`?v=20260817a`** (1 lần, 77 chỗ). **ĐỤNG `server/`** —
 Render deploy lại. Commit `a254ddf`.

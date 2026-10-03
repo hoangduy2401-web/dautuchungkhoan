@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20261002c`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20261003d`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -327,6 +327,37 @@ GET /api/crypto/history?id=bitcoin&days=90
 
 GET /api/crypto/search?q=sol
 → [{ id, symbol, name, rank }]   CoinGecko, lùi về bảng nội bộ ~40 coin.
+```
+
+```
+Phân tích cổ phiếu (03/10, phiên 17) — VNDirect finfo, không cần key:
+
+GET /api/valuation/history?symbol=FPT&days=730     (days ≤ 730)
+→ { source:"VNDirect", symbol, asOf, items:[{ date, pe, pb }] }   tăng dần
+   pe/pb = null ngày VNDirect không có (công ty lỗ / vốn chủ âm — VNDirect BỎ
+   dòng chứ không trả số âm). Không có dòng nào → 200 items:[], asOf:null.
+
+GET /api/financials/quarterly?symbol=FPT&quarters=12   (≤ 20)
+→ { source:"VNDirect", symbol, unit:"tỷ đồng",
+    revenueLabel:"Doanh thu thuần"|"Tổng thu nhập hoạt động",
+    items:[{ period:"Q2/2026", fiscalDate, revenue, grossProfit, netProfit,
+             operatingCashFlow }] }   tăng dần
+   Ngân hàng: revenue = tổng thu nhập HĐ (421701), grossProfit = null.
+   netProfit = LNST cổ đông công ty mẹ. CFO là số TỪNG QUÝ, không luỹ kế.
+   Trang xin 12 quý để tính YoY cho 8 quý hiện.
+
+GET /api/peers?symbol=FPT&limit=8                    (≤ 15)
+→ { source:"VNDirect", symbol, asOf,
+    industry:{ code, name, level:3, total } | null,
+    items:[{ symbol, self, marketCap, pe, pb, roe, dividendYield }],
+    median:{ pe, pb, roe, dividendYield } }
+   Top `limit` theo vốn hoá trong ngành ICB cấp 3; mã đang xem LUÔN có (self).
+   median = trung vị của CHÍNH các dòng items. marketCap nghìn tỷ, roe/div %.
+
+GET /api/foreign/history?symbols=A,B&sessions=20    (≤ 60 mã, sessions ≤ 21)
+→ { asOf, items:{ A:[{ date, buyVal, sellVal, netVal }] }, errors }  tỷ đồng
+   SSI DailyStockPrice, DÙNG CHUNG lần gọi của quote (0 call SSI thêm).
+   Ít hơn 20 phiên khi cửa sổ 29 ngày gặp nghỉ lễ — trang ghi số phiên thật.
 ```
 
 ```
@@ -936,6 +967,71 @@ coin (cache chung khoá `crypto:okx:tickers`); lịch sử `history-candles` t�
 nến/lần → 365 ngày = 4 call. `image`/`marketCap` null như đường Binance.
 **`/api/debug/crypto-probe` gọi thẳng Binance, bỏ qua cooldown** — đừng spam nó.
 
+### SSI MCP: backend KHÔNG giữ được phiên — refresh token xoay vòng chết ngay (03/10/2026)
+
+User muốn tích hợp SSI MCP (`https://mcp.ssi.com.vn/mcp`, ra 02/10, 54 tool dữ
+liệu công khai, miễn phí, OAuth bằng tài khoản SSI) vào website.
+
+**Đo được (script `scripts/ssi-mcp-spike.mjs`, user đăng nhập 3 lần):**
+- Backend gọi tool TRỰC TIẾP được (JSON-RPC, không cần LLM); từ Render gọi tới
+  được (401 y như local, không bị chặn IP); tool 90–330ms.
+- Access token 1h. Refresh token **xoay vòng** — và cái MỚI bị `invalid_grant`
+  ở lần dùng đầu: sau 10 giây, 2 phút, 8 phút đều hỏng (3/3 lần đo). Mỗi lần
+  đăng nhập sống tối đa ~2h → server không tự chạy 24/7 được. Kết luận: lỗi
+  phía SSI (phát token không dùng được), không phải chủ ý — **chưa xác nhận**,
+  user tự gửi báo lỗi (nội dung soạn sẵn trong phiên 17).
+- Bẫy dữ liệu nếu dùng lại: input ngày `DD/MM/YYYY` nhưng output
+  `trading_date` là **`MM/DD/YYYY`**; `pageSize` chỉ nhận 10/20/50/100/1000
+  (ratio history tối đa 200, trang quá cuối trả `data:{}`); BCTC trả các kỳ lộn
+  xộn + `length_report=6` (bán niên, tài liệu không ghi);
+  `marketdata_get_investor_type_trade_by_issues` luôn trả `data:{}` (3 cách gọi).
+- Tỷ lệ điều chỉnh của SSI khớp công thức của mình: mã SSI 0,7993 (ghi ngày
+  14/08 = phiên cuối TRƯỚC ex-date, mình dùng ex-date 17/08).
+
+**Đã chuyển sang VNDirect** cho P/E–P/B, BCTC, cùng ngành (khớp SSI MCP: P/E
+FPT 11,71 vs 11,66; doanh thu Q1–Q2/2026 trùng). Code backend MCP (OAuth connect/
+callback + bảng `server_tokens`) cất ở **nhánh local `spike/ssi-mcp-backend`**,
+chưa push. **Đừng dựng lại trước khi đo `soak` thấy refresh lần 2 chạy.**
+
+**DNSE MCP** (`https://mcp.dnse.com.vn/mcp`) cùng mô hình OAuth, CHƯA đo (cần tài
+khoản Entrade X). Khác SSI: chia sẻ cả dữ liệu TÀI KHOẢN, có tool GHI (chiến
+thuật), có "tư vấn đầu tư" — trái quyết định chatbot "chỉ dữ liệu thị trường".
+Giá trị riêng duy nhất: `market_get_stock_influences` (mã dẫn dắt chỉ số).
+
+### FCData chỉ có 9 API — không có fundamentals (rà soát 03/10/2026)
+
+`AccessToken, Securities, SecuritiesDetails, IndexComponents, IndexList,
+DailyOhlc, IntradayOhlc, DailyIndex, DailyStockPrice` + streaming giá/room. Không
+BCTC, P/E, ngành ICB, cổ đông. Đáng dùng: `DailyStockPrice` có khối ngoại theo
+ngày; `IndexComponents` của chỉ số ngành HOSE (`VNIT, VNFIN, VNREAL…`, KHÔNG có
+cho HNX/UPCoM). **`DailyStockPrice` chặn > 30 ngày/lần** — thông báo nguyên văn
+"max range 30 days" (90 ngày → 0 dòng). Gọi KHÔNG truyền Symbol + `market=HOSE`
+trả cả sàn trong 1 ngày (2.631 dòng, gồm CW/ETF).
+
+### VNDirect finfo — số đo cho 3 tính năng phân tích (03/10/2026)
+
+- `/v4/ratios?q=code:X~ratioCode:PRICE_TO_EARNINGS,PRICE_TO_BOOK~reportDate:gte:…`
+  — MỘT lần gọi cả 2 mã, 2 năm = 497+497 dòng, 0,4–0,9s, lịch sử từ 2017.
+  Mã lỗ: VNDirect **bỏ dòng** (HNG 0 dòng P/E; HVN 300/497 dòng P/B).
+- `/v4/financial_statements` quý: item `21001` DT thuần · `421701` ngân hàng ·
+  `23100` LN gộp · `23000` LNST mẹ · `32000` CFO (**từng quý**, FPT 2025:
+  −2.507/4.190/4.344/4.108). Không lọc `modelType` vẫn 0 dòng trùng. **Đừng
+  dùng `groupByFiscalDate()` cho tính năng mới** — nó `Number(null)` → 0.
+- `/v4/industry_classification?q=industryLevel:3` — 42 ngành, 2.088 mã, mỗi mã
+  đúng 1 ngành. Cấp 3 chọn vì: cấp 4 FPT chỉ 5 mã, cấp 2 gộp thép vào 123 mã
+  "Tài nguyên". Ngành lớn nhất 424 mã → `/ratios/latest` 165 mã mất 6,9s, 424 mã
+  ~13–14s (chia lô 150 song song, timeout 20s). **Khối "Cùng ngành" tải riêng,
+  KHÔNG nằm trong `Promise.all` của biểu đồ** — đừng gộp lại.
+  Mã có MARKETCAP cũ hơn 14 ngày so với mới nhất của ngành bị loại (thấy dòng
+  21/07 cạnh 02/10 ở ngành 8770 — mã huỷ niêm yết).
+
+### CSS: `.x > span` nuốt luôn thanh bar cũng là span (03/10/2026)
+
+Bảng 8 quý: thanh ngang không hiện, đo `width` 0. Nguyên nhân: `.fin-num > span
+{ position: relative }` (0,1,1) đè `.fin-bar { position: absolute }` (0,1,0) vì
+thanh cũng là `<span>`. Sửa: `.fin-num > .fin-bar`. Kèm: thanh giới hạn 60% ô để
+không đè số (đo khe 21–61px), ẩn hẳn ≤640px (ô hẹp vẫn đè).
+
 ### Skeleton: bẫy khi làm (02/10/2026)
 
 - **Thử local mà không bump `?v=`** → trình duyệt dùng JS cũ trong cache dù file
@@ -970,9 +1066,9 @@ trang tổng** — báo "ra trang Chứng khoán bấm Đồng bộ", để kên
 ## 9. Trạng thái hiện tại
 
 **Chạy dữ liệu thật end-to-end tại https://dashboardstock.io.vn** — `USE_MOCK: false`.
-Cache busting `?v=20261002c`. Nhánh `main` đã push (commit `ee86607`), backend
-deploy lại 02/10 (nguồn coin OKX — phiên song song). Bản live đã kiểm 02/10:
-`?v=20261002c` lên, trang Vàng lưu cache, 0 lỗi console.
+Cache busting `?v=20261003d`. Nhánh `main` sạch, đã push (commit `45d37a5`),
+backend deploy lại 03/10 (4 endpoint mới, mục 5). Bản live đã kiểm 03/10: trang
+Chứng khoán + Vàng 0 request lỗi, 3 khối phân tích + tab khối ngoại 20 phiên chạy.
 
 **Dữ liệu đọc từ Supabase** (`STORE_ENABLED: true` từ 15/08). Mỗi thiết bị đăng
 nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm đường lui — chưa xoá.
@@ -1029,9 +1125,37 @@ nhập một lần rồi ở lại lâu. localStorage vẫn giữ nguyên làm �
 | **Animation** | `motion.js` | nháy giá, shimmer, số chạy, hàng trượt vào, toast… (mục 4) |
 | **Skeleton loading** | `motion.js` + `.sk` (base.css) | thay mọi chữ "Đang tải…/Đang chờ máy chủ…"; bản chép tĩnh trong HTML; lỗi → báo lỗi, không shimmer mãi (mục 4) |
 | **Số liệu lần trước 4 trang tài sản** | localStorage `vn_dashboard_cache_*_v1` | Vàng/Ngoại tệ/Coin/Tiết kiệm vẽ bảng cũ ngay, mờ + nhãn giờ lưu; máy chủ lỗi thì giữ số cũ (mục 4) |
+| **Định giá so với 2 năm** | `/api/valuation/history` (VNDirect) | dưới 10 ô chỉ số: P/E, P/B hôm nay, thanh min–max + vạch trung vị, phân vị % trong lịch sử CỦA CHÍNH MÃ; mã lỗ → "VNDirect không có P/E" |
+| **Kết quả kinh doanh 8 quý** | `/api/financials/quarterly` (VNDirect) | bảng quý mới trên cùng: DT/LNST mẹ có thanh, YoY, biên gộp, CFO; YoY trên nền lỗ = "—"; ngân hàng = "Thu nhập HĐ" |
+| **Cùng ngành** | `/api/peers` (VNDirect ICB cấp 3) | top 8 vốn hoá + mã đang xem tô nổi + dòng trung vị; tải riêng (ngành 424 mã ~13s lần đầu) |
+| **Khối ngoại 20 phiên** | `/api/foreign/history` (SSI) | nút "Phiên gần nhất / 20 phiên": VN30 cộng dồn, cột nhỏ từng phiên, chuỗi mua/bán liên tiếp |
+| **Nút ẩn số tiền** | `assets/img/privacy-{hidden,shown}.png` | icon user gửi: khoá đóng = đang ẩn, khoá mở + tiền = đang hiện; "đang ẩn" = viền cam (nền cam nuốt icon) |
 | **Ảnh xem trước link** | `assets/og-image.png` | OG + description cả 6 trang; ảnh không có con số nào |
 
 ### Nhật ký theo phiên
+
+**03/10/2026 (phiên 17) — giá coin OKX, thử SSI MCP (thất bại có số đo), 3 khối phân tích cổ phiếu + khối ngoại 20 phiên.**
+Bump `?v=20261002c` → **`?v=20261003d`** (4 lần, qua `scripts/bump-v.sh`).
+**ĐỤNG `server/`** nhiều lần — Render deploy lại, đã kiểm live. 12 commit
+`a7087f6`…`45d37a5` (phần coin `f5b81a5`/`85d0c49` đã ghi ở phiên 16).
+
+- **SSI MCP:** probe từ Render, script OAuth local, đo token 3 lần → backend
+  không giữ được phiên (mục 7). Rà soát FCData + DNSE MCP (mục 7). User chốt:
+  làm bằng VNDirect.
+- **Định giá so với 2 năm** (`d767603` + `070fdaa`), **Kết quả kinh doanh 8
+  quý** (`3dc43bf` + `2bd3dad`), **Cùng ngành** (`8953d18` + `442a8c0`) — 3 khối
+  dưới 10 ô chỉ số, ẩn khi xem chỉ số. Mỗi khối: format user duyệt trước, kiểm
+  FPT/VCB/SSI/HUT/HNG/ROS/ZZZ, desktop + 375px + tối. Số đối chiếu tay: VNM P/E
+  10,92 phân vị 3%; FPT Q2/2026 DT 13.789 (−17%), LNST 2.568 (+14%), biên 31,0%.
+- **Khối ngoại 20 phiên** (`65ffe8b` + `45d37a5`): cửa sổ `DailyStockPrice` của
+  quote 7 → 29 ngày, cùng hàng đó nuôi `foreignSeries` — 0 call SSI thêm; live
+  0,26s cho 10 mã. Quote vẫn đúng như cũ (đã kiểm FPT 62,1 / −2,97 tỷ).
+- **Icon ẩn số tiền + căn thanh điều hướng** (`5b1b8b7`): `.nav-links
+  { margin-left: -12px }` = trừ đúng đệm của link → chữ thẳng tiêu đề (đo x=20
+  desktop, 14 điện thoại).
+- File: `server/index.js`, `core/{config,dataService,nav}.js`, `pages/chung-khoan.js`,
+  `base.css`, `chung-khoan.css`, 6 HTML, `assets/img/` (mới), `.gitignore`,
+  `scripts/ssi-mcp-spike.mjs` (mới).
 
 **02/10/2026 (phiên 16) — skeleton loading + số liệu lần trước cho 4 trang tài sản; chốt hướng chatbot.**
 Bump `?v=20260926j` → **`?v=20261002c`** (3 lần, qua `scripts/bump-v.sh`).
@@ -1057,82 +1181,31 @@ Bump `?v=20260926j` → **`?v=20261002c`** (3 lần, qua `scripts/bump-v.sh`).
 - File: `base.css`, `core/{motion,dataService,theme}.js`, `pages/{chung-khoan,
   vang,ngoai-te,coin,tiet-kiem,tong}.js`, 6 HTML, `docs/YTUONG.md`.
 
-**26/09/2026 (phiên 15) — rà soát toàn hệ thống: 4 giai đoạn tốc độ + độ chính xác + animation.**
-Bump `?v=20260817c` → **`?v=20260926j`** (10 lần, 4 lần cuối qua `scripts/bump-v.sh`).
-**ĐỤNG `server/`** 5 lần — Render deploy lại, đã kiểm live. 16 commit code
-`0a64999`…`6dcbf85` (+ 3 commit handoff).
-
-- **GĐ1 (CLS + gọi trùng):** thẻ giữ chỗ cho dải chỉ số + panel Tổng quan vẽ
-  khung sẵn → CLS 0,387 → 0,010 (desktop) / 0,007 (375px), đo với backend giả
-  lập chậm 4s. `ensureOvHistory` dùng chung promise → `index-history` 2 → 1 lần.
-- **GĐ2 (tốc độ):** endpoint `/quotes`, `/closes`, `/marketcaps` (mục 5);
-  request lúc tải trang Chứng khoán **43 → 9**; dừng làm mới khi tab ẩn, 10'
-  ngoài giờ; nhãn "Giá SSI đọc lúc"; treemap vốn hoá (nợ từ tháng 8, xong);
-  preconnect; trang tổng hỏi giá danh mục tay theo lô.
-- **Chen ngang theo yêu cầu user:** lỗi coin trùng ngày (mục 7 — cũng là căn
-  nguyên lỗi "lần vẽ đầu" treo từ 07/08); **ô nhập số tự chấm nghìn** (`numInput.js`).
-- **GĐ3 (độ chính xác):** tin VNDirect theo mã (0 → 49 tin); số liệu lần trước
-  khi máy chủ ngủ; ngày lễ theo `tradingDate`; ngưỡng chênh lệch vàng riêng
-  từng loại (mục 7); `QUYHOACH.md` sửa 7 → 9 bảng.
-- **GĐ4 (dọn):** SRI cho 2 thư viện CDN; OG + description; `scripts/bump-v.sh`;
-  xoá `server/temp`, `style.css.pre-glass.bak`, worktree `amazing-kalam`.
-- **Animation:** `motion.js` + khối MOTION cuối `base.css` (mục 4).
-- File: `server/index.js` + `package.json` (thêm `compression`),
-  `core/{dataService,networth,chartModule,nav,theme,motion,numInput}.js`,
-  cả 6 `pages/*.js`, `base.css`, `chung-khoan.css`, 6 HTML, `.gitignore`,
-  `docs/QUYHOACH.md`, `scripts/bump-v.sh`, `assets/og-image.png` + favicon.
-- Commit `d83d6eb` (bố cục 3 cột, 23/08) có từ trước phiên này, chưa được ghi
-  handoff — nó đã nằm trong bản live.
-- **Phần tiếp sau handoff đầu tiên (cùng ngày, `7e0238c` + `160b006`):**
-  - **Bỏ trần 5 mã watchlist** theo yêu cầu user. Watchlist + Tin tức hiện 5
-    dòng, nút "Xem thêm N mã/tin" mở rộng trong khung cuộn 460px (giữ bố cục
-    cột). `LIST_PREVIEW = 5` trong `chung-khoan.js` phải khớp `:nth-child(n + 6)`
-    trong `chung-khoan.css`. `/api/news` nhận 20 mã (trước 10); `/closes` chia lô 20.
-  - 5 tin đầu ưu tiên mỗi mã 1 tin, phần mở rộng xếp mới nhất bên dưới — 5 tin
-    đầu không đổi thứ tự khi bấm mở.
-  - 3 animation còn nợ: kéo thả FLIP, vạch nền trượt dưới tab, hàng thu lại khi xoá.
-  - **Bẫy đã gặp khi thử:** bấm "Xem thêm" rồi xoá ngay → animation mở rộng
-    (`.list-scroll.just-expanded > :nth-child`, độ ưu tiên cao hơn) đè
-    `.row-leave`, hàng biến mất không hiệu ứng (vẫn xoá đúng nhờ timeout 320ms
-    trong `Motion.leave`). Sửa: `.row-leave` dùng `!important`.
-  - Kéo thả khi thu gọn: chỉ hàng ĐANG HIỆN là đích thả, thả dưới hàng cuối thì
-    chèn trước hàng ẩn đầu tiên — nếu `appendChild` như cũ, hàng rơi vào vùng ẩn.
-    Thử bằng PointerEvent giả lập: `left_click_drag` của trình duyệt nhúng KHÔNG
-    kích hoạt được kéo thả này (không có pointermove trung gian).
-  - **Rà bản live trên điện thoại (375px) + sửa:** bảng Vàng/Ngoại tệ/Tiết
-    kiệm giấu đúng cột quan trọng (Bán, Chênh lệch, kỳ hạn đang sắp) → cột đầu
-    `position: sticky` + gọn lề (base.css, ≤640px), Ngoại tệ ẩn "Mua tiền mặt"
-    trên điện thoại, Tiết kiệm đưa kỳ hạn đang sắp lên sau tên NH (chỉ khi
-    màn hẹp). **Ô bảng muốn dính cột phải là ô bảng thật** — `td` mang
-    `display:flex` thì sticky hỏng (đã tách flex vào span `.sv-bank-in`).
-  - `.range-tabs` chuyển từ `chung-khoan.css` sang **`base.css`**: trang Ngoại tệ
-    và Coin trước giờ hiện nút mặc định trình duyệt (viền nổi, Arial) vì không
-    nạp `chung-khoan.css`. Thành phần dùng ở >1 trang phải nằm ở `base.css`.
-  - Dải mờ mép cuộn ngang (`.fade-l/.fade-r`, motion.js) cho thanh điều hướng,
-    tab thị trường, bảng; thanh điều hướng tự cuộn tới trang hiện tại MỘT lần.
-  - Trang tổng: cả 5 kênh không có dòng nào → "—" + lý do, không "0 ₫".
-  - Tiết kiệm: nút ✕ ẩn từng cảnh báo đáo hạn + "Ẩn tất cả". Ẩn theo **mức**
-    (`idSổ:d30|d15|d7|past`, setting `svAlertDismissed` qua Store) — tới mốc kế
-    tiếp cảnh báo hiện lại. Đừng đổi thành ẩn vĩnh viễn.
-  - **Biểu đồ lịch sử giá vàng SJC** (`aab04ac` server + `6dcbf85` trang):
-    CafeF chính / PNJ dự phòng (≤31 ngày) / đường thế giới = XAU FXRatesAPI.
-    Nguồn, đối chiếu, cạm bẫy: **`docs/VANG.md` mục 4** — đọc trước khi động
-    vào. Biểu đồ là instance Lightweight Charts riêng trong `vang.js` (3 đường
-    cùng trục), KHÔNG qua ChartModule. `.fx-chart-*` chuyển sang `base.css`.
-    Giá đỉnh ~190 triệu/lượng tháng 1–3/2026 là THẬT (PNJ xác nhận), đừng lọc.
-  - **Bẫy công cụ:** chụp màn hình ở chế độ giả lập điện thoại SAU KHI CUỘN ra
-    ảnh trống nửa trên (DOM vẫn đúng — `elementFromPoint` xác nhận). Cách chụp:
-    giữ `scrollY=0`, dịch `document.body.style.transform = translateY(-Npx)`.
-
-Các phiên trước đó (kể cả phiên 14): **`docs/NHATKY.md`**.
+Các phiên trước đó (kể cả phiên 15): **`docs/NHATKY.md`**.
 
 ## 10. Việc còn treo
 
 ### BẮT ĐẦU TỪ ĐÂU (phiên sau đọc mục này trước)
 
-Cây làm việc sạch, đã push, bản live đã kiểm (02/10). Skeleton + số liệu lần
-trước xong (phiên 16). Quy hoạch chính thức còn **GĐ 7** (đang hoãn) và việc mới
+Cây làm việc sạch, đã push, bản live đã kiểm (03/10). Phiên 17 xong 3 khối phân
+tích + khối ngoại 20 phiên. Quy hoạch chính thức còn **GĐ 7** (đang hoãn) và
 **chatbot AI** (dưới).
+
+#### SSI MCP — chờ SSI trả lời (phiên 17)
+
+**⚠ USER TỰ LÀM:** gửi báo lỗi cho hỗ trợ SSI MCP (nội dung soạn sẵn ở phiên 17:
+refresh token sau xoay vòng → `invalid_grant` lần dùng kế tiếp, đo 10s/2'/8').
+Khi SSI trả lời "đã sửa": chạy `node scripts/ssi-mcp-spike.mjs login` rồi
+`… soak 1,2,4,8,15,30,60` — qua hết mới lấy lại code ở nhánh
+`spike/ssi-mcp-backend` (nhánh LOCAL, chưa push — mất máy là mất; push nếu muốn
+giữ). Token local nằm ở `server/.ssi-mcp-token.json` (gitignore). Ở SSI đã có vài
+OAuth client tên "Bang Dien dashboard (spike/probe)" do phiên 17 đăng ký — vô hại.
+
+#### Nợ nhỏ từ phiên 17
+- Bảng "Phiên gần nhất" của tab khối ngoại vẫn in số kiểu `-961.8 tỷ` (toFixed,
+  dấu chấm) trong khi chế độ 20 phiên in `-529,9 tỷ` — nên thống nhất `fmt()`.
+- Dòng chú thích bảng 8 quý trên điện thoại vẫn nhắc "CFO" dù cột đã ẩn.
+- Bấm mã trong bảng "Cùng ngành" chưa mở mã đó (ý tưởng, user chưa yêu cầu).
 
 #### Chatbot AI — hướng đã chốt, chưa code (phiên 16)
 
@@ -1142,6 +1215,9 @@ Sonnet phân tích, trần chi tiêu/ngày trên server, `/api/chat` theo khuôn
 `/api/account/*`, `chat.js` nạp lười khi bấm nút. Đổi hợp đồng dữ liệu (mục 2) —
 chốt chi tiết endpoint với user khi bắt tay. Trước khi code: đọc skill `claude-api`
 lấy model ID + giá hiện hành, đừng viết từ trí nhớ.
+Công cụ cho chatbot: dùng CHÍNH các endpoint của dashboard (giá, P/E–P/B, BCTC,
+cùng ngành, khối ngoại — mục 5), KHÔNG dựa vào SSI MCP cho tới khi lỗi token
+được sửa (mục 7).
 
 **⚠ USER TỰ LÀM TRƯỚC:**
 1. Vào console.anthropic.com → tạo API key (nên đặt giới hạn chi tiêu tháng ở
