@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20261003d`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20261004e`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -1044,6 +1044,23 @@ không đè số (đo khe 21–61px), ẩn hẳn ≤640px (ô hẹp vẫn đè).
   ở span con bên trong thanh.
 - `.sk` width theo **%** trong hộp co theo nội dung (flex item, `.ov-pct`, giá
   watchlist) → rộng 0, không thấy gì. Ở đó dùng px (`skBar("44px")`).
+
+### Căn lề toàn site — hệ thống và 2 bẫy (04/10/2026)
+
+**Hệ thống (đo bằng script, 6 trang × 1440/375px):** cột nội dung tối đa 1440px,
+lề 20px (≤640px: 14px). Mép HỘP (panel, banner cảnh báo, thẻ chỉ số) = mép chữ
+tiêu đề trang = mép chữ thanh điều hướng. Mép CHỮ trong hộp = hộp + padding 24 +
+viền 1 (điện thoại 16+1): tiêu đề panel, ô nhập, nút, chữ cột đầu bảng, số cột
+cuối bảng đều về đúng đường này. Khe giữa mọi panel/thẻ = 16px.
+- **Bảng:** chữ thẳng mép nhờ kéo khung ra hai bên bằng `--cell-x` (padding ô),
+  KHÔNG bỏ padding ô — nền hover/dòng chọn vẫn có lề. Đổi padding ô thì đổi
+  `--cell-x`. Bảng trong thẻ con (`.fin-scroll`) cùng cách, −6px.
+- **`overflow-x: hidden` trên html/body giết mọi `position: sticky`** (body thành
+  vùng cuộn riêng, không bao giờ cuộn). Đã đổi sang `overflow-x: clip` (giữ dòng
+  `hidden` phía trên cho trình duyệt cũ). Đừng đổi lại.
+- **Sticky đặt thẳng lên ô lưới:** Chrome giới hạn theo CẢ lưới, không theo ô —
+  panel so sánh lãi suất đè lên bảng sổ (đo: panel 16–209, bảng sổ top 50). Phải
+  bọc khung `align-self: stretch` (`.sv-calc-col`) rồi sticky bên trong.
 
 ## 8. FastConnect Trading — GĐ1 chỉ đọc (ĐÃ triển khai, đang chạy)
 
