@@ -23,7 +23,7 @@
 | Repo local | /Users/duyhoang/Claude/dautuchungkhoan |
 | Supabase (GĐ 5) | project `kndumltxfrhqxbjrlice` · region Singapore · gói free |
 
-Cache busting hiện **`?v=20261004e`** (107 chỗ trong 6 file HTML). Bump bằng
+Cache busting hiện **`?v=20261004g`** (107 chỗ trong 6 file HTML). Bump bằng
 **`bash scripts/bump-v.sh`** — đừng sửa tay nữa.
 
 ---
@@ -1052,9 +1052,15 @@ lề 20px (≤640px: 14px). Mép HỘP (panel, banner cảnh báo, thẻ chỉ s
 tiêu đề trang = mép chữ thanh điều hướng. Mép CHỮ trong hộp = hộp + padding 24 +
 viền 1 (điện thoại 16+1): tiêu đề panel, ô nhập, nút, chữ cột đầu bảng, số cột
 cuối bảng đều về đúng đường này. Khe giữa mọi panel/thẻ = 16px.
-- **Bảng:** chữ thẳng mép nhờ kéo khung ra hai bên bằng `--cell-x` (padding ô),
-  KHÔNG bỏ padding ô — nền hover/dòng chọn vẫn có lề. Đổi padding ô thì đổi
-  `--cell-x`. Bảng trong thẻ con (`.fin-scroll`) cùng cách, −6px.
+- **Bảng:** ô ngoài cùng không có lề ngoài (`tr > :first-child { padding-left:0 }`,
+  `:last-child` tương tự) → chữ, số VÀ đường kẻ dòng cùng mép tiêu đề panel.
+  **Đừng dùng margin âm kéo khung bảng ra** (bản 04/10 đầu): chữ thẳng nhưng
+  đường kẻ thò 10px mỗi bên, user chụp màn hình báo lệch. `.fin-table` cùng cách.
+  Điện thoại: ô đầu dòng đang chọn có padding 9px để vạch cam không đè chữ.
+- **Header:** rộng đúng cột nội dung (`width: calc(min(100%,1440px) - 40px)`,
+  padding ngang 0) để đường kẻ dưới header thẳng mép panel.
+- Ảnh user gửi lệch mà đo live thấy đúng → gần như chắc là cache HTML 10 phút;
+  bảo user tải lại cứng (Cmd+Shift+R) trước khi sửa tiếp.
 - **`overflow-x: hidden` trên html/body giết mọi `position: sticky`** (body thành
   vùng cuộn riêng, không bao giờ cuộn). Đã đổi sang `overflow-x: clip` (giữ dòng
   `hidden` phía trên cho trình duyệt cũ). Đừng đổi lại.
