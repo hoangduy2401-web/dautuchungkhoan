@@ -279,7 +279,10 @@ a { color: inherit; }
    ============================================================ */
 .app-header {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 16px; padding: 16px 20px;
+  /* Rộng đúng cột nội dung (không phải cột + lề): đường kẻ dưới header bắt đầu
+     và kết thúc thẳng mép panel. Trước 04/10 nó chạy từ sát mép màn hình. */
+  gap: 16px; padding: 16px 0;
+  width: calc(min(100%, 1440px) - 40px); max-width: none;
   background: var(--surface-app);
   border-bottom: 1px solid var(--border-default);
   flex-wrap: wrap;
@@ -550,16 +553,14 @@ tr:hover td { background: var(--surface-hover); }
 .src-badge.alt { color: var(--accent-orange); background: var(--accent-soft); border-color: transparent; }
 
 .asset-table-wrap { overflow-x: auto; }
-/* Căn lề: chữ cột đầu + số cột cuối phải thẳng mép với tiêu đề panel, ô nhập,
-   badge nguồn (đo 04/10: trước lệch vào 10px ở cả 6 trang). Không bỏ padding
-   ô — kéo khung bảng ra hai bên đúng bằng padding ô, nên nền hover/dòng chọn
-   vẫn có lề quanh chữ. --cell-x phải khớp padding ngang của th/td. */
+/* Căn lề: chữ cột đầu, số cột cuối VÀ đường kẻ giữa các dòng đều thẳng mép
+   với tiêu đề panel, ô nhập, badge nguồn — ô ngoài cùng không có lề ngoài.
+   (Thử kéo khung bảng ra bằng margin âm: chữ thẳng nhưng đường kẻ thò ra 10px
+   mỗi bên — user thấy lệch, 04/10. Đừng quay lại cách đó.) */
 :root { --cell-x: 10px; }
-.asset-table-wrap { margin-left: calc(-1 * var(--cell-x)); margin-right: calc(-1 * var(--cell-x)); }
-:not(.asset-table-wrap) > .asset-table {
-  width: calc(100% + 2 * var(--cell-x)); margin-left: calc(-1 * var(--cell-x)); margin-right: calc(-1 * var(--cell-x));
-}
 .asset-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.asset-table tr > :first-child { padding-left: 0; }
+.asset-table tr > :last-child { padding-right: 0; }
 .asset-table th {
   text-align: left; font-size: var(--text-2xs); font-weight: 600;
   color: var(--text-secondary); padding: 8px var(--cell-x);
@@ -714,7 +715,7 @@ tr:hover td { background: var(--surface-hover); }
   /* Nút Sáng/Tối lên cùng hàng tiêu đề, góc phải — trước đây nó chiếm nguyên
      một hàng riêng, để trống cả dải ngang (đo 04/10: ~56px cao). Nhãn trạng
      thái máy chủ (khi có) xếp ngay dưới nút, cũng căn phải. */
-  .app-header { padding: 14px; flex-wrap: nowrap; }
+  .app-header { padding: 14px 0; width: calc(100% - 28px); flex-wrap: nowrap; }
   .brand { flex: 1 1 auto; min-width: 0; }
   .header-right {
     flex: 0 1 auto; max-width: 48%;
@@ -753,7 +754,7 @@ tr:hover td { background: var(--surface-hover); }
   .asset-table-wrap > .asset-table tr > :first-child {
     position: sticky; left: 0; z-index: 1; background: var(--surface-card);
   }
-  .asset-table-wrap > .asset-table tbody tr.sel > :first-child { background: var(--surface-card); box-shadow: inset 3px 0 0 var(--accent-orange); }
+  .asset-table-wrap > .asset-table tbody tr.sel > :first-child { background: var(--surface-card); box-shadow: inset 3px 0 0 var(--accent-orange); padding-left: 9px; }
   .asset-table-wrap > .asset-table td.empty-state { position: static; }
 }
 
@@ -959,6 +960,12 @@ tr:hover td { background: var(--surface-hover); }
 .tools-body {
   padding: 0 var(--space-6) var(--space-6);
   display: flex; flex-direction: column; gap: 14px;
+}
+/* Điện thoại: panel thường còn padding 16 — accordion phải theo, nếu không chữ
+   bên trong thụt sâu hơn mọi panel khác 8px (đo 04/10). */
+@media (max-width: 640px) {
+  .tools-panel > summary { padding: 14px 16px; }
+  .tools-body { padding: 0 16px 16px; }
 }
 /* Panel con trong accordion: lam phang de khong long hop-trong-hop. Bo nen/vien/
    bong, chi giu duong ke mong ngan cach. */

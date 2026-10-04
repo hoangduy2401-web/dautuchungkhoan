@@ -426,7 +426,10 @@
   background: var(--surface-inset); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
 }
-.fin-scroll { overflow-x: auto; margin: 0 -6px; } /* = cell padding: text lines up with .val-title */
+.fin-scroll { overflow-x: auto; }
+/* Outer cells flush: text and row rules line up with .val-title (as .asset-table). */
+.fin-table tr > :first-child { padding-left: 0; }
+.fin-table tr > :last-child { padding-right: 0; }
 .fin-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .fin-table th {
   font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary);
