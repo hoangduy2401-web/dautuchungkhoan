@@ -16,8 +16,16 @@
   gap: 16px;
 }
 .main-grid-savings > .panel:nth-child(1) { grid-area: rates; }
-.main-grid-savings > .panel:nth-child(2) { grid-area: calc; }
-.main-grid-savings > .panel:nth-child(3) { grid-area: books; }
+.main-grid-savings > .sv-calc-col { grid-area: calc; align-self: stretch; }
+/* Hai cột: bảng lãi suất dài ~1.100px, công cụ so sánh chỉ ~200px — đứng yên
+   thì để trống cả cột phải. Dính theo khi cuộn, nên luôn so được ngay cạnh bảng.
+   Khung .sv-calc-col kéo cao bằng hàng đầu → panel dừng ở cuối bảng lãi suất.
+   Đặt sticky thẳng lên ô lưới thì Chrome giới hạn theo CẢ lưới: đo 04/10 panel
+   đè lên bảng sổ phía dưới. Chỉ ở bố cục 2 cột. */
+@media (min-width: 1101px) {
+  .sv-calc-col > .panel { position: sticky; top: 16px; }
+}
+.main-grid-savings > .panel:nth-child(3) { grid-area: books; } /* 2nd child = .sv-calc-col */
 
 /* ---- Cảnh báo đáo hạn: nằm trên cùng, không giấu trong bảng ---- */
 .sv-alerts {

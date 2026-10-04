@@ -243,6 +243,11 @@ html, body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  /* `clip` chặn tràn ngang giống `hidden` nhưng KHÔNG biến body thành vùng
+     cuộn riêng — `hidden` làm mọi `position: sticky` trong trang chết (đo 04/10:
+     panel so sánh lãi suất trôi mất). Trình duyệt cũ không hiểu `clip` thì
+     dùng dòng trên. */
+  overflow-x: clip;
 }
 
 a { color: inherit; }
@@ -304,6 +309,10 @@ a { color: inherit; }
 /* "Giá SSI đọc lúc …" under the clock (stock page). Turns warning-coloured when
    the quotes are clearly behind during trading hours. */
 .data-asof { font-size: var(--text-2xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+/* Trang tài sản chỉ có nhãn khi đang hiện số liệu lưu lần trước — trống thì
+   đừng để một dòng trắng dưới đồng hồ. Trang Chứng khoán luôn có nhãn nên giữ
+   chỗ (chung-khoan.css) để khỏi giật bố cục. */
+.data-asof:empty { display: none; }
 .data-asof.late { color: var(--accent-orange); font-weight: 600; }
 
 /* Theme toggle — khoi 2 nut, nut dang chon to mau accent */
@@ -541,10 +550,19 @@ tr:hover td { background: var(--surface-hover); }
 .src-badge.alt { color: var(--accent-orange); background: var(--accent-soft); border-color: transparent; }
 
 .asset-table-wrap { overflow-x: auto; }
+/* Căn lề: chữ cột đầu + số cột cuối phải thẳng mép với tiêu đề panel, ô nhập,
+   badge nguồn (đo 04/10: trước lệch vào 10px ở cả 6 trang). Không bỏ padding
+   ô — kéo khung bảng ra hai bên đúng bằng padding ô, nên nền hover/dòng chọn
+   vẫn có lề quanh chữ. --cell-x phải khớp padding ngang của th/td. */
+:root { --cell-x: 10px; }
+.asset-table-wrap { margin-left: calc(-1 * var(--cell-x)); margin-right: calc(-1 * var(--cell-x)); }
+:not(.asset-table-wrap) > .asset-table {
+  width: calc(100% + 2 * var(--cell-x)); margin-left: calc(-1 * var(--cell-x)); margin-right: calc(-1 * var(--cell-x));
+}
 .asset-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
 .asset-table th {
   text-align: left; font-size: var(--text-2xs); font-weight: 600;
-  color: var(--text-secondary); padding: 8px 10px;
+  color: var(--text-secondary); padding: 8px var(--cell-x);
   border-bottom: 1px solid var(--border-default); white-space: nowrap;
 }
 .asset-table th.num, .asset-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -554,7 +572,7 @@ tr:hover td { background: var(--surface-hover); }
 .asset-table th.sorted[data-dir="asc"]::after { content: " \25B2"; font-size: 9px; }
 .asset-table th.sorted[data-dir="desc"]::after { content: " \25BC"; font-size: 9px; }
 .asset-table td {
-  padding: 9px 10px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap;
+  padding: 9px var(--cell-x); border-bottom: 1px solid var(--border-subtle); white-space: nowrap;
 }
 .asset-table tbody tr:hover { background: var(--surface-hover); }
 .asset-table tbody tr.sel { background: var(--accent-soft); }
@@ -675,7 +693,12 @@ tr:hover td { background: var(--surface-hover); }
 /* ============================================================
    TRANG TONG — layout mot cot (tam thoi, GD 0)
    ============================================================ */
-.main-grid-single { padding: 16px 20px 40px; }
+.main-grid-single {
+  padding: 16px 20px 40px;
+  /* Khe giữa các panel = 16px như mọi lưới khác (đo 04/10: trang tổng để 0 —
+     hai panel dính nhau, viền chồng lên nhau). */
+  display: flex; flex-direction: column; gap: 16px;
+}
 .build-note { font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary); margin: 0 0 14px; }
 .build-note a { color: var(--accent-orange); font-weight: 600; }
 .demo-stats { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 20px; }
@@ -688,8 +711,16 @@ tr:hover td { background: var(--surface-hover); }
    MOBILE — phan dung chung
    ============================================================ */
 @media (max-width: 640px) {
-  .app-header { padding: 14px; }
-  .header-right { width: 100%; justify-content: space-between; }
+  /* Nút Sáng/Tối lên cùng hàng tiêu đề, góc phải — trước đây nó chiếm nguyên
+     một hàng riêng, để trống cả dải ngang (đo 04/10: ~56px cao). Nhãn trạng
+     thái máy chủ (khi có) xếp ngay dưới nút, cũng căn phải. */
+  .app-header { padding: 14px; flex-wrap: nowrap; }
+  .brand { flex: 1 1 auto; min-width: 0; }
+  .header-right {
+    flex: 0 1 auto; max-width: 48%;
+    flex-direction: column-reverse; align-items: flex-end; gap: 6px;
+  }
+  .header-right .backend-status, .header-right .mock-badge { text-align: right; }
   .main-grid-single { padding-left: 14px; padding-right: 14px; }
   .panel { padding: 16px; }
   .panel-head { flex-wrap: wrap; gap: 8px 12px; }
@@ -718,7 +749,7 @@ tr:hover td { background: var(--surface-hover); }
 
   /* Bảng trên điện thoại: gọn lề + cột đầu (tên) đứng yên khi vuốt ngang —
      trước đây vuốt tới cột Bán/Chênh lệch là mất luôn tên hàng đang xem. */
-  .asset-table th, .asset-table td { padding-left: 7px; padding-right: 7px; }
+  :root { --cell-x: 7px; }
   .asset-table-wrap > .asset-table tr > :first-child {
     position: sticky; left: 0; z-index: 1; background: var(--surface-card);
   }
@@ -746,8 +777,17 @@ tr:hover td { background: var(--surface-hover); }
   background: var(--accent-soft); color: var(--accent-orange);
   border: 1px solid var(--accent-orange);
   border-radius: var(--radius-sm);
-  padding: 10px 14px; margin: 0 0 14px;
   font-size: var(--text-sm); line-height: 1.5;
+  /* Nằm trong cột nội dung như panel: mép hộp = mép panel (cột tối đa 1440px,
+     lề 20px), chữ = mép chữ trong panel (padding 24 + viền 1). Trước đây tràn
+     sát mép màn hình, chữ lệch khỏi tiêu đề trang. */
+  box-sizing: border-box;
+  width: calc(min(100%, 1440px) - 40px);
+  margin: 12px auto 0;
+  padding: 10px 24px;
+}
+@media (max-width: 640px) {
+  .login-warn { width: calc(100% - 28px); padding: 10px 16px; }
 }
 .login-warn a { color: inherit; font-weight: 600; text-decoration: underline; }
 

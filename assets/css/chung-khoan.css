@@ -42,7 +42,7 @@
    ============================================================ */
 .index-strip {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
+  gap: 16px; /* same gutter as every panel grid */
 }
 .index-card {
   background: var(--surface-card); border: 1px solid var(--border-subtle);
@@ -426,7 +426,7 @@
   background: var(--surface-inset); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
 }
-.fin-scroll { overflow-x: auto; }
+.fin-scroll { overflow-x: auto; margin: 0 -6px; } /* = cell padding: text lines up with .val-title */
 .fin-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .fin-table th {
   font-size: var(--text-2xs); font-weight: 600; color: var(--text-secondary);
@@ -605,3 +605,7 @@
 .ov-breadth-legend .ceil { color: var(--accent-orange); font-weight: 600; }
 .ov-breadth-legend .floor { color: var(--accent-purple); font-weight: 600; }
 .ov-note { margin-top: 10px; font-size: var(--text-2xs); color: var(--text-tertiary); line-height: 1.6; }
+
+/* Nhãn "Giá SSI đọc lúc …" luôn có ở trang này: giữ chỗ ngay từ đầu, kể cả khi
+   còn trống, để nhãn hiện ra không đẩy cả trang xuống (base.css ẩn khi trống). */
+.data-asof:empty { display: block; }
