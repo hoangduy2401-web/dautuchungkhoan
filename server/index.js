@@ -2897,6 +2897,548 @@ app.get("/api/debug/ssi-mcp-probe", async (req, res) => {
 });
 
 // ============================================================
+// ============================================================
+// CHATBOT AI — POST /api/chat (Claude Haiku 5.5 + tool use)
+//
+// Scope decided by the user (docs/YTUONG.md): MARKET DATA ONLY. Nothing from
+// the user's portfolio, savings books or trade history is ever sent to the AI
+// API — the tools below can only read the same public market endpoints the
+// dashboard itself uses. Do not add a tool that reads Store/Supabase/account
+// data without asking the user first.
+//
+// Tools call this server's own routes over loopback instead of the compute*
+// functions directly, so they inherit every cache, validation and fallback
+// those routes already have, and answer with exactly the shapes documented
+// in CLAUDE.md section 5.
+//
+// Haiku 5.5 API traps (400 otherwise): no temperature/top_p/top_k, no
+// assistant prefill, thinking only "adaptive" (never budget_tokens). Earlier
+// turns come back from the client as plain text only — thinking blocks are
+// kept just inside one turn's tool loop, so the append-only check on
+// replayed thinking never applies across turns.
+//
+// Off unless ANTHROPIC_API_KEY is set, and gated like /api/account/*.
+// ============================================================
+const Anthropic = require("@anthropic-ai/sdk");
+
+const CHAT_MODEL = "claude-haiku-5-5";
+const CHAT_EFFORT = "medium";
+const CHAT_MAX_TOKENS = 8000; // thinking counts toward this too
+const CHAT_MAX_LOOPS = 6; // model calls per question
+const CHAT_HISTORY_MAX = 10; // messages kept from the client
+const CHAT_TEXT_MAX = 2000; // chars per message
+const CHAT_DAILY_USD = Number(process.env.CHAT_DAILY_USD) || 0.5;
+
+// USD per 1M tokens. Haiku 5.5 bills a request whose prompt is over 100K
+// tokens at 5x — the tool outputs below are trimmed so we never get there,
+// but cost accounting still honours the higher tier if it ever happens.
+const HAIKU55_PRICE = {
+  small: { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
+  large: { input: 0.5, output: 2.5, cacheWrite: 0.625, cacheRead: 0.05 },
+};
+
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+
+// Daily spend lives in memory: a restart (Render sleeps after 15 idle minutes)
+// resets it. The hard backstop is the monthly limit set in the Anthropic
+// Console; this cap only stops a runaway day.
+const chatSpend = { day: "", usd: 0 };
+
+function vnDay() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+}
+
+function spentToday() {
+  const day = vnDay();
+  if (chatSpend.day !== day) {
+    chatSpend.day = day;
+    chatSpend.usd = 0;
+  }
+  return chatSpend.usd;
+}
+
+function costOf(usage) {
+  const inTok = usage.input_tokens || 0;
+  const cw = usage.cache_creation_input_tokens || 0;
+  const cr = usage.cache_read_input_tokens || 0;
+  const p = inTok + cw + cr > 100_000 ? HAIKU55_PRICE.large : HAIKU55_PRICE.small;
+  return (
+    (inTok * p.input + cw * p.cacheWrite + cr * p.cacheRead + (usage.output_tokens || 0) * p.output) /
+    1e6
+  );
+}
+
+// Round every number in a tool result: 15 significant digits of P/E cost
+// tokens and add nothing.
+function roundDeep(v, digits = 2) {
+  if (typeof v === "number") return Number.isFinite(v) ? Number(v.toFixed(digits)) : null;
+  if (Array.isArray(v)) return v.map((x) => roundDeep(x, digits));
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const [k, x] of Object.entries(v)) out[k] = roundDeep(x, digits);
+    return out;
+  }
+  return v;
+}
+
+async function selfGet(pathAndQuery) {
+  const res = await fetchWithTimeout(`http://127.0.0.1:${PORT}${pathAndQuery}`, {}, 25_000);
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error((json && (json.detail || json.error)) || `HTTP ${res.status}`);
+  }
+  return json;
+}
+
+function oneSymbol(input) {
+  const s = String((input && input.symbol) || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{1,10}$/.test(s)) throw new Error("Mã không hợp lệ");
+  return s;
+}
+
+function listSymbols(input, max) {
+  const arr = Array.isArray(input && input.symbols) ? input.symbols : [];
+  const syms = parseSymbols(arr.join(","), max);
+  if (!syms.length) throw new Error("Thiếu mã");
+  return syms;
+}
+
+function percentileOf(values, x) {
+  if (!values.length || x === null || x === undefined) return null;
+  return (values.filter((v) => v <= x).length / values.length) * 100;
+}
+
+// Thin a long series to at most `max` points, always keeping the last one.
+function thin(rows, max) {
+  if (rows.length <= max) return rows;
+  const step = Math.ceil(rows.length / max);
+  const out = rows.filter((_, i) => (rows.length - 1 - i) % step === 0);
+  return out;
+}
+
+const CHAT_TOOLS = [
+  {
+    name: "get_quotes",
+    description:
+      "Giá hiện tại của cổ phiếu và/hoặc chỉ số. Mã chỉ số hợp lệ: VNINDEX, VN30, HNXINDEX, UPCOM. " +
+      "Trả price (nghìn đồng), changePct (%), volume (cổ phiếu), netForeignVal (khối ngoại mua-bán ròng, tỷ đồng); " +
+      "chỉ số có thêm số mã tăng/giảm/trần/sàn. Một mã lỗi sẽ nằm trong errors, KHÔNG bao giờ là 0.",
+    input_schema: {
+      type: "object",
+      properties: {
+        symbols: { type: "array", items: { type: "string" }, description: "Tối đa 20 mã, ví dụ [\"FPT\",\"VNINDEX\"]" },
+      },
+      required: ["symbols"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_price_history",
+    description:
+      "Lịch sử giá đóng cửa theo ngày của một cổ phiếu (đã điều chỉnh cổ tức) hoặc chỉ số. " +
+      "Trả tóm tắt (đầu/cuối kỳ, cao/thấp nhất, % thay đổi) và tối đa 60 điểm. Giá cổ phiếu tính bằng nghìn đồng.",
+    input_schema: {
+      type: "object",
+      properties: {
+        symbol: { type: "string" },
+        days: { type: "integer", description: "Số ngày lịch nhìn lại, 5–365. Mặc định 90." },
+      },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_fundamentals",
+    description:
+      "Chỉ số cơ bản của một cổ phiếu (VNDirect): vốn hoá (nghìn tỷ đồng), P/E, P/B, EPS (nghìn đồng), ROE, ROA, " +
+      "tỷ suất cổ tức, tăng trưởng doanh thu/lợi nhuận YoY (%), nợ/vốn chủ; kèm P/E, P/B hôm nay so với 2 năm " +
+      "(thấp nhất, cao nhất, trung vị, phân vị %).",
+    input_schema: {
+      type: "object",
+      properties: { symbol: { type: "string" } },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_financials",
+    description:
+      "Kết quả kinh doanh 8 quý gần nhất (tỷ đồng): doanh thu (ngân hàng = tổng thu nhập hoạt động), lợi nhuận gộp, " +
+      "lợi nhuận sau thuế công ty mẹ, dòng tiền kinh doanh.",
+    input_schema: {
+      type: "object",
+      properties: { symbol: { type: "string" } },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_peers",
+    description:
+      "Các mã cùng ngành (ICB cấp 3) lớn nhất theo vốn hoá, kèm P/E, P/B, ROE, tỷ suất cổ tức và trung vị ngành.",
+    input_schema: {
+      type: "object",
+      properties: { symbol: { type: "string" } },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_foreign_flow",
+    description: "Giao dịch khối ngoại từng phiên (mua, bán, ròng — tỷ đồng), tối đa 20 phiên gần nhất.",
+    input_schema: {
+      type: "object",
+      properties: {
+        symbols: { type: "array", items: { type: "string" }, description: "Tối đa 10 mã cổ phiếu" },
+        sessions: { type: "integer", description: "1–20, mặc định 20" },
+      },
+      required: ["symbols"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_news_events",
+    description:
+      "5 tin tức mới nhất và 5 sự kiện quyền gần nhất (cổ tức tiền, cổ phiếu thưởng, phát hành quyền) của một mã.",
+    input_schema: {
+      type: "object",
+      properties: { symbol: { type: "string" } },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_other_assets",
+    description:
+      "Bảng giá hiện tại của tài sản khác. kind=gold: giá vàng PNJ (nghìn đồng/chỉ; 1 lượng = 10 chỉ). " +
+      "kind=fx: tỷ giá bán lẻ Vietcombank (đồng). kind=crypto: giá coin (USD và VND quy đổi), cần ids kiểu " +
+      "\"bitcoin\", \"ethereum\". kind=savings: lãi suất tiết kiệm (%/năm) các ngân hàng theo kỳ hạn " +
+      "(0T = không kỳ hạn, 12T = 12 tháng).",
+    input_schema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["gold", "fx", "crypto", "savings"] },
+        ids: { type: "array", items: { type: "string" }, description: "Chỉ dùng cho crypto, tối đa 10" },
+      },
+      required: ["kind"],
+      additionalProperties: false,
+    },
+  },
+];
+
+const CHAT_TOOL_RUNNERS = {
+  async get_quotes(input) {
+    const syms = listSymbols(input, 20);
+    const indexCodes = syms.filter((s) => INDEX_IDS[s]);
+    const stocks = syms.filter((s) => !INDEX_IDS[s]);
+    const out = {};
+    if (stocks.length) {
+      const q = await selfGet(`/api/price/quotes?symbols=${stocks.join(",")}`);
+      Object.assign(out, { asOf: q.asOf, quotes: q.quotes, errors: q.errors });
+    }
+    if (indexCodes.length) {
+      const all = await selfGet("/api/price/indices");
+      out.indices = all.filter((i) => indexCodes.includes(i.code));
+    }
+    return out;
+  },
+
+  async get_price_history(input) {
+    const sym = oneSymbol(input);
+    const days = Math.min(365, Math.max(5, Math.round(Number(input.days) || 90)));
+    const rows = INDEX_IDS[sym]
+      ? await selfGet(`/api/price/index-history?code=${sym}&days=${days}`)
+      : await selfGet(`/api/price/history?symbol=${sym}&days=${days}`);
+    if (!rows.length) return { symbol: sym, error: "Nguồn không trả dữ liệu" };
+    const closes = rows.map((r) => r.close);
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    const hi = rows.reduce((a, r) => (r.close > a.close ? r : a));
+    const lo = rows.reduce((a, r) => (r.close < a.close ? r : a));
+    return {
+      symbol: sym,
+      sessions: rows.length,
+      summary: {
+        from: first.date,
+        to: last.date,
+        firstClose: first.close,
+        lastClose: last.close,
+        changePct: ((last.close - first.close) / first.close) * 100,
+        highest: { date: hi.date, close: hi.close },
+        lowest: { date: lo.date, close: lo.close },
+        avgVolume: rows.reduce((a, r) => a + (r.volume || 0), 0) / rows.length,
+      },
+      points: thin(rows, 60).map((r) => ({ date: r.date, close: r.close, volume: r.volume })),
+      note: closes.length > 60 ? "points đã thưa bớt, summary tính trên toàn bộ phiên" : undefined,
+    };
+  },
+
+  async get_fundamentals(input) {
+    const sym = oneSymbol(input);
+    const [f, v] = await Promise.allSettled([
+      selfGet(`/api/fundamentals/${sym}`),
+      selfGet(`/api/valuation/history?symbol=${sym}&days=730`),
+    ]);
+    const out = { symbol: sym };
+    out.ratios = f.status === "fulfilled" ? f.value : { error: f.reason.message };
+    if (v.status === "fulfilled") {
+      const items = v.value.items || [];
+      const band = (key) => {
+        const vals = items.map((i) => i[key]).filter((x) => Number.isFinite(x) && x > 0);
+        if (!vals.length) return null;
+        const sorted = [...vals].sort((a, b) => a - b);
+        const today = items[items.length - 1][key];
+        return {
+          today,
+          min: sorted[0],
+          max: sorted[sorted.length - 1],
+          median: sorted[Math.floor(sorted.length / 2)],
+          percentile: percentileOf(vals, today),
+        };
+      };
+      out.valuation2y = { asOf: v.value.asOf, pe: band("pe"), pb: band("pb") };
+    } else {
+      out.valuation2y = { error: v.reason.message };
+    }
+    return out;
+  },
+
+  async get_financials(input) {
+    const sym = oneSymbol(input);
+    const r = await selfGet(`/api/financials/quarterly?symbol=${sym}&quarters=8`);
+    return {
+      symbol: sym,
+      unit: r.unit,
+      revenueLabel: r.revenueLabel,
+      items: (r.items || []).map(({ fiscalDate, ...rest }) => rest),
+    };
+  },
+
+  async get_peers(input) {
+    const sym = oneSymbol(input);
+    return selfGet(`/api/peers?symbol=${sym}&limit=8`);
+  },
+
+  async get_foreign_flow(input) {
+    const syms = listSymbols(input, 10);
+    const sessions = Math.min(20, Math.max(1, Math.round(Number(input.sessions) || 20)));
+    return selfGet(`/api/foreign/history?symbols=${syms.join(",")}&sessions=${sessions}`);
+  },
+
+  async get_news_events(input) {
+    const sym = oneSymbol(input);
+    const [n, e] = await Promise.allSettled([
+      selfGet(`/api/news?symbols=${sym}`),
+      selfGet(`/api/events/${sym}`),
+    ]);
+    return {
+      symbol: sym,
+      news:
+        n.status === "fulfilled"
+          ? n.value.slice(0, 5).map(({ title, source, time }) => ({ title, source, time }))
+          : { error: n.reason.message },
+      events:
+        e.status === "fulfilled"
+          ? e.value.slice(0, 5).map(({ typeDesc, note, exDate, recordDate }) => ({ typeDesc, note, exDate, recordDate }))
+          : { error: e.reason.message },
+    };
+  },
+
+  async get_other_assets(input) {
+    const kind = String((input && input.kind) || "");
+    if (kind === "gold") return selfGet("/api/gold/prices");
+    if (kind === "fx") return selfGet("/api/fx/rates");
+    if (kind === "savings") {
+      const r = await selfGet("/api/savings/rates");
+      return {
+        fetchedAt: r.fetchedAt,
+        source: r.source,
+        terms: r.terms,
+        banks: (r.banks || []).map(({ name, rates }) => ({ name, rates })),
+      };
+    }
+    if (kind === "crypto") {
+      const ids = (Array.isArray(input.ids) ? input.ids : [])
+        .map((s) => String(s).trim().toLowerCase())
+        .filter((s) => /^[a-z0-9-]{1,40}$/.test(s))
+        .slice(0, 10);
+      const r = await selfGet(`/api/crypto/prices?ids=${(ids.length ? ids : ["bitcoin", "ethereum"]).join(",")}`);
+      return {
+        updatedAt: r.updatedAt,
+        source: r.source,
+        note: r.note,
+        items: (r.items || []).map(({ image, ...rest }) => rest),
+      };
+    }
+    throw new Error("kind không hợp lệ");
+  },
+};
+
+// Frozen on purpose: anything that changes per request (today's date, the
+// symbol on screen) goes into the user turn, so this prefix stays cacheable.
+const CHAT_SYSTEM = `Bạn là trợ lý tra cứu dữ liệu thị trường trong "Bảng Điện", dashboard chứng khoán Việt Nam cá nhân. Trả lời bằng tiếng Việt, ngắn gọn, đi thẳng vào câu hỏi.
+
+Luật bắt buộc:
+1. Mọi con số phải lấy từ kết quả công cụ trong cuộc trò chuyện này. Không dùng số từ trí nhớ, không ước đoán, không làm tròn kiểu bịa. Thiếu dữ liệu hoặc công cụ báo lỗi thì nói rõ "nguồn không trả dữ liệu", đừng điền số khác.
+2. Nêu thời điểm của số liệu (ngày phiên, giờ cập nhật) khi trả lời về giá. Cuối tuần/ngày lễ, giá là của phiên gần nhất — nói rõ điều đó.
+3. Không khuyến nghị mua, bán hay nắm giữ; không dự báo giá. Được phép mô tả, so sánh, giải thích chỉ số. Nếu người dùng hỏi "có nên mua", trả lời bằng dữ liệu liên quan và nhắc đây không phải tư vấn đầu tư.
+4. Bạn KHÔNG có quyền xem danh mục, giao dịch hay tài sản cá nhân của người dùng. Nếu được hỏi, nói rằng chatbot chỉ đọc dữ liệu thị trường.
+5. Đơn vị: giá cổ phiếu nghìn đồng (59,7 = 59.700 đ); giá trị khối ngoại và báo cáo tài chính tỷ đồng; vốn hoá nghìn tỷ đồng; vàng nghìn đồng/chỉ. Viết số kiểu Việt Nam: dấu chấm phân cách nghìn, dấu phẩy thập phân.
+6. Định dạng: văn bản thường, có thể dùng gạch đầu dòng ngắn và **in đậm**; không dùng bảng, không dùng tiêu đề #.
+7. Câu hỏi ngoài thị trường tài chính thì từ chối ngắn gọn.`;
+
+function chatError(res, status, error, detail) {
+  return res.status(status).json({ error, detail });
+}
+
+app.post("/api/chat", accountGuards, async (req, res) => {
+  if (!anthropic) {
+    return chatError(res, 503, "chat_disabled", "Chưa set ANTHROPIC_API_KEY — chatbot đang tắt.");
+  }
+  const spent = spentToday();
+  if (spent >= CHAT_DAILY_USD) {
+    return chatError(res, 429, "daily_cap", `Hết hạn mức chatbot hôm nay ($${CHAT_DAILY_USD}).`);
+  }
+
+  // Validate and trim history. Only text travels between turns.
+  const raw = Array.isArray(req.body && req.body.messages) ? req.body.messages : [];
+  let history = raw
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.text === "string")
+    .map((m) => ({ role: m.role, text: m.text.trim().slice(0, CHAT_TEXT_MAX) }))
+    .filter((m) => m.text)
+    .slice(-CHAT_HISTORY_MAX);
+  while (history.length && history[0].role !== "user") history.shift();
+  if (!history.length || history[history.length - 1].role !== "user") {
+    return chatError(res, 400, "bad_messages", "Tin cuối phải là câu hỏi của người dùng.");
+  }
+  // The API wants strictly alternating roles; merge any same-role neighbours.
+  const merged = [];
+  for (const m of history) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.role === m.role) prev.text += "\n\n" + m.text;
+    else merged.push({ ...m });
+  }
+
+  const ctxSymbol = String((req.body.context && req.body.context.symbol) || "").toUpperCase();
+  const ctxLine =
+    `[Hôm nay: ${vnDay()} (giờ Việt Nam)` +
+    (/^[A-Z0-9]{1,10}$/.test(ctxSymbol) ? `. Mã đang xem trên dashboard: ${ctxSymbol}` : "") +
+    "]";
+
+  const messages = merged.map((m, i) => {
+    if (i < merged.length - 1) return { role: m.role, content: m.text };
+    return {
+      role: "user",
+      content: [
+        { type: "text", text: ctxLine },
+        { type: "text", text: m.text },
+      ],
+    };
+  });
+
+  const toolsUsed = [];
+  const usageTotal = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costUsd: 0 };
+  let answer = "";
+  let stop = null;
+
+  try {
+    for (let loop = 0; loop < CHAT_MAX_LOOPS; loop++) {
+      const response = await anthropic.messages.create({
+        model: CHAT_MODEL,
+        max_tokens: CHAT_MAX_TOKENS,
+        thinking: { type: "adaptive" },
+        output_config: { effort: CHAT_EFFORT },
+        cache_control: { type: "ephemeral" },
+        system: CHAT_SYSTEM,
+        tools: CHAT_TOOLS,
+        messages,
+      });
+
+      const cost = costOf(response.usage);
+      chatSpend.usd += cost;
+      usageTotal.inputTokens +=
+        (response.usage.input_tokens || 0) + (response.usage.cache_creation_input_tokens || 0);
+      usageTotal.cacheReadTokens += response.usage.cache_read_input_tokens || 0;
+      usageTotal.outputTokens += response.usage.output_tokens || 0;
+      usageTotal.costUsd += cost;
+
+      stop = response.stop_reason;
+      const text = response.content
+        .filter((b) => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+        .trim();
+
+      if (stop === "tool_use") {
+        // Thinking blocks must go back unchanged with the tool results.
+        messages.push({ role: "assistant", content: response.content });
+        const calls = response.content.filter((b) => b.type === "tool_use");
+        const results = await Promise.all(
+          calls.map(async (call) => {
+            toolsUsed.push(call.name);
+            const runner = CHAT_TOOL_RUNNERS[call.name];
+            try {
+              if (!runner) throw new Error("Công cụ không tồn tại");
+              const data = roundDeep(await runner(call.input || {}));
+              return { type: "tool_result", tool_use_id: call.id, content: JSON.stringify(data) };
+            } catch (err) {
+              return {
+                type: "tool_result",
+                tool_use_id: call.id,
+                content: `Lỗi: ${err.message}`,
+                is_error: true,
+              };
+            }
+          })
+        );
+        messages.push({ role: "user", content: results });
+        if (chatSpend.usd >= CHAT_DAILY_USD) {
+          answer = "Đã chạm hạn mức chatbot hôm nay giữa chừng, chưa trả lời xong.";
+          break;
+        }
+        continue;
+      }
+
+      if (stop === "refusal") {
+        answer = "Xin lỗi, câu này mình không trả lời được.";
+      } else if (stop === "max_tokens") {
+        answer = text || "Câu trả lời quá dài, bị cắt. Hãy hỏi hẹp hơn.";
+      } else {
+        answer = text;
+      }
+      break;
+    }
+    if (stop === "tool_use" && !answer) {
+      answer = "Câu hỏi cần tra quá nhiều dữ liệu, mình dừng lại. Hãy hỏi hẹp hơn.";
+    }
+  } catch (err) {
+    console.error("[/api/chat]", err.status || "", err.message);
+    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+      return chatError(res, 503, "chat_misconfigured", "ANTHROPIC_API_KEY không hợp lệ.");
+    }
+    if (err instanceof Anthropic.RateLimitError) {
+      return chatError(res, 503, "chat_busy", "API AI đang giới hạn tần suất, thử lại sau ít phút.");
+    }
+    if (err instanceof Anthropic.APIError) {
+      return chatError(res, 502, "chat_upstream", err.message);
+    }
+    return chatError(res, 500, "chat_failed", err.message);
+  }
+
+  res.json({
+    answer: answer || "Không có câu trả lời.",
+    toolsUsed: [...new Set(toolsUsed)],
+    stopReason: stop,
+    asOf: new Date().toISOString(),
+    usage: {
+      ...usageTotal,
+      costUsd: Number(usageTotal.costUsd.toFixed(5)),
+      spentTodayUsd: Number(chatSpend.usd.toFixed(4)),
+      capUsd: CHAT_DAILY_USD,
+    },
+  });
+});
+
 // `startedAt` / `uptimeSec` tell you whether this instance just cold-started.
 // Render Free spins the instance down after 15 idle minutes, and a cold start
 // is the difference between an instant page load and a 30-60s wait — so when
