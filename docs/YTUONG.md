@@ -61,8 +61,18 @@ không shimmer mãi. Kèm: mở rộng "số liệu lần trước" (như
 **Chatbot — quyết định của user:**
 - Phạm vi: **CHỈ dữ liệu thị trường.** KHÔNG gửi danh mục/sổ tiết kiệm/giao dịch
   cá nhân sang API AI. Đừng tự mở rộng — hỏi lại user.
-- Model: **cân bằng** — Haiku cho tra cứu, Sonnet khi cần phân tích; trần chi
-  tiêu/ngày trên server.
+- Model: ~~Haiku tra cứu + Sonnet phân tích~~ → **CHỈ `claude-haiku-5-5`** (user
+  chốt 08/10/2026, Haiku 5.5 ra 07/10). Tra cứu `effort: "low"`, phân tích
+  `"medium"`/`"high"` — không định tuyến 2 model. Thêm Sonnet chỉ khi thử thật
+  thấy Haiku phân tích kém. Trần chi tiêu/ngày trên server vẫn giữ.
+- Giá Haiku 5.5: $0,10 / $0,50 per 1M token (in/out) khi prompt ≤100K; **>100K
+  nhân 5** → server phải cắt lịch sử chat + rút gọn JSON tool. Ước ~$0,002/câu
+  (15K in, 800 out). Tokenizer đếm nhiều hơn Haiku 4.5 ~30%.
+- Bẫy API Haiku 5.5 (400 nếu sai): KHÔNG `temperature`/`top_p`/`top_k`; KHÔNG
+  prefill; thinking chỉ `adaptive` (không `budget_tokens`); đọc block theo
+  `type` (thinking đứng đầu); lịch sử append-only nếu gửi lại thinking block —
+  qua lượt mới chỉ lưu chữ trả lời; xử lý `stop_reason: "refusal"` (không có
+  fallback server). Trước khi chốt: thử ~20 câu tiếng Việt mẫu.
 - Kiến trúc dự kiến: `/api/chat` trên Render (khoá API ở env, không ra frontend),
   khuôn bảo vệ y `/api/account/*` (`x-dashboard-key` + origin allowlist + 503 khi
   thiếu env). Claude tool use gọi lại hàm dữ liệu sẵn có (quote, history, news,

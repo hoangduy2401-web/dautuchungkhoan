@@ -368,6 +368,18 @@ GET /api/savings/rates                  (CafeF — file JSON tĩnh trên CDN)
    `fetchedAt` = lúc SERVER lấy về, KHÔNG phải lúc ngân hàng đổi lãi suất —
    trang ghi "lấy lúc". `rates[kỳ hạn]` = null: ngân hàng không niêm yết kỳ hạn
    đó, không phải 0%/năm. `stale: true` = nguồn chết, đang trả bản chụp cũ.
+
+POST /api/chat        (08/10 — chatbot, khuôn bảo vệ /api/account/*)
+  header x-dashboard-key; body { messages:[{role:"user"|"assistant", text}],
+  context?:{ symbol } }  — chỉ CHỮ đi giữa các lượt, server giữ 10 tin cuối
+→ { answer, toolsUsed:[…], stopReason, asOf,
+    usage:{ inputTokens, outputTokens, cacheReadTokens, costUsd, spentTodayUsd, capUsd } }
+   503 chat_disabled (thiếu ANTHROPIC_API_KEY) / chat_misconfigured / chat_busy;
+   429 daily_cap (CHAT_DAILY_USD, mặc định 0,5 — đếm TRONG BỘ NHỚ, Render ngủ là
+   reset; chặn thật là hạn mức tháng ở Console). Model `claude-haiku-5-5`,
+   effort medium. 8 tool gọi lại CHÍNH các route trên qua 127.0.0.1 (loopback),
+   kết quả làm tròn 2 số lẻ + cắt gọn (≤60 điểm giá, 8 quý, 5 tin) để prompt
+   không vượt 100K (giá ×5).
 ```
 
 **`/api/fx/rates` và `/api/fx/history` là HAI LOẠI tỷ giá khác nhau, lệch ~0,8%
@@ -1233,14 +1245,18 @@ OAuth client tên "Bang Dien dashboard (spike/probe)" do phiên 17 đăng ký �
 #### Chatbot AI — hướng đã chốt, chưa code (phiên 16)
 
 Đọc **`docs/YTUONG.md` mục cuối** trước. Tóm tắt quyết định của user: **CHỈ dữ
-liệu thị trường** (không gửi danh mục/sổ/giao dịch sang API AI), Haiku tra cứu +
-Sonnet phân tích, trần chi tiêu/ngày trên server, `/api/chat` theo khuôn bảo vệ
+liệu thị trường** (không gửi danh mục/sổ/giao dịch sang API AI), **chỉ
+`claude-haiku-5-5`** (đổi 08/10 — effort low/medium/high theo loại câu, bẫy API ở YTUONG), trần chi tiêu/ngày trên server, `/api/chat` theo khuôn bảo vệ
 `/api/account/*`, `chat.js` nạp lười khi bấm nút. Đổi hợp đồng dữ liệu (mục 2) —
 chốt chi tiết endpoint với user khi bắt tay. Trước khi code: đọc skill `claude-api`
 lấy model ID + giá hiện hành, đừng viết từ trí nhớ.
 Công cụ cho chatbot: dùng CHÍNH các endpoint của dashboard (giá, P/E–P/B, BCTC,
 cùng ngành, khối ngoại — mục 5), KHÔNG dựa vào SSI MCP cho tới khi lỗi token
 được sửa (mục 7).
+
+**Server `/api/chat` ĐÃ CODE 08/10** (mục 5), thử bằng API Anthropic giả: 8 tool chạy,
+thinking block gửi lại đúng trong vòng tool. CHƯA thử model thật, CHƯA có UI (`chat.js`).
+Còn: thử ~20 câu tiếng Việt với key thật → UI nút nổi + sheet.
 
 **⚠ USER TỰ LÀM TRƯỚC:**
 1. Vào console.anthropic.com → tạo API key (nên đặt giới hạn chi tiêu tháng ở
